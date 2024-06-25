@@ -32,31 +32,33 @@ type Board struct {
 }
 
 type Post struct {
-	BoardID   string `json:"BoardID"`
-	ThreadID  string `json:"ThreadID"`
-	PostID    int64  `json:"PostID"`
-	Content   string `json:"Content"`
-	ImageURL  string `json:"ImageURL"`
-	Subject   string `json:"Subject"`
-	Author    string `json:"Author"`
-	ParentID  string `json:"ParentID"`
-	Timestamp string `json:"Timestamp"`
-	IP        string `json:"IP"`
-	Sticky    bool   `json:"Sticky"`
-	Locked    bool   `json:"Locked"`
+	BoardID        string `json:"BoardID"`
+	ThreadID       string `json:"ThreadID"`
+	PostID         int64  `json:"PostID"`
+	Content        string `json:"Content"`
+	PartialContent string `json:"PartialContent"`
+	ImageURL       string `json:"ImageURL"`
+	Subject        string `json:"Subject"`
+	Author         string `json:"Author"`
+	ParentID       string `json:"ParentID"`
+	Timestamp      string `json:"Timestamp"`
+	IP             string `json:"IP"`
+	Sticky         bool   `json:"Sticky"`
+	Locked         bool   `json:"Locked"`
 }
 
 type RecentPosts struct {
-	ID        int64  `json:"ID"`
-	BoardID   string `json:"BoardID"`
-	ThreadID  string `json:"ThreadID"`
-	PostID    int64  `json:"PostID"`
-	Content   string `json:"Content"`
-	ImageURL  string `json:"ImageURL"`
-	Subject   string `json:"Subject"`
-	Author    string `json:"Author"`
-	ParentID  string `json:"ParentID"`
-	Timestamp string `json:"Timestamp"`
+	ID             int64  `json:"ID"`
+	BoardID        string `json:"BoardID"`
+	ThreadID       string `json:"ThreadID"`
+	PostID         int64  `json:"PostID"`
+	Content        string `json:"Content"`
+	PartialContent string `json:"PartialContent"`
+	ImageURL       string `json:"ImageURL"`
+	Subject        string `json:"Subject"`
+	Author         string `json:"Author"`
+	ParentID       string `json:"ParentID"`
+	Timestamp      string `json:"Timestamp"`
 }
 
 type RateLimit struct {
@@ -70,8 +72,8 @@ type PostCounter struct {
 }
 
 func init() {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	db.AutoMigrate(&Board{})
 	db.AutoMigrate(&RecentPosts{})
 	db.AutoMigrate(&PostCounter{})
@@ -175,18 +177,23 @@ func CreateThread(c echo.Context) error {
 	AddBoardPostCount(boardID)
 	var postCount int64
 	postCount = GetGlobalPostCount()
+	safeEndIndex := len(content)
+	if safeEndIndex > 20 {
+		safeEndIndex = 20
+	}
 	post := Post{
-		BoardID:   boardID,
-		ThreadID:  strconv.Itoa(threadID),
-		PostID:    int64(postCount),
-		Content:   content,
-		ImageURL:  imageURL,
-		Subject:   subject,
-		Author:    author,
-		Timestamp: time.Now().Format("01-02-2006 15:04:05"),
-		IP:        c.RealIP(),
-		Sticky:    sticky,
-		Locked:    locked,
+		BoardID:        boardID,
+		ThreadID:       strconv.Itoa(threadID),
+		PostID:         int64(postCount),
+		Content:        content,
+		PartialContent: content[:safeEndIndex],
+		ImageURL:       imageURL,
+		Subject:        subject,
+		Author:         author,
+		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
+		IP:             c.RealIP(),
+		Sticky:         sticky,
+		Locked:         locked,
 	}
 	// create a json file for the thread
 	jsonFilePath := boardDir + "/" + strconv.Itoa(threadID) + ".json"
@@ -214,7 +221,9 @@ func CreateThread(c echo.Context) error {
 	boardName := url.PathEscape(c.Param("b"))
 	threadIDStr := strconv.Itoa(threadID)
 	redirectURL := "/board/" + boardName + "/" + threadIDStr
-	AddRecentPost(post)
+	if LatestPostsCheck(c, boardID) {
+		AddRecentPost(post)
+	}
 	return c.Redirect(http.StatusFound, redirectURL)
 }
 
@@ -270,17 +279,24 @@ func CreateThreadPost(c echo.Context) error {
 	postCount := AddGlobalPostCount()
 	AddBoardPostCount(boardID)
 
-	post := Post{
-		BoardID:   boardID,
-		ThreadID:  strconv.Itoa(threadID),
-		PostID:    postCount,
-		Content:   content,
-		ImageURL:  imageURL,
-		Author:    author,
-		Timestamp: time.Now().Format("01-02-2006 15:04:05"),
-		IP:        c.RealIP(),
+	// Calculate the safe slice end index
+	safeEndIndex := len(content)
+	if safeEndIndex > 20 {
+		safeEndIndex = 20
 	}
 
+	// Use the safeEndIndex for slicing content
+	post := Post{
+		BoardID:        boardID,
+		ThreadID:       strconv.Itoa(threadID),
+		PostID:         postCount,
+		Content:        content,
+		PartialContent: content[:safeEndIndex], // Use safe slice
+		ImageURL:       imageURL,
+		Author:         author,
+		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
+		IP:             c.RealIP(),
+	}
 	if err := addPostToFile(boardID, threadID, post); err != nil {
 		return c.JSON(http.StatusInternalServerError, "Failed to add post to thread")
 	}
@@ -288,9 +304,36 @@ func CreateThreadPost(c echo.Context) error {
 	boardName := url.PathEscape(boardID)
 	threadIDStr := strconv.Itoa(threadID)
 	redirectURL := "/board/" + boardName + "/" + threadIDStr
-	AddRecentPost(post)
+	if LatestPostsCheck(c, boardID) {
+		AddRecentPost(post)
+	}
 
 	return c.Redirect(http.StatusFound, redirectURL)
+}
+
+func LatestPostsCheck(c echo.Context, boardID string) bool {
+	if CheckIfArchived(boardID) {
+		return false
+	}
+	if CheckIfLocked(boardID) {
+		return false
+	}
+	if CheckIfImageOnly(boardID) {
+		return false
+	}
+	if CheckLatestPosts(boardID) {
+		return false
+	}
+	return true
+
+}
+
+func CheckLatestPosts(boardID string) bool {
+	db := database.DB
+
+	var board Board
+	db.Where("board_id = ?", boardID).First(&board)
+	return board.LatestPosts
 }
 
 func addPostToFile(boardID string, threadID int, post Post) error {
@@ -400,8 +443,8 @@ func DeleteLastThread(boardID string) {
 }
 
 func GetBoards() []Board {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var boards []Board
 	db.Find(&boards)
 
@@ -409,8 +452,8 @@ func GetBoards() []Board {
 }
 
 func GetLatestPosts(n int) ([]RecentPosts, error) {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var posts []RecentPosts
 	db.Order("timestamp DESC").Limit(n).Find(&posts)
 
@@ -418,24 +461,24 @@ func GetLatestPosts(n int) ([]RecentPosts, error) {
 }
 
 func GetBoardName(boardID string) string {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
 	return board.Name
 }
 
 func GetBoard(boardID string) Board {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
 	return board
 }
 
 func GetBoardID(boardID string) string {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
 	return board.BoardID
@@ -508,8 +551,8 @@ func GetThread(boardID string, threadID int) Post {
 }
 
 func AddRecentPost(post Post) {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var count int64
 	db.Model(&RecentPosts{}).Count(&count)
 	if count >= 10 {
@@ -519,41 +562,42 @@ func AddRecentPost(post Post) {
 		db.Where("id = ?", oldestPost.ID).Delete(&RecentPosts{})
 	}
 	recentPost := RecentPosts{
-		BoardID:   post.BoardID,
-		ThreadID:  post.ThreadID,
-		PostID:    post.PostID,
-		Content:   post.Content,
-		ImageURL:  post.ImageURL,
-		Subject:   post.Subject,
-		Timestamp: post.Timestamp,
+		BoardID:        post.BoardID,
+		ThreadID:       post.ThreadID,
+		PostID:         post.PostID,
+		Content:        post.Content,
+		PartialContent: post.PartialContent,
+		ImageURL:       post.ImageURL,
+		Subject:        post.Subject,
+		Timestamp:      post.Timestamp,
 	}
 	db.Create(&recentPost)
 }
 
 func CheckIfLocked(boardID string) bool {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
-	defer database.Close() // Ensure the database is closed after all operations are done
+	// Ensure the database is closed after all operations are done
 	return board.Locked
 }
 
 func CheckIfArchived(boardID string) bool {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
-	defer database.Close() // Ensure the database is closed after all operations are done
+	// Ensure the database is closed after all operations are done
 	return board.Archived
 }
 
 func CheckIfImageOnly(boardID string) bool {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
+
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
-	defer database.Close() // Ensure the database is closed after all operations are done
+	// Ensure the database is closed after all operations are done
 	return board.ImageOnly
 }
 
@@ -570,8 +614,7 @@ func ThreadCheckLocked(c echo.Context, boardid string, threadid string) bool {
 }
 
 func AddGlobalPostCount() int64 {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
 
 	var postCounter PostCounter
 	db.First(&postCounter)
@@ -580,8 +623,7 @@ func AddGlobalPostCount() int64 {
 	return postCounter.PostCount
 }
 func GetGlobalPostCount() int64 {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
 
 	var postCounter PostCounter
 	db.First(&postCounter)
@@ -589,8 +631,7 @@ func GetGlobalPostCount() int64 {
 }
 
 func AddBoardPostCount(boardID string) {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
 
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
@@ -599,10 +640,34 @@ func AddBoardPostCount(boardID string) {
 }
 
 func GetBoardPostCount(boardID string) int64 {
-	db := database.Connect()
-	defer database.Close()
+	db := database.DB
 
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
 	return board.PostCount
+}
+
+func GetPartialPosts(boardID string, threadID int, postid int) []Post {
+	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".json"
+	file, err := os.Open(filepath)
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+	var posts []Post
+	json.NewDecoder(file).Decode(&posts)
+
+	// get partial post
+	var partialPosts []Post
+	for i := range posts {
+		if posts[i].PostID > int64(postid) {
+			// Check if the post content is longer than 20 characters
+			if len(posts[i].Content) > 20 {
+				// Truncate the content to the first 20 characters
+				posts[i].Content = posts[i].Content[:20]
+			}
+			partialPosts = append(partialPosts, posts[i])
+		}
+	}
+	return partialPosts
 }

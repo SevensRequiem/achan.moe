@@ -20,6 +20,11 @@ type Board struct {
 	BoardID     string `json:"id" gorm:"column:board_id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	PostCount   int64  `json:"post_count"`
+	ImageOnly   bool   `json:"image_only"`   //todo
+	Locked      bool   `json:"locked"`       //todo
+	Archived    bool   `json:"archived"`     //todo
+	LatestPosts bool   `json:"latest_posts"` //todo
 }
 
 type Post struct {
@@ -56,8 +61,6 @@ func CreateBoard(c echo.Context) error {
 	if !auth.AdminCheck(c) {
 		return c.JSON(http.StatusUnauthorized, "Unauthorized")
 	}
-	database.Connect()
-	defer database.Close() // Ensure the database is closed after all operations are done
 
 	// get board name
 	name := c.FormValue("name")
@@ -74,15 +77,26 @@ func CreateBoard(c echo.Context) error {
 	if description == "" {
 		return c.JSON(http.StatusBadRequest, "Description cannot be empty")
 	}
+	recentposts := c.FormValue("recentposts")
+	if recentposts == "" {
+		return c.JSON(http.StatusBadRequest, "Recentposts cannot be empty")
+	}
+	// Convert recentposts to an integer
+	recentpostsValue := 0
+	if recentposts == "on" {
+		recentpostsValue = 1
+	}
+
 	// check if board exists
 	var board Board
-	result := database.DB.Where("board_id = ?", boardID).First(&board)
+	db := database.DB
+	result := db.Where("board_id = ?", boardID).First(&board)
 	if result.Error == nil {
 		// Record is found, throw an error
 		return c.JSON(http.StatusBadRequest, "Record found, operation not allowed")
 	} else if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		// Record not found, proceed with your operation
-		if err := database.DB.Exec("INSERT INTO boards (board_id, name, description) VALUES (?, ?, ?)", boardID, name, description).Error; err != nil {
+		if err := database.DB.Exec("INSERT INTO boards (board_id, name, description, latest_posts) VALUES (?, ?, ?, ?)", boardID, name, description, recentpostsValue).Error; err != nil {
 			return c.JSON(http.StatusInternalServerError, "Failed to insert record")
 		}
 		os.Mkdir("boards/"+boardID, 0755)   // Consider error handling for directory creation
@@ -98,13 +112,13 @@ func DeleteBoard(c echo.Context) {
 	if !auth.AdminCheck(c) {
 		c.JSON(http.StatusUnauthorized, "Unauthorized")
 	}
-	boardID := c.FormValue("id")
+	boardID := c.Param("b")
 	if boardID == "" {
 		c.JSON(http.StatusBadRequest, "ID cannot be empty")
 	}
-	database.Connect()
-	database.DB.Delete(&Board{}, "board_id = ?", boardID)
-	database.Close()
+	db := database.DB
+	db.Delete(&Board{}, "board_id = ?", boardID)
+
 	os.RemoveAll("boards/" + boardID)
 }
 
@@ -350,7 +364,7 @@ func RemoveFromRecentPosts(postID, threadID int64) {
 	}
 
 	// Open database connection
-	db := database.Connect()
+	db := database.DB
 
 	// Remove recent post by postID if it's not zero
 	if postID != 0 {
@@ -361,7 +375,6 @@ func RemoveFromRecentPosts(postID, threadID int64) {
 	if threadID != 0 {
 		removeRecentPostByField(db, "thread_id", threadID)
 	}
-	defer database.Close()
 
 }
 

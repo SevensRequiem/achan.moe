@@ -10,7 +10,9 @@ import (
 	"net/http"
 
 	"achan.moe/auth"
+	"achan.moe/bans"
 	"achan.moe/board"
+	"achan.moe/utils"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 )
@@ -163,6 +165,7 @@ func globaldata(c echo.Context) map[string]interface{} {
 	data["IP"] = c.RealIP()
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	data["user"] = "Anonymous"
+	data["TotalSize"] = utils.GetProjectSize(".")
 	latestPosts, err := board.GetLatestPosts(1)
 	if err != nil {
 		// Handle the error, for example, log it or return it
@@ -183,6 +186,26 @@ func AdminHandler(c echo.Context) error {
 	data := map[string]interface{}{}
 	data = globaldata(c)
 	data["Pagename"] = "Admin"
+	data["Boards"] = board.GetBoards()
+	data["Bans"] = bans.GetBans(c)
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func DonateHandler(c echo.Context) error {
+	tmpl, err := template.ParseFiles("views/base.html", "views/donate.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	data := map[string]interface{}{}
+	data = globaldata(c)
+	data["Pagename"] = "Donate"
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {

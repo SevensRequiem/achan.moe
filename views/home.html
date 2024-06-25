@@ -31,22 +31,32 @@
         {{range .LatestPosts}}
             {{if .Subject}}
             <li>
-                <img src="/{{.ImageURL}}" alt="Image">
-                <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
-                <span>by {{.Author}} on {{.Timestamp}}</span>
+                <a href="/board/{{.BoardID}}/{{.ThreadID}}" >
+                {{if .ImageURL}}
+                <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                {{end}}
+                <span class="subject">{{.Subject}}</span>
+                <p>{{.PartialContent}}</p>
+                <span>{{.Timestamp}}</span></a>
             </li>
             {{else}}
             <li>
-                <img src="/{{.ImageURL}}" alt="Image">
-                <a href="/board/{{.BoardID}}/{{.ThreadID}}">No Subject</a>
-                <span>by {{.Author}} on {{.Timestamp}}</span>
+                <a href="/board/{{.BoardID}}/{{.ThreadID}}" >
+                {{if .ImageURL}}
+                <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                {{end}}
+                <p>{{.PartialContent}}</p>
+                <span>{{.Timestamp}}</span></a>
             </li>
             {{end}}
-
         {{end}}
     </ul>
 </fieldset>
     <style>
+            .subject {
+        font-weight: bold;
+        color: #AAF;
+    }
         #boards {
             width: 50%;
             margin: 0 auto;
@@ -94,18 +104,17 @@
             margin: 0;
         }
 
-        #latest li {
+        #latest li a {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            border: 1px solid #00fff2;
+            border: 1px solid #1f1f1f;
             margin: 10px;
             padding: 10px;
         }
 
         #latest img {
-            margin-right: 10px;
             max-height: 200px;
         }
 

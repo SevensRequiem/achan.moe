@@ -16,6 +16,10 @@ func Routes(e *echo.Echo) {
 		return home.HomeHandler(c)
 	})
 
+	e.GET("/donate", func(c echo.Context) error {
+		return home.DonateHandler(c)
+	})
+
 	e.GET("/board/:b", func(c echo.Context) error {
 		return home.BoardHandler(c)
 	})
@@ -65,7 +69,7 @@ func Routes(e *echo.Echo) {
 	})
 
 	e.POST("/admin/ban", func(c echo.Context) error {
-		bans.BanIP(c, c.FormValue("ip"), c.FormValue("reason"), c.FormValue("username"), c.FormValue("admin"), c.FormValue("timestamp"))
+		bans.BanIP(c)
 		return nil
 	})
 	// janny

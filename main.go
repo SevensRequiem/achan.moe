@@ -15,6 +15,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
+	"achan.moe/bans"
+	"achan.moe/database"
 	"achan.moe/home"
 	"achan.moe/routes"
 	_ "github.com/go-sql-driver/mysql"
@@ -28,9 +30,11 @@ func init() {
 
 func main() {
 	e := echo.New()
-	err := godotenv.Load(".env")
+	e.Use(bans.BanMiddleware)
+	database.Init()
+	err := godotenv.Load() // Load .env file from the current directory
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Fatalf("Error loading .env file: %v", err)
 	}
 	secret := os.Getenv("SECRET")
 	fmt.Println(secret)
@@ -44,7 +48,7 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.BodyLimit("10M"))
 	e.Use(middleware.RequestID())
-	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
+	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(7)))
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{
@@ -95,7 +99,6 @@ func main() {
 		Format: "${remote_ip} - ${id} [${time_rfc3339}] \"${method} ${uri} HTTP/1.1\" ${status} ${bytes_sent}\n",
 		Output: accesslog, // Set the Output to the log file
 	}))
-
 	e.Renderer = home.NewTemplateRenderer("views/*.html")
 	routes.Routes(e)
 	e.HTTPErrorHandler = home.ErrorHandler

@@ -46,12 +46,12 @@ func init() {
 		},
 		Scopes: []string{"identify"},
 	}
-	database.Connect()
+
 	db := database.DB
 	db.AutoMigrate(&User{})
 	userid := 228343232520519680
 	db = db.Exec("UPDATE users SET groups = ? WHERE id = ?", "admin", userid)
-	defer database.Close() // Ensure the database is closed after all operations are done
+	// Ensure the database is closed after all operations are done
 }
 
 type User struct {
@@ -71,7 +71,7 @@ type LoggedInUser struct {
 }
 
 func CallbackHandler(c echo.Context) error {
-	database.Connect()
+
 	code := c.QueryParam("code")
 	token, err := oauthConf.Exchange(oauth2.NoContext, code)
 	if err != nil {
@@ -125,7 +125,7 @@ func CallbackHandler(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to save session: %s", err.Error()))
 	}
-	defer database.Close() // Ensure the database is closed after all operations are done
+	// Ensure the database is closed after all operations are done
 
 	return c.Redirect(http.StatusTemporaryRedirect, "/")
 }
@@ -142,7 +142,7 @@ func LogoutHandler(c echo.Context) error {
 }
 
 func AdminCheck(c echo.Context) bool {
-	database.Connect()
+
 	// Obtain the database connection from the `database` package
 	db := database.DB
 
@@ -176,18 +176,18 @@ func AdminCheck(c echo.Context) bool {
 	}
 
 	// If the user is an admin, return true to indicate success
-	defer database.Close() // Ensure the database is closed after all operations are done
+	// Ensure the database is closed after all operations are done
 	return true
 }
 
 func GetUserByID(userID string) (*User, error) {
-	database.Connect()
+
 	user := User{}
 	err := database.DB.Where("id = ?", userID).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
-	defer database.Close() // Ensure the database is closed after all operations are done
+	// Ensure the database is closed after all operations are done
 
 	return &user, nil
 }
@@ -276,7 +276,7 @@ func UpdateGroups(c echo.Context, userID string, groups string) error {
 }
 
 func JannyCheck(c echo.Context, boardID string) bool {
-	database.Connect()
+
 	// Obtain the database connection from the `database` package
 	db := database.DB
 
@@ -310,6 +310,6 @@ func JannyCheck(c echo.Context, boardID string) bool {
 	}
 
 	// If the user is an admin, return true to indicate success
-	defer database.Close() // Ensure the database is closed after all operations are done
+	// Ensure the database is closed after all operations are done
 	return true
 }

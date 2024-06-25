@@ -1,4 +1,9 @@
 {{define "content"}}
+<div id="threadnav">
+    <a href="/board/{{.Thread.BoardID}}">/{{.Thread.BoardID}}/</a> - <a href="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}">/{{.Thread.ThreadID}}/</a>
+    <span>{{.Thread.Subject}}</span>
+    <a href="/board/{{.Thread.BoardID}}">Back</a>
+</div>
 <div class="container">
     <fieldset id="board">
         <legend>{{.Thread.Author}} // {{.Thread.Subject}} - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
@@ -123,6 +128,17 @@
     </fieldset>
 </div>
 <style>
+    #threadnav {
+        display: flex;
+        flex-direction: row;
+        justify-content: left;
+        align-items: center;
+        border-bottom: 5px solid #1b1b1b;
+    }
+    #threadnav a, #threadnav span {
+        margin-right: 10px;
+    }
+    
     .mod {
         display: flex;
         flex-direction: row;

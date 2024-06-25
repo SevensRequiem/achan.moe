@@ -12,13 +12,11 @@
     <div class="scene"></div>
     <div id="side">
         <span class="achantitle">achan.moe</span>
+        <span class="subtitle">v0.01</span>
         <span>&copy;2023</span>
         <ol>
             <li><a href="/">home</a></li>
-            <li><a href="/home">rules</a></li>
-            <li><a href="/home">store</a></li>
-            <li><a href="/home">donate</a></li>
-            <li>[0$ Oct]</li>
+            <li><a href="/donate">donate</a></li>
 
             <hr>
 
@@ -39,26 +37,13 @@
     </div>
     <div id="footer">
         <span id="page-data">
-            <span> [ </span>
-            <span id="page-title">
-
-            </span>
             <span id="page-url">
-                >> achan.moe//{{.Pagename}}
+                >> achan.moe/{{.Pagename}}
             </span>
-            <span id="board-stats">
-                <span>Threads:<span id="thread-count"></span></span>
-                <span> | </span>
-                <span>Size:<span id="thread-size"></span></span>
-                <span> | </span>
-            </span>
-            <span> ] </span>
         </span>
         <span id="site-data">
             <span> [ </span>
-            <span>Latest: <span id="site-latest">{{.LatestPost}}</span></span>
-            <span> | </span>
-            <span>Total:<span id="site-size"></span></span>
+            <span>Total:<span id="site-size">{{.TotalSize}} MB</span></span>
             <span> | </span>
             <span><span id="site-ip">IP: {{.IP}}</span></span>
             <span> ] </span>

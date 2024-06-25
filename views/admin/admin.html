@@ -16,6 +16,17 @@
             <div>
             <label for="boardDesc">Board Description:</label>
             <input type="text" id="description" name="description" required><br><br>
+            <div id="options">
+                <input type="checkbox" name="LatestPostsCheckbox" id="LatestPosts" onchange="updateLatestPostsValue()">
+                <label for="LatestPosts">Disable Latest Posts</label>
+                <input type="hidden" name="LatestPosts" id="recentposts" value="0">
+                <script>
+                function updateLatestPostsValue() {
+                    var checkbox = document.getElementById('LatestPosts');
+                    var hiddenInput = document.getElementById('recentposts');
+                    hiddenInput.value = checkbox.checked ? "1" : "0";
+                }
+                </script>
             </div>
         </div>
 
@@ -34,6 +45,7 @@
                     formData.append('name', name);
                     formData.append('id', id);
                     formData.append('description', description);
+                    formData.append('recentposts', document.getElementById("LatestPosts").value);
                     
                     // Define the URL for creating a board
                     const createBoardUrl = "/admin/board";
@@ -71,12 +83,118 @@
                 {{end}}
             </select>
         </div>
-        <a href="#" onclick="deleteBoard()">Delete Board</a>
+        <a href="#" onclick="deleteBoard(); return false;">Delete Board</a>
     </form>
+    <script>
+        // Define deleteBoard as an async function to handle board deletion
+        const deleteBoard = async () => {
+            // Retrieve the selected board ID
+            const boardID = document.querySelector("select[name='boardID']").value;
+            // Define the URL for deleting a board
+            const deleteBoardUrl = `/admin/delete/${boardID}`;
+            try {
+                // Send a DELETE request to the server
+                const response = await fetch(deleteBoardUrl, {
+                    method: "DELETE"
+                });
+                // Check if the request was successful
+                if (response.ok) {
+                    alert("Board deleted successfully");
+                } else {
+                    // If the server responds with an error, alert the user
+                    const errorText = await response.text(); // Assuming the server sends a textual error message
+                    alert(`Failed to delete board: ${errorText}`);
+                }
+            } catch (error) {
+                // Catch and alert any errors that occur during the fetch operation
+                alert(`Error: ${error.message}`);
+            }
+        }
+    </script>
     <hr>
 
 </fieldset>
+<div id="bans">
+<form>
+    <input type="text" name="ip" placeholder="IP Address">
+    <input type="text" name="reason" placeholder="Reason">
+    <input hidden type="text" name="username" value="{{.User}}">
+    <input type="date" name="expires" placeholder="Expires">
+    <a href="#" onclick="return false;">Ban IP</a>
+</form>
+<script>
+    document.querySelector("#bans form a").addEventListener("click", async () => {
+        const ip = document.querySelector("#bans form input[name='ip']").value;
+        const reason = document.querySelector("#bans form input[name='reason']").value;
+        const username = document.querySelector("#bans form input[name='username']").value;
+        const expires = document.querySelector("#bans form input[name='expires']").value;
+        const formData = new URLSearchParams();
+        formData.append('ip', ip);
+        formData.append('reason', reason);
+        formData.append('username', username);
+        formData.append('expires', expires);
+        const response = await fetch("/admin/ban", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: formData
+        });
+        if (response.ok) {
+            alert("IP banned successfully");
+        } else {
+            const errorText = await response.text();
+            alert(`Failed to ban IP: ${errorText}`);
+        }
+    });
+</script>
+<table>
+    <tr>
+        <th>Banned IP</th>
+        <th>Reason</th>
+        <th>Admin</th>
+        <th>Timestamp</th>
+        <th>Expires</th>
+
+    </tr>
+    {{range .Bans}}
+    <tr>
+        <td>{{.IP}}</td>
+        <td>{{.Reason}}</td>
+        <td>{{.Username}}</td>
+        <td>{{.Timestamp}}</td>
+        <td>{{.Expires}}</td>
+    </tr>
+    {{end}}
+    
+</table>
+</div>
 <style>
+    #bans {
+        width: 80%;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    #bans table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    #bans th, #bans td {
+        border: 1px solid black;
+        padding: 5px;
+    }
+    #bans th {
+        background-color: #1b1b1b;
+    }
+    #bans form {
+        width: 100%;
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+    }
     #admin {
         width: 50%;
         margin: 0 auto;

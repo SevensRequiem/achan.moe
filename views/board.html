@@ -1,14 +1,11 @@
 {{define "content"}}
-<fieldset id="board">
-    <legend>
-        {{.BoardID}}
-    </legend>
+    <div class="container">
     <form action="/board/{{.BoardID}}" method="post" enctype="multipart/form-data">
         <div>
         <label for="subject">Subject:</label>
         <input type="text" id="subject" name="subject" required><br><br>
         <label for="author">Username:</label>
-        <input type="text" id="author" name="author" required><br><br>
+        <input type="text" id="author" name="author" value="Anonymous"><br><br>
         </div>
         <label for="content">Post:</label>
         <textarea id="content" name="content" required></textarea><br><br>
@@ -32,7 +29,7 @@
         
         <button type="submit">Submit Post</button>
     </form>
-    </fieldset>
+    </div>
 <fieldset id="threads">
     <ul>
         {{if .IsAdmin}}
@@ -40,8 +37,11 @@
             {{range .Threads}}
                 {{if .Sticky}}
                 <li class="sticky">
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}" target="_blank">
                     <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
-                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                    <span class="subject">{{.Subject}}</span>
+                    <p>{{.PartialContent}}</p>
+                    <span>{{.Timestamp}}</span></a>
                 </li>
                 {{end}}
             {{end}}
@@ -49,8 +49,11 @@
             {{range .Threads}}
                 {{if not .Sticky}}
                 <li>
-                    <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
-                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}" target="_blank">
+                        <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <span class="subject">{{.Subject}}</span>
+                        <p>{{.PartialContent}}</p>
+                        <span>{{.Timestamp}}</span></a>
                 </li>
                 {{end}}
             {{end}}
@@ -59,8 +62,11 @@
             {{range .Threads}}
                 {{if .Sticky}}
                 <li class="sticky">
-                    <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
-                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}" target="_blank">
+                        <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <span class="subject">{{.Subject}}</span>
+                        <p>{{.PartialContent}}</p>
+                        <span>{{.Timestamp}}</span></a>
                 </li>
                 {{end}}
             {{end}}
@@ -68,8 +74,11 @@
             {{range .Threads}}
                 {{if not .Sticky}}
                 <li>
-                    <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
-                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}" target="_blank">
+                        <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <span class="subject">{{.Subject}}</span>
+                        <p>{{.PartialContent}}</p>
+                        <span>{{.Timestamp}}</span></a>
                 </li>
                 {{end}}
             {{end}}
@@ -79,6 +88,10 @@
     </ul>
 </fieldset>
 <style>
+    .subject {
+        font-weight: bold;
+        color: #AAF;
+    }
     #board {
         display: flex;
         align-items: center; /* Vertically center the content */
@@ -87,18 +100,12 @@
         margin: 0 auto; /* Center the fieldset */
         width: 50%; /* Adjust as necessary */
     }
-    form {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        width: 50%; /* Adjust as necessary */
-    }
     #threads {
         display: flex;
         list-style-type: none;
         padding: 15px;
         margin: 0;
+        border: 0;
     }
     #threads ul {
         display: flex;
@@ -109,14 +116,18 @@
         margin: 0;
 
     }
-    #threads li {
+    #threads li a {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        border: 1px solid #00fff2;
+        border: 1px solid #1a1a1a;
         margin: 10px;
         padding: 10px;
+    }
+    #threads li a p {
+        margin: 10px;
+        color: #AAF;
     }
     #threads a {
         text-decoration: none;
@@ -127,14 +138,7 @@
     #threads a:hover {
         text-decoration: underline;
     }
-    #threads a::before {
-        content: "[";
-        color: #AAF;
-    }
-    #threads a::after {
-        content: "]";
-        color: #AAF;
-    }
+
     #threads img {
         max-height: 300px;
     }
@@ -149,6 +153,40 @@
         flex-direction: row;
         align-items: center;
         justify-content: center;
+    }
+    .container {
+        display: flex;
+        flex-direction: column;
+        align-items: left;
+        width: 30%;
+        margin: 0 auto;
+    }
+    form {
+        display: flex;
+        flex-direction: column;
+        align-items: left;
+        border: 1px solid #181818;
+    }
+    form label {
+        color: #AAF;
+    }
+    form input {
+        background-color: rgb(26, 26, 26);
+        color: #035d79;
+        border: 1px solid #035d79;
+        margin: 5px;
+    }
+    form textarea {
+        background-color: rgb(26, 26, 26);
+        color: #035d79;
+        border: 1px solid #035d79;
+    }
+    form button {
+        background-color: #035d79;
+        color: rgb(26, 26, 26);
+        border: 1px solid #035d79;
+        width: 50%;
+        margin: 0 auto;
     }
 </style>
 

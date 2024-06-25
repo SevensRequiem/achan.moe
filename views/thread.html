@@ -1,0 +1,215 @@
+{{define "content"}}
+<div class="container">
+    <fieldset id="board">
+        <legend>{{.Thread.Author}} // {{.Thread.Subject}} - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
+            {{.Thread.Timestamp}}</legend>
+        {{if .Thread.ImageURL}}
+        <img src="/img/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image">
+        {{end}}
+        <p>{{.Thread.Content}}</p>
+
+    </fieldset>
+    {{if .IsAdmin}}
+    <div class="mod"><a href="#" onclick="deleteThread()">Delete Thread</a>|<a href="#" onclick="banUser()">Ban IP</a>|<a href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a></div>
+    <script>
+        const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
+        const threadid = {{.Thread.ThreadID }};
+        const boardid = {{.Thread.BoardID }};
+        const deleteThread = async () => {
+            const response = await fetch(url, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ threadid, boardid })
+            });
+            if (response.ok) {
+                window.location.href = "/board/{{.Thread.BoardID}}";
+            }
+        }
+
+    </script>
+    {{else if .IsJanny }}
+    <a href="#" onclick="deleteThread()">Delete Thread</a>
+    <script>
+        const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
+        const threadid = {{.Thread.ThreadID }};
+        const boardid = {{.Thread.BoardID }};
+        const deleteThread = async () => {
+            const response = await fetch(url, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ threadid, boardid })
+            });
+            if (response.ok) {
+                window.location.href = "/board/{{.Thread.BoardID}}";
+            }
+        }
+
+    </script>
+    {{end}}
+    <div id="posts">
+        {{if .IsAdmin}}
+        <script>
+            // Assuming BoardID and ThreadID are available in the template's root object
+            const boardID = "{{.BoardID}}";
+            const threadID = "{{.ThreadID}}";
+            const deletePost = async (postid) => {
+                const url = `/admin/delete/${boardID}/${threadID}/` + postid;
+                const response = await fetch(url, {
+                    method: "DELETE",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                if (response.ok) {
+                    window.location.reload();
+                }
+            }
+        </script>
+
+        {{range .Posts}}
+            <fieldset class="post">
+                <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>
+                    <a href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |
+                    <a href="#" onclick="banUser('{{.IP}}')">Ban IP</a> |
+                    <a href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a></legend>
+                {{if .ImageURL}}
+                <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Post Image">
+                {{end}}
+                <p>{{.Content}}</p>
+
+            </fieldset>
+        {{end}}
+        {{else if .IsJanny}}
+        {{range .Posts}}
+        <fieldset class="post">
+            <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span></legend>
+            {{if .ImageURL}}
+            <img src="/{{.ImageURL}}" alt="Post Image">
+            {{end}}
+            <p>{{.Content}}</p>
+            <div class="mod">
+                <a href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a>
+            </div>
+        </fieldset>
+        {{end}}
+        {{else}}
+        {{range .Posts}}
+        <fieldset class="post">
+            <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span></legend>
+            {{if .ImageURL}}
+            <img src="/{{.ImageURL}}" alt="Post Image">
+            {{end}}
+            <p>{{.Content}}</p>
+        </fieldset>
+        {{end}}
+        {{end}}
+    </div>
+    <fieldset id="reply">
+        <legend>Reply</legend>
+    <form action="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}" method="post" enctype="multipart/form-data">
+        <input type="text" id="boardID" name="b" value="{{.BoardID}}" hidden><br><br>
+        <label for="author">Username:</label>
+        <input type="text" id="author" name="author" value="Anonymous" required><br><br>
+        <label for="content">Post:</label>
+        <textarea id="content" name="content" required></textarea><br><br>
+        <label for="image">Image:</label>
+        <input type="file" id="image" name="image" accept="image/*"><br><br>
+        <button type="submit">Submit Post</button>
+    </form>
+    </fieldset>
+</div>
+<style>
+    .mod {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-around;
+        align-items: center;
+    }
+    .container {
+        display: flex;
+        flex-direction: column;
+        align-items: left;
+    }
+
+    #board {
+        border-bottom: 0;
+        border-left: 0;
+        border-right: 0;
+        border-top: 5px solid #00fff2;
+        display: flex;
+        flex-direction: row;
+        justify-content: start;
+        align-items: left;
+    }
+
+    #board img {
+        margin-right: 10px;
+        max-height: 300px;
+    }
+
+    .posts {
+        display: flex;
+        flex-direction: column;
+        align-items: left;
+    }
+
+    .post {
+        border-bottom: 0;
+        border-left: 0;
+        border-right: 0;
+        border-top: 5px solid #00ff22;
+        background-color: rgb(26, 26, 26);
+        display: flex;
+        flex-direction: row;
+        justify-content: start;
+        align-items: left;
+        margin-top: 10px;
+    }
+
+    .post legend span {
+        margin-right: 10px;
+    }
+
+    .post img {
+        margin-right: 10px;
+        max-height: 200px;
+    }
+    #reply {
+        display: flex;
+        flex-direction: column;
+        align-items: left;
+        width: 30%;
+        margin: 0 auto;
+    }
+    form {
+        display: flex;
+        flex-direction: column;
+        align-items: left;
+    }
+    form label {
+        color: #AAF;
+    }
+    form input {
+        background-color: rgb(26, 26, 26);
+        color: #035d79;
+        border: 1px solid #035d79;
+    }
+    form textarea {
+        background-color: rgb(26, 26, 26);
+        color: #035d79;
+        border: 1px solid #035d79;
+    }
+    form button {
+        background-color: #035d79;
+        color: rgb(26, 26, 26);
+        border: 1px solid #035d79;
+        width: 50%;
+        margin: 0 auto;
+    }
+</style>
+
+{{end}}

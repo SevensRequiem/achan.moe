@@ -1,0 +1,129 @@
+{{define "content"}}
+    <fieldset id="home">
+        <legend>Welcome, {{.IP}}</legend>
+        <span>Here you can view the latest posts and boards.</span>
+        <hr>
+        <h3>Rules</h3>
+        <ol>
+            <li>No illegal content.</li>
+            <li>No spamming.</li>
+            <li>No doxxing.</li>
+            <li>No flooding.</li>
+            <li>No impersonation.</li>
+            <li>No off-topic posts.</li>
+            <li>No advertising.</li>
+        </ol>
+
+    </fieldset>
+        
+    <fieldset id="boards">
+        <legend>Boards</legend>
+        <ul>
+            {{range .Boards}}
+                <li><a href="/board/{{.BoardID}}">/{{.BoardID}}/</a> - {{.Description}}</li>
+            {{end}}
+        </ul>
+    </fieldset>
+    <hr>
+<fieldset id="latest">
+    <legend>Latest Posts</legend>
+    <ul>
+        {{range .LatestPosts}}
+            {{if .Subject}}
+            <li>
+                <img src="/{{.ImageURL}}" alt="Image">
+                <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                <span>by {{.Author}} on {{.Timestamp}}</span>
+            </li>
+            {{else}}
+            <li>
+                <img src="/{{.ImageURL}}" alt="Image">
+                <a href="/board/{{.BoardID}}/{{.ThreadID}}">No Subject</a>
+                <span>by {{.Author}} on {{.Timestamp}}</span>
+            </li>
+            {{end}}
+
+        {{end}}
+    </ul>
+</fieldset>
+    <style>
+        #boards {
+            width: 50%;
+            margin: 0 auto;
+        }
+        #boards ul {
+            display: flex;
+            flex-wrap: wrap;
+            flex-direction: row;
+            justify-content: space-around;
+            list-style-type: none;
+            padding: 15px;
+            margin: 0;
+        }
+        #boards li {
+            margin: 0;
+            padding: 0;
+        }
+        #boards li::before {
+            content: "[";
+            margin-right: 5px;
+        }
+        #boards li::after {
+            content: "]";
+            margin-left: 5px;
+        }
+        #boards a {
+            text-decoration: none;
+            color: rgb(16, 197, 128);
+        }
+        #boards a:hover {
+            text-decoration: underline;
+        }
+
+        #latest {
+            width: 50%;
+            margin: 0 auto;
+        }
+        #latest ul {
+            display: flex;
+            flex-wrap: wrap;
+            flex-direction: row;
+            justify-content: space-around;
+            list-style-type: none;
+            padding: 15px;
+            margin: 0;
+        }
+
+        #latest li {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #00fff2;
+            margin: 10px;
+            padding: 10px;
+        }
+
+        #latest img {
+            margin-right: 10px;
+            max-height: 200px;
+        }
+
+
+
+        #home {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+
+            width: 50%;
+            margin: 0 auto;
+        }
+        #home p {
+            margin: 0;
+            padding: 0;
+        }
+
+    </style>
+{{end}}

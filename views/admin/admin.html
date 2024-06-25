@@ -1,0 +1,108 @@
+{{define "content"}}
+<fieldset id="admin">
+    <legend>
+        Admin Panel
+    </legend>
+    <form action="/admin/board" method="post">
+        <div>
+            <div>
+            <label for="board">Board:</label>
+            <input type="text" id="name" name="name" required><br><br>
+            </div>
+            <div>
+            <label for="boardID">Board ID:</label>
+            <input type="text" id="id" name="id" required><br><br>
+            </div>
+            <div>
+            <label for="boardDesc">Board Description:</label>
+            <input type="text" id="description" name="description" required><br><br>
+            </div>
+        </div>
+
+        <a href="#" onclick="createBoard(); return false;">Create Board</a>
+            </form>
+            <script>
+                // Define createBoard as an async function to handle board creation
+                const createBoard = async () => {
+                    // Retrieve input values
+                    const name = document.getElementById("name").value;
+                    const id = document.getElementById("id").value;
+                    const description = document.getElementById("description").value;
+                    
+                    // Prepare URL-encoded form data
+                    const formData = new URLSearchParams();
+                    formData.append('name', name);
+                    formData.append('id', id);
+                    formData.append('description', description);
+                    
+                    // Define the URL for creating a board
+                    const createBoardUrl = "/admin/board";
+                    try {
+                        // Send a POST request to the server with URL-encoded form data
+                        const response = await fetch(createBoardUrl, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/x-www-form-urlencoded"
+                            },
+                            body: formData
+                        });
+                        // Check if the request was successful
+                        if (response.ok) {
+                            alert("Board created successfully");
+                        } else {
+                            // If the server responds with an error, alert the user
+                            const errorText = await response.text(); // Assuming the server sends a textual error message
+                            alert(`Failed to create board: ${errorText}`);
+                        }
+                    } catch (error) {
+                        // Catch and alert any errors that occur during the fetch operation
+                        alert(`Error: ${error.message}`);
+                    }
+                }
+            </script>
+
+    <hr>
+
+    <form action="/admin" method="post">
+        <div>
+            <select name="boardID">
+                {{range .Boards}}
+                <option value="{{.BoardID}}">{{.BoardID}}</option>
+                {{end}}
+            </select>
+        </div>
+        <a href="#" onclick="deleteBoard()">Delete Board</a>
+    </form>
+    <hr>
+
+</fieldset>
+<style>
+    #admin {
+        width: 50%;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+
+    }
+
+    #admin hr {
+        width: 100%;
+    }
+
+    #admin form {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    #admin form div {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+    }
+</style>
+{{end}}
+

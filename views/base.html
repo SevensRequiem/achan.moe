@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>achan.moe</title>
+    <link rel="stylesheet" href="http://192.168.0.12:1313/assets/css/main.css" />
+</head>
+
+<body>
+    <div class="scene"></div>
+    <div id="side">
+        <span class="achantitle">achan.moe</span>
+        <span>&copy;2023</span>
+        <ol>
+            <li><a href="/">home</a></li>
+            <li><a href="/home">rules</a></li>
+            <li><a href="/home">store</a></li>
+            <li><a href="/home">donate</a></li>
+            <li>[0$ Oct]</li>
+
+            <hr>
+
+            {{if .User}}
+            <span class="user">[{{.User}}]</span>
+            <span class="logout"><a href="/logout">logout</a></span>
+            {{else}}
+            <span class="login"><a href="/login">login</a></span>
+            {{end}}
+
+            {{if .IsAdmin}}
+            <span class="admin"><a href="/admin">admin</a></span>
+            {{end}}
+        </ol>
+    </div>
+    <div id="content">
+        {{template "content" .}}
+    </div>
+    <div id="footer">
+        <span id="page-data">
+            <span> [ </span>
+            <span id="page-title">
+
+            </span>
+            <span id="page-url">
+                >> achan.moe//{{.Pagename}}
+            </span>
+            <span id="board-stats">
+                <span>Threads:<span id="thread-count"></span></span>
+                <span> | </span>
+                <span>Size:<span id="thread-size"></span></span>
+                <span> | </span>
+            </span>
+            <span> ] </span>
+        </span>
+        <span id="site-data">
+            <span> [ </span>
+            <span>Latest: <span id="site-latest">{{.LatestPost}}</span></span>
+            <span> | </span>
+            <span>Total:<span id="site-size"></span></span>
+            <span> | </span>
+            <span><span id="site-ip">IP: {{.IP}}</span></span>
+            <span> ] </span>
+        </span>
+    </div>
+</body>
+
+</html>

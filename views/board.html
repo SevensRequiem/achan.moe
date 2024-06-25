@@ -1,0 +1,155 @@
+{{define "content"}}
+<fieldset id="board">
+    <legend>
+        {{.BoardID}}
+    </legend>
+    <form action="/board/{{.BoardID}}" method="post" enctype="multipart/form-data">
+        <div>
+        <label for="subject">Subject:</label>
+        <input type="text" id="subject" name="subject" required><br><br>
+        <label for="author">Username:</label>
+        <input type="text" id="author" name="author" required><br><br>
+        </div>
+        <label for="content">Post:</label>
+        <textarea id="content" name="content" required></textarea><br><br>
+        <div id="options">
+        {{if .IsAdmin}}
+        <label for="isSticky">Sticky:</label>
+        <input type="checkbox" id="isSticky" name="isSticky"><br><br>
+        <label for="isLocked">Locked:</label>
+        <input type="checkbox" id="isLocked" name="isLocked"><br><br>
+        {{else if .IsJanny}}
+        <label for="isSticky">Sticky:</label>
+        <input type="checkbox" id="isSticky" name="isSticky"><br><br>
+        <label for="isLocked">Locked:</label>
+        <input type="checkbox" id="isLocked" name="isLocked"><br><br>
+        {{end}}
+        
+        <label for="image">Image:</label>
+        
+        <input type="file" id="image" name="image" accept="image/*" required><br><br>
+        </div>
+        
+        <button type="submit">Submit Post</button>
+    </form>
+    </fieldset>
+<fieldset id="threads">
+    <ul>
+        {{if .IsAdmin}}
+            <!-- Render sticky threads first for admin -->
+            {{range .Threads}}
+                {{if .Sticky}}
+                <li class="sticky">
+                    <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                </li>
+                {{end}}
+            {{end}}
+            <!-- Render non-sticky threads -->
+            {{range .Threads}}
+                {{if not .Sticky}}
+                <li>
+                    <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                </li>
+                {{end}}
+            {{end}}
+        {{else}}
+            <!-- Render sticky threads first for non-admin -->
+            {{range .Threads}}
+                {{if .Sticky}}
+                <li class="sticky">
+                    <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                </li>
+                {{end}}
+            {{end}}
+            <!-- Render non-sticky threads -->
+            {{range .Threads}}
+                {{if not .Sticky}}
+                <li>
+                    <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">{{.Subject}}</a>
+                </li>
+                {{end}}
+            {{end}}
+        {{end}}
+
+
+    </ul>
+</fieldset>
+<style>
+    #board {
+        display: flex;
+        align-items: center; /* Vertically center the content */
+        justify-content: center; /* Horizontally center the content */
+        flex-direction: column; /* Stack the content vertically */
+        margin: 0 auto; /* Center the fieldset */
+        width: 50%; /* Adjust as necessary */
+    }
+    form {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 50%; /* Adjust as necessary */
+    }
+    #threads {
+        display: flex;
+        list-style-type: none;
+        padding: 15px;
+        margin: 0;
+    }
+    #threads ul {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+
+    }
+    #threads li {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #00fff2;
+        margin: 10px;
+        padding: 10px;
+    }
+    #threads a {
+        text-decoration: none;
+        color: rgb(16, 197, 128);
+        padding: 5px;
+
+    }
+    #threads a:hover {
+        text-decoration: underline;
+    }
+    #threads a::before {
+        content: "[";
+        color: #AAF;
+    }
+    #threads a::after {
+        content: "]";
+        color: #AAF;
+    }
+    #threads img {
+        max-height: 300px;
+    }
+
+    #threads img:hover {
+        cursor: pointer;
+        max-height: 600px;
+    }
+
+    #options {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+{{end}}

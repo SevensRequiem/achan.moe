@@ -266,10 +266,31 @@ func CheckLoggedIn(c echo.Context) (*LoggedInUser, error) {
 	return &LoggedInUser{ID: user.ID, Username: user.Username, IsLoggedIn: true}, nil
 }
 
-func UpdateGroups(c echo.Context, userID string, groups string) error {
+func UpdateGroups(c echo.Context) error {
+	if !AdminCheck(c) {
+		return fmt.Errorf("user is not an admin")
+	}
+	groups := c.FormValue("groups")
+	userID := c.FormValue("userID")
+
 	db := database.DB.Exec("UPDATE users SET groups = ? WHERE id = ?", groups, userID)
 	if db.Error != nil {
 		return fmt.Errorf("failed to update user groups: %v", db.Error)
+	}
+
+	return nil
+}
+
+func UpdateJannyBoards(c echo.Context) error {
+	if !AdminCheck(c) {
+		return fmt.Errorf("user is not an admin")
+	}
+	jannyBoard := c.FormValue("boardID")
+	userID := c.FormValue("userID")
+
+	db := database.DB.Exec("UPDATE users SET janny_boards = ? WHERE id = ?", jannyBoard, userID)
+	if db.Error != nil {
+		return fmt.Errorf("failed to update user janny boards: %v", db.Error)
 	}
 
 	return nil

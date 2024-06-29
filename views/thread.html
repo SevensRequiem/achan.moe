@@ -1,231 +1,275 @@
 {{define "content"}}
-<div id="threadnav">
-    <a href="/board/{{.Thread.BoardID}}">/{{.Thread.BoardID}}/</a> - <a href="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}">/{{.Thread.ThreadID}}/</a>
-    <span>{{.Thread.Subject}}</span>
-    <a href="/board/{{.Thread.BoardID}}">Back</a>
-</div>
-<div class="container">
-    <fieldset id="board">
-        <legend>{{.Thread.Author}} // {{.Thread.Subject}} - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
-            {{.Thread.Timestamp}}</legend>
-        {{if .Thread.ImageURL}}
-        <img src="/img/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image">
-        {{end}}
-        <p>{{.Thread.Content}}</p>
 
-    </fieldset>
-    {{if .IsAdmin}}
-    <div class="mod"><a href="#" onclick="deleteThread()">Delete Thread</a>|<a href="#" onclick="banUser()">Ban IP</a>|<a href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a></div>
-    <script>
-        const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
-        const threadid = {{.Thread.ThreadID }};
-        const boardid = {{.Thread.BoardID }};
-        const deleteThread = async () => {
-            const response = await fetch(url, {
-                method: "DELETE",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ threadid, boardid })
-            });
-            if (response.ok) {
-                window.location.href = "/board/{{.Thread.BoardID}}";
-            }
-        }
+<div class="content-wrapper">
 
-    </script>
-    {{else if .IsJanny }}
-    <a href="#" onclick="deleteThread()">Delete Thread</a>
-    <script>
-        const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
-        const threadid = {{.Thread.ThreadID }};
-        const boardid = {{.Thread.BoardID }};
-        const deleteThread = async () => {
-            const response = await fetch(url, {
-                method: "DELETE",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ threadid, boardid })
-            });
-            if (response.ok) {
-                window.location.href = "/board/{{.Thread.BoardID}}";
-            }
-        }
-
-    </script>
-    {{end}}
-    <div id="posts">
+    <div class="banners">
+    <div id="banner">
+        <img src="/banner/{{.BoardID}}/{{.Banner}}" alt="Banner">
+    </div>
+    </div>
+    
+    <div class="container">
+        <fieldset id="thread">
+            <legend>{{.Thread.Author}} // {{.Thread.Subject}} - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
+                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: {{.Thread.ImageURL}}</span>{{end}}</legend>
+            {{if .Thread.ImageURL}}
+            <img src="/file/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image" id="threadfile">
+            {{end}}
+            <p class="postcontent">{{.Thread.Content}}</p>
+                <script>
+                    const threadfile = document.getElementById("threadfile");
+                    const srcurl = threadfile.src;
+                    if (/\.(png|jpg|jpeg|gif)$/i.test(srcurl)) {
+                    } else if (/\.(webm|mp4)$/i.test(srcurl)) {
+                        threadfile.outerHTML = `<video controls><source src="${srcurl}" type="video/${srcurl.split('.').pop()}"></video>`;
+                    } else if (/\.(mp3|wav)$/i.test(srcurl)) {
+                        threadfile.outerHTML = `<audio controls><source src="${srcurl}" type="audio/${srcurl.split('.').pop()}"></audio>`;
+                    } else {
+                        threadfile.outerHTML = `<a href="${srcurl}">Download File</a>`;
+                    }
+                </script>
+        </fieldset>
         {{if .IsAdmin}}
+        <div class="mod"><a href="#" onclick="deleteThread()">Delete Thread</a>|<a
+                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a></div>
         <script>
-            // Assuming BoardID and ThreadID are available in the template's root object
-            const boardID = "{{.BoardID}}";
-            const threadID = "{{.ThreadID}}";
-            const deletePost = async (postid) => {
-                const url = `/admin/delete/${boardID}/${threadID}/` + postid;
+            const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
+            const threadid = {{.Thread.ThreadID }};
+            const boardid = {{.Thread.BoardID }};
+            const deleteThread = async () => {
                 const response = await fetch(url, {
                     method: "DELETE",
                     headers: {
                         "Content-Type": "application/json"
-                    }
+                    },
+                    body: JSON.stringify({ threadid, boardid })
                 });
                 if (response.ok) {
-                    window.location.reload();
+                    window.location.href = "/board/{{.Thread.BoardID}}";
                 }
             }
         </script>
+        {{else if .IsJanny }}
+        <a href="#" onclick="deleteThread()">Delete Thread</a>
+        <script>
+            const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
+            const threadid = {{.Thread.ThreadID }};
+            const boardid = {{.Thread.BoardID }};
+            const deleteThread = async () => {
+                const response = await fetch(url, {
+                    method: "DELETE",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ threadid, boardid })
+                });
+                if (response.ok) {
+                    window.location.href = "/board/{{.Thread.BoardID}}";
+                }
+            }
+        </script>
+        {{end}}
+        <div id="posts">
+            {{if .IsAdmin}}
+            <script>
+                // Assuming BoardID and ThreadID are available in the template's root object
+                const boardID = "{{.BoardID}}";
+                const threadID = "{{.ThreadID}}";
+                const deletePost = async (postid) => {
+                    const url = `/admin/delete/${boardID}/${threadID}/` + postid;
+                    const response = await fetch(url, {
+                        method: "DELETE",
+                        headers: {
+                            "Content-Type": "application/json"
+                        }
+                    });
+                    if (response.ok) {
+                        window.location.reload();
+                    }
+                }
+            </script>
 
-        {{range .Posts}}
+            {{range .Posts}}
             <fieldset class="post">
-                <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>
+                <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
                     <a href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |
-                    <a href="#" onclick="banUser('{{.IP}}')">Ban IP</a> |
-                    <a href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a></legend>
+                    <a href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>
+                </legend>
                 {{if .ImageURL}}
-                <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Post Image">
+                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
                 {{end}}
-                <p>{{.Content}}</p>
+                <p class="postcontent">{{.Content}}</p>
 
             </fieldset>
-        {{end}}
-        {{else if .IsJanny}}
-        {{range .Posts}}
-        <fieldset class="post">
-            <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span></legend>
-            {{if .ImageURL}}
-            <img src="/{{.ImageURL}}" alt="Post Image">
             {{end}}
-            <p>{{.Content}}</p>
-            <div class="mod">
-                <a href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a>
-            </div>
-        </fieldset>
-        {{end}}
-        {{else}}
-        {{range .Posts}}
-        <fieldset class="post">
-            <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span></legend>
-            {{if .ImageURL}}
-            <img src="/{{.ImageURL}}" alt="Post Image">
+            {{else if .IsJanny}}
+            {{range .Posts}}
+            <fieldset class="post">
+                <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}</legend>
+                {{if .ImageURL}}
+                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
+                {{end}}
+                <p class="postcontent">{{.Content}}</p>
+                <div class="mod">
+                    <a href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a>
+                </div>
+            </fieldset>
             {{end}}
-            <p>{{.Content}}</p>
+            {{else}}
+            {{range .Posts}}
+            <fieldset class="post">
+                <legend><span><a href="#" onclick="replyTo('{{.PostID}}');">#{{.PostID}}</a></span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}</legend>
+                {{if .ImageURL}}
+                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
+                {{end}}
+                <p class="postcontent">{{.Content}}</p>
+            </fieldset>
+            {{end}}
+            {{end}}
+            <script>
+                document.querySelectorAll(".postfile").forEach(postfile => {
+                    const postsrc = postfile.src;
+                    if (/\.(png|jpg|jpeg|gif)$/i.test(postsrc)) {
+                        // Image handling logic here, if necessary
+                    } else if (/\.(webm|mp4)$/i.test(postsrc)) {
+                        postfile.outerHTML = `<video controls><source src="${postsrc}" type="video/${postsrc.split('.').pop()}"></video>`;
+                    } else if (/\.(mp3|wav)$/i.test(postsrc)) {
+                        postfile.outerHTML = `<audio controls><source src="${postsrc}" type="audio/${postsrc.split('.').pop()}"></audio>`;
+                    } else {
+                        postfile.outerHTML = `<a href="${postsrc}">Download File</a>`;
+                    }
+                });
+            </script>
+        </div>
+        <a href="#" onclick="loadForm(); return false;" class="createpost">Post a Reply</a>
+        <fieldset class="reply">
+            <legend>Reply</legend>
+            <form action="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}" method="post" enctype="multipart/form-data">
+                <input type="text" id="boardID" name="b" value="{{.BoardID}}" hidden><br><br>
+                <label for="author">Username:</label>
+                <input type="text" id="author" name="author" value="Anonymous" required><br><br>
+                <label for="content">Post:</label>
+                <textarea id="formcontent" name="content" required></textarea><br><br>
+                <label for="image">Image:</label>
+                <input type="file" id="image" name="image" accept="image/*"><br><br>
+                <button type="submit">Submit Post</button>
+            </form>
         </fieldset>
-        {{end}}
-        {{end}}
     </div>
-    <fieldset id="reply">
-        <legend>Reply</legend>
-    <form action="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}" method="post" enctype="multipart/form-data">
-        <input type="text" id="boardID" name="b" value="{{.BoardID}}" hidden><br><br>
-        <label for="author">Username:</label>
-        <input type="text" id="author" name="author" value="Anonymous" required><br><br>
-        <label for="content">Post:</label>
-        <textarea id="content" name="content" required></textarea><br><br>
-        <label for="image">Image:</label>
-        <input type="file" id="image" name="image" accept="image/*"><br><br>
-        <button type="submit">Submit Post</button>
-    </form>
-    </fieldset>
 </div>
+
 <style>
-    #threadnav {
+    .content-wrapper {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        overflow: hidden;
+        width: 100%;
+    }
+
+
+
+    #thread {
         display: flex;
         flex-direction: row;
         justify-content: left;
         align-items: center;
-        border-bottom: 5px solid #1b1b1b;
-    }
-    #threadnav a, #threadnav span {
-        margin-right: 10px;
-    }
-    
-    .mod {
-        display: flex;
-        flex-direction: row;
-        justify-content: space-around;
-        align-items: center;
-    }
-    .container {
-        display: flex;
-        flex-direction: column;
-        align-items: left;
-    }
+        word-break: break-all;
+        border-top: 5px solid #027733;
+            border-left: 1px solid #027733;
+            border-right: 1px solid #027733;
+            border-bottom: 1px solid #027733;
 
-    #board {
-        border-bottom: 0;
-        border-left: 0;
-        border-right: 0;
-        border-top: 5px solid #00fff2;
-        display: flex;
-        flex-direction: row;
-        justify-content: start;
-        align-items: left;
-    }
+            background-color: #1b1b1b7a;
 
-    #board img {
-        margin-right: 10px;
-        max-height: 300px;
     }
-
-    .posts {
-        display: flex;
-        flex-direction: column;
-        align-items: left;
+    #thread img {
+        max-width: 400px;
+        max-height: 400px;
     }
-
     .post {
-        border-bottom: 0;
-        border-left: 0;
-        border-right: 0;
-        border-top: 5px solid #00ff22;
-        background-color: rgb(26, 26, 26);
         display: flex;
         flex-direction: row;
-        justify-content: start;
-        align-items: left;
-        margin-top: 10px;
-    }
+        justify-content: left;
+        align-items: center;
+        word-break: break-all;
+        border-top: 5px solid #024877;
+            border-left: 1px solid #024877;
+            border-right: 1px solid #024877;
+            border-bottom: 1px solid #024877;
 
-    .post legend span {
-        margin-right: 10px;
+            background-color: #1b1b1b7a;
+            width: 70%;
+            min-height: 100px;
     }
-
+    .post a {
+        color: #AAF;
+        text-decoration: none;
+    }
+    .post a:hover {
+        color: #FFF;
+    }
     .post img {
-        margin-right: 10px;
-        max-height: 200px;
+        max-width: 250px;
+        max-height: 250px;
     }
-    #reply {
-        display: flex;
-        flex-direction: column;
-        align-items: left;
-        width: 30%;
-        margin: 0 auto;
+    .post video {
+        max-width: 250px;
+        max-height: 250px;
     }
-    form {
-        display: flex;
-        flex-direction: column;
-        align-items: left;
-    }
-    form label {
+    .post p {
+        margin: 10px;
         color: #AAF;
     }
-    form input {
-        background-color: rgb(26, 26, 26);
-        color: #035d79;
-        border: 1px solid #035d79;
-    }
-    form textarea {
-        background-color: rgb(26, 26, 26);
-        color: #035d79;
-        border: 1px solid #035d79;
-    }
-    form button {
-        background-color: #035d79;
-        color: rgb(26, 26, 26);
-        border: 1px solid #035d79;
-        width: 50%;
+    
+    .createpost {
+        display: flex;
+        align-items: center;
+        justify-content: center;
         margin: 0 auto;
+        width: 20%;
+        text-align: center;
+        padding: 10px;
+        background-color: #0245647a;
+        border: 1px solid #1a1a1a;
+        color: #AAF;
+        text-decoration: none;
     }
+    .createpost:hover {
+        background-color: #024877;
+    }
+    
+    
 </style>
+<script>
+    const loadForm = () => {
+        const form = document.querySelector('.reply');
+        if (form.style.display === 'flex') {
+            form.style.display = 'none';
+        } else {
+            form.style.display = 'flex';
+        }
+    }
 
+    const openForm = () => {
+        const form = document.querySelector('.reply');
+        form.style.display = 'flex';
+    }
+
+    // find and replace html codes with actual characters
+    const postcontent = document.querySelectorAll('.postcontent');
+    postcontent.forEach(post => {
+        post.innerHTML = post.innerHTML.replace(/&gt;/g, '>');
+        post.innerHTML = post.innerHTML.replace(/&lt;/g, '<');
+        post.innerHTML = post.innerHTML.replace(/&quot;/g, '"');
+        post.innerHTML = post.innerHTML.replace(/&amp;/g, '&');
+    });
+
+    const replyTo = (postid) => {
+        openForm();
+        const content = document.getElementById('formcontent');
+        content.value = `>>${postid}\n`;
+        content.focus();
+    }
+</script>
 {{end}}

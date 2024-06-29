@@ -29,6 +29,7 @@ func init() {
 }
 
 func main() {
+	runtime.StartCPUProfile
 	e := echo.New()
 	e.Use(bans.BanMiddleware)
 	database.Init()
@@ -48,7 +49,7 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.BodyLimit("10M"))
 	e.Use(middleware.RequestID())
-	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(7)))
+	//e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(7)))
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{

@@ -82,10 +82,6 @@ func CreateBoard(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Recentposts cannot be empty")
 	}
 	// Convert recentposts to an integer
-	recentpostsValue := 0
-	if recentposts == "on" {
-		recentpostsValue = 1
-	}
 
 	// check if board exists
 	var board Board
@@ -96,11 +92,12 @@ func CreateBoard(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Record found, operation not allowed")
 	} else if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		// Record not found, proceed with your operation
-		if err := database.DB.Exec("INSERT INTO boards (board_id, name, description, latest_posts) VALUES (?, ?, ?, ?)", boardID, name, description, recentpostsValue).Error; err != nil {
+		if err := database.DB.Exec("INSERT INTO boards (board_id, name, description, latest_posts) VALUES (?, ?, ?, ?)", boardID, name, description, recentposts).Error; err != nil {
 			return c.JSON(http.StatusInternalServerError, "Failed to insert record")
 		}
-		os.Mkdir("boards/"+boardID, 0755)   // Consider error handling for directory creation
-		return c.JSON(http.StatusOK, board) // Respond with the created board
+		os.Mkdir("boards/"+boardID, 0755)            // Consider error handling for directory creation
+		os.Mkdir("boards/"+boardID+"/banners", 0755) // Consider error handling for directory creation
+		return c.JSON(http.StatusOK, board)          // Respond with the created board
 	} else {
 		// Some other error occurred during the query execution
 		return c.JSON(http.StatusInternalServerError, "Internal server error")

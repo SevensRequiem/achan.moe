@@ -45,7 +45,7 @@
                     formData.append('name', name);
                     formData.append('id', id);
                     formData.append('description', description);
-                    formData.append('recentposts', document.getElementById("LatestPosts").value);
+                    formData.append('recentposts', document.getElementById("recentposts").value);
                     
                     // Define the URL for creating a board
                     const createBoardUrl = "/admin/board";
@@ -112,7 +112,6 @@
         }
     </script>
     <hr>
-
 </fieldset>
 <div id="bans">
 <form>
@@ -176,6 +175,12 @@
         display: flex;
         flex-direction: column;
         align-items: center;
+        border-top: 5px solid #770202;
+            border-left: 1px solid #770202;
+            border-right: 1px solid #770202;
+            border-bottom: 1px solid #770202;
+
+            background-color: #1b1b1b7a;
     }
     #bans table {
         width: 100%;
@@ -202,6 +207,12 @@
         flex-direction: column;
         align-items: center;
 
+        border-top: 5px solid #024877;
+            border-left: 1px solid #024877;
+            border-right: 1px solid #024877;
+            border-bottom: 1px solid #024877;
+
+            background-color: #1b1b1b7a;
     }
 
     #admin hr {

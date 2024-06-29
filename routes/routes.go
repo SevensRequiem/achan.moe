@@ -16,6 +16,15 @@ func Routes(e *echo.Echo) {
 		return home.HomeHandler(c)
 	})
 
+	e.GET("/terms", func(c echo.Context) error {
+		return home.TermsHandler(c)
+	})
+	e.GET("/privacy", func(c echo.Context) error {
+		return home.PrivacyHandler(c)
+	})
+	e.GET("/contact", func(c echo.Context) error {
+		return home.ContactHandler(c)
+	})
 	e.GET("/donate", func(c echo.Context) error {
 		return home.DonateHandler(c)
 	})
@@ -85,13 +94,25 @@ func Routes(e *echo.Echo) {
 
 	// static files
 	e.Static("/assets", "assets")
-	e.GET("/img/:b/:f", func(c echo.Context) error {
+	e.GET("/robots.txt", func(c echo.Context) error {
+		return c.File("static/robots.txt")
+	})
+	e.GET("/sitemap.xml", func(c echo.Context) error {
+		return c.File("static/sitemap.xml")
+	})
+	e.GET("/file/:b/:f", func(c echo.Context) error {
 		board := c.Param("b")
 		file := c.Param("f")
 		// Construct the path to the file based on the parameters
 		filePath := fmt.Sprintf("boards/%s/%s", board, file)
 		// Serve the file
 		return c.File(filePath)
+	})
+	e.GET("/banner/:b/:f", func(c echo.Context) error {
+		board := c.Param("b")
+		file := c.Param("f")
+		filepath := fmt.Sprintf("boards/%s/banners/%s", board, file)
+		return c.File(filepath)
 	})
 
 	//auth

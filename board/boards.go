@@ -16,6 +16,7 @@ import (
 
 	"achan.moe/auth"
 	"achan.moe/database"
+	"achan.moe/utils/sitemap"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
@@ -141,6 +142,14 @@ func CreateThread(c echo.Context) error {
 		}
 	}
 
+	// make sure image is only the following formats, gif, jpg, jpeg, png, webm, mp4, webp, pdf
+	if image != nil {
+		imageExt := filepath.Ext(image.Filename)
+		if imageExt != ".gif" && imageExt != ".jpg" && imageExt != ".jpeg" && imageExt != ".png" && imageExt != ".webm" && imageExt != ".mp4" && imageExt != ".webp" && imageExt != ".pdf" {
+			return c.JSON(http.StatusBadRequest, "Invalid image extension")
+		}
+	}
+
 	imageURL, err := saveImage(boardID, image)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err.Error())
@@ -224,6 +233,10 @@ func CreateThread(c echo.Context) error {
 	if LatestPostsCheck(c, boardID) {
 		AddRecentPost(post)
 	}
+	sitemap := sitemap.Sitemap{
+		XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9",
+	}
+	sitemap.AddURL("https://achan.moe/board/"+boardName+"/"+threadIDStr, "daily", "0.5")
 	return c.Redirect(http.StatusFound, redirectURL)
 }
 
@@ -270,7 +283,12 @@ func CreateThreadPost(c echo.Context) error {
 	if threadIsFull(boardID, threadID) {
 		return c.JSON(http.StatusForbidden, "Thread is full")
 	}
-
+	if image != nil {
+		imageExt := filepath.Ext(image.Filename)
+		if imageExt != ".gif" && imageExt != ".jpg" && imageExt != ".jpeg" && imageExt != ".png" && imageExt != ".webm" && imageExt != ".mp4" && imageExt != ".webp" && imageExt != ".pdf" {
+			return c.JSON(http.StatusBadRequest, "Invalid image extension")
+		}
+	}
 	imageURL, err := saveImage(boardID, image)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err.Error())
@@ -670,4 +688,12 @@ func GetPartialPosts(boardID string, threadID int, postid int) []Post {
 		}
 	}
 	return partialPosts
+}
+
+func GetBoardDescription(boardID string) string {
+	db := database.DB
+
+	var board Board
+	db.Where("board_id = ?", boardID).First(&board)
+	return board.Description
 }

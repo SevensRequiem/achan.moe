@@ -4,51 +4,85 @@
 
 <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="achan.moe is a simple imageboard written in golang" />
+    <meta name="keywords" content="imageboard, golang, achan.moe, chan, 4chan, anime, gaming, board, online" />
+    <meta name="author" content="achan.moe" />
+    <meta name="robots" content="index, follow" />
+    <meta name="googlebot" content="index, follow" />
+    <meta name="bingbot" content="index, follow" />
+
+    <meta property="og:title" content="achan.moe" />
+    <meta property="og:description" content="achan.moe is a simple imageboard written in golang" />
+    <meta property="og:image" content="https://achan.moe/assets/img/achan.moe.png" />
+    <meta property="og:url" content="https://achan.moe" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="achan.moe" />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:site" content="@achanmoe" />
+
+    <link rel="icon" type="image/png" href="https://achan.moe/assets/img/favicon.png" />
+    <link rel="canonical" href="https://achan.moe" />
+
+    
     <title>achan.moe</title>
     <link rel="stylesheet" href="http://192.168.0.12:1313/assets/css/main.css" />
 </head>
 
 <body>
-    <div class="scene"></div>
-    <div id="side">
-        <span class="achantitle">achan.moe</span>
-        <span class="subtitle">v0.01</span>
-        <span>&copy;2023</span>
-        <ol>
-            <li><a href="/">home</a></li>
-            <li><a href="/donate">donate</a></li>
-
-            <hr>
-
+    <div id="background"></div>
+    <header>
+        <span id="logo">achan.moe</span>
+        <span id="subtitle">v0.01</span>
+        <br>
+        <span id="tagline">a simple imageboard written in golang</span>
+        <br>
+        <nav>
+        <span id="boardnav">
+            {{range .Boards}}
+            <a href="/board/{{.BoardID}}">/{{.BoardID}}/</a>
+            {{end}}
+        </span>
+        <br>
+        <br>
+        <br>
+        <span id="mainnav">
+            <a href="/">home</a>
+            <a href="/donate">donate</a>
             {{if .User}}
             <span class="user">[{{.User}}]</span>
-            <span class="logout"><a href="/logout">logout</a></span>
+            <a href="/logout">logout</a>
             {{else}}
-            <span class="login"><a href="/login">login</a></span>
+            <a href="/login">login</a>
             {{end}}
-
             {{if .IsAdmin}}
-            <span class="admin"><a href="/admin">admin</a></span>
+            <a href="/admin">admin</a>
             {{end}}
-        </ol>
-    </div>
+        </span>
+        </nav>
+    </header>
     <div id="content">
         {{template "content" .}}
     </div>
-    <div id="footer">
-        <span id="page-data">
+    <footer>
             <span id="page-url">
                 >> achan.moe/{{.Pagename}}
             </span>
+        <span>
+            <a href="/terms">terms</a>
+            <a href="/privacy">privacy</a>
+            <a href="/contact">contact</a>
         </span>
         <span id="site-data">
-            <span> [ </span>
-            <span>Total:<span id="site-size">{{.TotalSize}} MB</span></span>
-            <span> | </span>
-            <span><span id="site-ip">IP: {{.IP}}</span></span>
-            <span> ] </span>
+            <span>Total: {{.TotalSize}} MB</span>
+            <span>IP: {{.IP}}</span>
         </span>
-    </div>
+</footer>
 </body>
-
+<script>console.log("achan.moe")</script>
 </html>

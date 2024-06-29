@@ -2,7 +2,6 @@
     <fieldset id="home">
         <legend>Welcome, {{.IP}}</legend>
         <span>Here you can view the latest posts and boards.</span>
-        <hr>
         <h3>Rules</h3>
         <ol>
             <li>No illegal content.</li>
@@ -15,7 +14,7 @@
         </ol>
 
     </fieldset>
-        
+        <br>
     <fieldset id="boards">
         <legend>Boards</legend>
         <ul>
@@ -24,7 +23,14 @@
             {{end}}
         </ul>
     </fieldset>
-    <hr>
+    <br>
+    <fieldset id="stats">
+        <legend>Stats</legend>
+        <p>Posts: <span class="data">{{.PostCount}}</span></p>
+        <p>Users: <span class="data">{{.UserCount}}</span></p>
+        <p>Total Content: <span class="data">{{.TotalSize}} MB</span></p>
+    </fieldset>
+    <br><br>
 <fieldset id="latest">
     <legend>Latest Posts</legend>
     <ul>
@@ -33,7 +39,7 @@
             <li>
                 <a href="/board/{{.BoardID}}/{{.ThreadID}}" >
                 {{if .ImageURL}}
-                <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
                 {{end}}
                 <span class="subject">{{.Subject}}</span>
                 <p>{{.PartialContent}}</p>
@@ -43,7 +49,7 @@
             <li>
                 <a href="/board/{{.BoardID}}/{{.ThreadID}}" >
                 {{if .ImageURL}}
-                <img src="/img/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image" class="postfile">
                 {{end}}
                 <p>{{.PartialContent}}</p>
                 <span>{{.Timestamp}}</span></a>
@@ -51,6 +57,20 @@
             {{end}}
         {{end}}
     </ul>
+    <script>
+        document.querySelectorAll(".postfile").forEach(postfile => {
+            const postsrc = postfile.src;
+            if (/\.(png|jpg|jpeg|gif)$/i.test(postsrc)) {
+                // Image handling logic here, if necessary
+            } else if (/\.(webm|mp4)$/i.test(postsrc)) {
+                postfile.outerHTML = `<video controls><source src="${postsrc}" type="video/${postsrc.split('.').pop()}"></video>`;
+            } else if (/\.(mp3|wav)$/i.test(postsrc)) {
+                postfile.outerHTML = `<audio controls><source src="${postsrc}" type="audio/${postsrc.split('.').pop()}"></audio>`;
+            } else {
+                postfile.outerHTML = `<a href="${postsrc}">Download File</a>`;
+            }
+        });
+    </script>
 </fieldset>
     <style>
             .subject {
@@ -58,8 +78,14 @@
         color: #AAF;
     }
         #boards {
-            width: 50%;
+            width: 70%;
             margin: 0 auto;
+            border-top: 5px solid #024877;
+            border-left: 1px solid #024877;
+            border-right: 1px solid #024877;
+            border-bottom: 1px solid #024877;
+
+            background-color: #1b1b1b7a;
         }
         #boards ul {
             display: flex;
@@ -90,9 +116,29 @@
             text-decoration: underline;
         }
 
-        #latest {
-            width: 50%;
+        #stats {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-evenly;
+
+            width: 70%;
             margin: 0 auto;
+            border-top: 5px solid #024877;
+            border-left: 1px solid #024877;
+            border-right: 1px solid #024877;
+            border-bottom: 1px solid #024877;
+            background-color: #1b1b1b7a;
+        }
+
+        #latest {
+            width: 70%;
+            margin: 0 auto;
+            border-top: 5px solid #024877;
+            border-left: 1px solid #024877;
+            border-right: 1px solid #024877;
+            border-bottom: 1px solid #024877;
+            background-color: #1b1b1b7a;
         }
         #latest ul {
             display: flex;
@@ -104,7 +150,16 @@
             margin: 0;
         }
 
+        #latest li {
+            margin: 0;
+            padding: 0;
+        }
+
         #latest li a {
+            text-decoration: none;
+            color: rgb(16, 197, 128);
+            height: 300px;
+            width: 300px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -114,9 +169,16 @@
             padding: 10px;
         }
 
-        #latest img {
+        #latest video {
+            max-width: 300px;
             max-height: 200px;
         }
+
+        #latest img {
+            max-height: 200px;
+            max-width: 200px;
+        }
+
 
 
 
@@ -125,8 +187,12 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-
-            width: 50%;
+            border-top: 5px solid #024877;
+            border-left: 1px solid #024877;
+            border-right: 1px solid #024877;
+            border-bottom: 1px solid #024877;
+            background-color: #1b1b1b7a;
+            width: 70%;
             margin: 0 auto;
         }
         #home p {
@@ -134,5 +200,14 @@
             padding: 0;
         }
 
+        .data {
+            font-weight: bold;
+            color: rgb(170, 228, 255);
+        }
+
+    .postfile {
+        max-width: 250px;
+        max-height: 250px;
+    }
     </style>
 {{end}}

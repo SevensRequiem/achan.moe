@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"achan.moe/auth"
+	"achan.moe/banners"
 	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/utils"
@@ -39,7 +40,9 @@ func HomeHandler(c echo.Context) error {
 	data := map[string]interface{}{}
 	data = globaldata(c)
 	data["Pagename"] = "Home"
-	data["Boards"] = board.GetBoards()
+
+	data["PostCount"] = board.GetGlobalPostCount()
+	data["UserCount"] = auth.GetTotalUsers()
 	latestPosts, err := board.GetLatestPosts(10)
 	if err != nil {
 		// Handle the error, for example, log it or return it
@@ -67,9 +70,11 @@ func BoardHandler(c echo.Context) error {
 	data["Pagename"] = boardname
 	data["Board"] = board.GetBoard(c.Param("b"))
 	data["BoardID"] = board.GetBoardID(c.Param("b"))
+	data["BoardDesc"] = board.GetBoardDescription(c.Param("b"))
 	boardid := board.GetBoardID(c.Param("b"))
 	data["Threads"] = board.GetThreads(boardid)
 	data["IsJanny"] = auth.JannyCheck(c, boardid)
+	data["Banner"] = banners.GetRandomBanner(boardid)
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -102,15 +107,19 @@ func ThreadHandler(c echo.Context) error {
 	data["Thread"] = board.GetThread(b, tInt)
 	data["ThreadID"] = tInt
 	data["BoardID"] = board.GetBoardID(b)
+	data["BoardDesc"] = board.GetBoardDescription(b)
 	posts := board.GetPosts(b, tInt)
 	data["Posts"] = posts
 	data["IsJanny"] = auth.JannyCheck(c, b)
+	boardid := board.GetBoardID(c.Param("b"))
+	data["Banner"] = banners.GetRandomBanner(boardid)
+
+	// Execute the template once with all the data prepared
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
 		fmt.Println("Error executing template:", err)
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
-
 	return nil
 }
 func PostHandler(c echo.Context) error {
@@ -162,6 +171,7 @@ func globaldata(c echo.Context) map[string]interface{} {
 	}
 	data["IsAdmin"] = auth.AdminCheck(c)
 	data["User"] = user.Username
+	data["Boards"] = board.GetBoards()
 	data["IP"] = c.RealIP()
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	data["user"] = "Anonymous"
@@ -206,6 +216,60 @@ func DonateHandler(c echo.Context) error {
 	data := map[string]interface{}{}
 	data = globaldata(c)
 	data["Pagename"] = "Donate"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func TermsHandler(c echo.Context) error {
+	tmpl, err := template.ParseFiles("views/base.html", "views/terms.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	data := map[string]interface{}{}
+	data = globaldata(c)
+	data["Pagename"] = "Terms"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func PrivacyHandler(c echo.Context) error {
+	tmpl, err := template.ParseFiles("views/base.html", "views/privacy.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	data := map[string]interface{}{}
+	data = globaldata(c)
+	data["Pagename"] = "Privacy"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func ContactHandler(c echo.Context) error {
+	tmpl, err := template.ParseFiles("views/base.html", "views/contact.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	data := map[string]interface{}{}
+	data = globaldata(c)
+	data["Pagename"] = "Contact"
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {

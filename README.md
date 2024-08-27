@@ -12,6 +12,7 @@ Install achan.moe on ubuntu/debian
 
 ```bash
   adduser achan
+  su achan
   git clone https://github.com/SevensRequiem/achan.moe.git
   cd achan.moe
   go build

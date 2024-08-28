@@ -62,6 +62,11 @@ func Routes(e *echo.Echo) {
 		return nil
 	})
 
+	e.POST("/admin/user", func(c echo.Context) error {
+		admin.UpdateUserRole(c)
+		return nil
+	})
+
 	e.DELETE("/admin/delete/:b", func(c echo.Context) error {
 		admin.DeleteBoard(c)
 		return nil
@@ -82,12 +87,12 @@ func Routes(e *echo.Echo) {
 		return nil
 	})
 	// janny
-	e.POST("/janny/delete/:b/:t", func(c echo.Context) error {
+	e.DELETE("/janny/delete/:b/:t", func(c echo.Context) error {
 		admin.JannyDeleteThread(c)
 		return nil
 	})
 
-	e.POST("/janny/delete/:b/:t/:p", func(c echo.Context) error {
+	e.DELETE("/janny/delete/:b/:t/:p", func(c echo.Context) error {
 		admin.JannyDeletePost(c)
 		return nil
 	})

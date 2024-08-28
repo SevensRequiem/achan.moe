@@ -50,6 +50,9 @@
             }
         }
     </script>
+<div id="options">
+    <a href="/board/{{.BoardID}}">Refresh</a>
+</div>
 <fieldset id="threads">
     <ul>
         {{if .IsAdmin}}
@@ -61,7 +64,7 @@
                     <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
                     <span class="subject">{{.Subject}}</span>
                     <p>{{.PartialContent}}</p>
-                    <span>{{.Timestamp}}</span></a>
+                    </a>
                 </li>
                 {{end}}
             {{end}}
@@ -73,7 +76,7 @@
                         <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
-                        <span>{{.Timestamp}}</span></a>
+                        </a>
                 </li>
                 {{end}}
             {{end}}
@@ -86,7 +89,7 @@
                         <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
-                        <span>{{.Timestamp}}</span></a>
+                        </a>
                 </li>
                 {{end}}
             {{end}}
@@ -98,7 +101,7 @@
                         <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
-                        <span>{{.Timestamp}}</span></a>
+                        </a>
                 </li>
                 {{end}}
             {{end}}
@@ -107,6 +110,9 @@
 
     </ul>
 </fieldset>
+<div id="cirno">
+    <img src="/assets/cirno.png" alt="Cirno">
+</div>
 <style>
     .createpost {
         display: flex;
@@ -180,20 +186,25 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: space-evenly;
         border: 1px solid #1a1a1a;
-        margin: 10px;
-        padding: 10px;
+        margin: 5px;
+        padding: 5px;
+
         border-top: 5px solid #024877;
             border-left: 1px solid #024877;
             border-right: 1px solid #024877;
             border-bottom: 1px solid #024877;
 
             background-color: #1b1b1b7a;
+            width: 200px;
+            height: 250px;
     }
     #threads li a p {
-        margin: 10px;
-        color: #AAF;
+        color: rgb(58, 58, 110);
+    }
+    #threads li a span {
+        color: rgb(255, 255, 255);
     }
     #threads a {
         text-decoration: none;
@@ -206,7 +217,8 @@
     }
 
     #threads img {
-        max-height: 300px;
+        max-height: 150px;
+        max-width: 150px;
     }
 
     #options {
@@ -234,6 +246,26 @@
         width: 500px;
         height: 100px;
     }
+
+    #cirno {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+    }
+    #cirno img {
+        max-width: 100px;
+        max-height: 100px;
+    }
+
+    #options a {
+        text-decoration: none;
+        color: rgb(0, 225, 255);
+        padding: 5px;
+    }
+    #options a:hover {
+        text-decoration: underline;
+    }
+
 </style>
 
 {{end}}

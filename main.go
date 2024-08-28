@@ -46,7 +46,7 @@ func main() {
 		Format: "${id} ${time_rfc3339} ${remote_ip} > ${method} > ${uri} > ${status} ${latency_human}\n",
 	}))
 	e.Use(middleware.Recover())
-	e.Use(middleware.BodyLimit("10M"))
+	e.Use(middleware.BodyLimit("11M"))
 	e.Use(middleware.RequestID())
 	//e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(7)))
 
@@ -69,7 +69,9 @@ func main() {
 		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
 	}))
-	e.Use(middleware.Gzip())
+	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{
+		Level: 5,
+	}))
 	e.Use(middleware.Secure())
 	baseUrl := os.Getenv("BASE_URL")
 	middleware.CSRFWithConfig(middleware.CSRFConfig{

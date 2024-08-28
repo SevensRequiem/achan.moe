@@ -11,7 +11,9 @@
     <div class="container">
         <fieldset id="thread">
             <legend>{{.Thread.Author}} // {{.Thread.Subject}} - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
-                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: {{.Thread.ImageURL}}</span>{{end}}</legend>
+                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: {{.Thread.ImageURL}}</span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
+                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{else if .IsJanny}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
+                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}}</legend>
             {{if .Thread.ImageURL}}
             <img src="/file/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image" id="threadfile">
             {{end}}
@@ -30,8 +32,6 @@
                 </script>
         </fieldset>
         {{if .IsAdmin}}
-        <div class="mod"><a href="#" onclick="deleteThread()">Delete Thread</a>|<a
-                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a></div>
         <script>
             const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
             const threadid = {{.Thread.ThreadID }};
@@ -50,9 +50,8 @@
             }
         </script>
         {{else if .IsJanny }}
-        <a href="#" onclick="deleteThread()">Delete Thread</a>
         <script>
-            const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
+            const url = "/janny/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
             const threadid = {{.Thread.ThreadID }};
             const boardid = {{.Thread.BoardID }};
             const deleteThread = async () => {
@@ -88,12 +87,30 @@
                     }
                 }
             </script>
+            {{else if .IsJanny}}
+            <script>
+                // Assuming BoardID and ThreadID are available in the template's root object
+                const boardID = "{{.BoardID}}";
+                const threadID = "{{.ThreadID}}";
+                const deletePost = async (postid) => {
+                    const url = `/janny/delete/${boardID}/${threadID}/` + postid;
+                    const response = await fetch(url, {
+                        method: "DELETE",
+                        headers: {
+                            "Content-Type": "application/json"
+                        }
+                    });
+                    if (response.ok) {
+                        window.location.reload();
+                    }
+                }
+            </script>
 
             {{range .Posts}}
             <fieldset class="post">
                 <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
-                    <a href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |
-                    <a href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>
+                    <a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |
+                    <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>
                 </legend>
                 {{if .ImageURL}}
                 <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
@@ -105,14 +122,14 @@
             {{else if .IsJanny}}
             {{range .Posts}}
             <fieldset class="post">
-                <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}</legend>
+                <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
+                    <a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |
+                    <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>
+                </legend>
                 {{if .ImageURL}}
                 <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
                 {{end}}
                 <p class="postcontent">{{.Content}}</p>
-                <div class="mod">
-                    <a href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a>
-                </div>
             </fieldset>
             {{end}}
             {{else}}
@@ -156,8 +173,11 @@
             </form>
         </fieldset>
     </div>
+    
 </div>
-
+<div id="cirno">
+    <img src="/assets/cirno.png" alt="Cirno">
+</div>
 <style>
     .content-wrapper {
         display: flex;
@@ -202,10 +222,6 @@
             width: 70%;
             min-height: 100px;
     }
-    .post a {
-        color: #AAF;
-        text-decoration: none;
-    }
     .post a:hover {
         color: #FFF;
     }
@@ -239,7 +255,19 @@
         background-color: #024877;
     }
     
-    
+    #cirno {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+    }
+    #cirno img {
+        max-width: 100px;
+        max-height: 100px;
+    }
+    .mod {
+        color: rgb(255, 0, 0);
+        text-decoration: none;
+    }
 </style>
 <script>
     const loadForm = () => {

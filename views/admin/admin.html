@@ -40,35 +40,44 @@
                     const id = document.getElementById("id").value;
                     const description = document.getElementById("description").value;
                     
-                    // Prepare URL-encoded form data
-                    const formData = new URLSearchParams();
-                    formData.append('name', name);
-                    formData.append('id', id);
-                    formData.append('description', description);
-                    formData.append('recentposts', document.getElementById("recentposts").value);
-                    
-                    // Define the URL for creating a board
-                    const createBoardUrl = "/admin/board";
-                    try {
-                        // Send a POST request to the server with URL-encoded form data
-                        const response = await fetch(createBoardUrl, {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/x-www-form-urlencoded"
-                            },
-                            body: formData
-                        });
-                        // Check if the request was successful
-                        if (response.ok) {
-                            alert("Board created successfully");
-                        } else {
-                            // If the server responds with an error, alert the user
-                            const errorText = await response.text(); // Assuming the server sends a textual error message
-                            alert(`Failed to create board: ${errorText}`);
+                    // Display a confirmation dialog
+                    const isConfirmed = confirm(`Are you sure you want to create the board with ID ${id} and name ${name}?`);
+
+                    // Proceed only if the user confirmed
+                    if (isConfirmed) {
+                        // Prepare URL-encoded form data
+                        const formData = new URLSearchParams();
+                        formData.append('name', name);
+                        formData.append('id', id);
+                        formData.append('description', description);
+                        formData.append('recentposts', document.getElementById("recentposts").value);
+                        
+                        // Define the URL for creating a board
+                        const createBoardUrl = "/admin/board";
+                        try {
+                            // Send a POST request to the server with URL-encoded form data
+                            const response = await fetch(createBoardUrl, {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/x-www-form-urlencoded"
+                                },
+                                body: formData
+                            });
+                            // Check if the request was successful
+                            if (response.ok) {
+                                alert("Board created successfully");
+                            } else {
+                                // If the server responds with an error, alert the user
+                                const errorText = await response.text(); // Assuming the server sends a textual error message
+                                alert(`Failed to create board: ${errorText}`);
+                            }
+                        } catch (error) {
+                            // Catch and alert any errors that occur during the fetch operation
+                            alert(`Error: ${error.message}`);
                         }
-                    } catch (error) {
-                        // Catch and alert any errors that occur during the fetch operation
-                        alert(`Error: ${error.message}`);
+                    } else {
+                        // If the user cancels, you might want to alert them or simply do nothing
+                        console.log("Board creation cancelled by the user.");
                     }
                 }
             </script>
@@ -92,18 +101,92 @@
             const boardID = document.querySelector("select[name='boardID']").value;
             // Define the URL for deleting a board
             const deleteBoardUrl = `/admin/delete/${boardID}`;
+
+            // Display a confirmation dialog
+            const isConfirmed = confirm(`Are you sure you want to delete the board with ID ${boardID}?`);
+
+            // Proceed only if the user confirmed
+            if (isConfirmed) {
+                try {
+                    // Send a DELETE request to the server
+                    const response = await fetch(deleteBoardUrl, {
+                        method: "DELETE"
+                    });
+                    // Check if the request was successful
+                    if (response.ok) {
+                        alert("Board deleted successfully");
+                    } else {
+                        // If the server responds with an error, alert the user
+                        const errorText = await response.text(); // Assuming the server sends a textual error message
+                        alert(`Failed to delete board: ${errorText}`);
+                    }
+                } catch (error) {
+                    // Catch and alert any errors that occur during the fetch operation
+                    alert(`Error: ${error.message}`);
+                }
+            } else {
+                // If the user cancels, you might want to alert them or simply do nothing
+                console.log("Board deletion cancelled by the user.");
+            }
+        }
+    </script>
+    <hr>
+    <!-- edit user groups-->
+    <form action="/admin/user" method="post">
+        <div>
+            <label for="userid">Userid:</label>
+            <input type="text" id="userid" name="userid" required><br><br>
+            <label for="group">group:</label>
+            <select name="group">
+                <option value="user">User</option>
+                <option value="janny">Janny</option>
+                <option value="admin">Admin</option>
+            </select>
+        </div>
+        <!-- if janny slected-->
+        <div>
+            <label for="boardid">Board:</label>
+
+            <select name="boardid">
+                <option value="">None</option>
+                {{range .Boards}}
+                <option value="{{.BoardID}}">{{.BoardID}}</option>
+                {{end}}
+            </select>
+        </div>
+
+        <a href="#" onclick="editUser(); return false;">Edit User</a>
+    </form>
+    <script>
+        // Define editUser as an async function to handle user group editing
+        const editUser = async () => {
+            // Retrieve input values
+            const userid = document.getElementById("userid").value;
+            const group = document.querySelector("select[name='group']").value;
+            const boardid = document.querySelector("select[name='boardid']").value;
+            // Prepare URL-encoded form data
+            const formData = new URLSearchParams();
+            formData.append('userid', userid);
+            formData.append('group', group);
+            formData.append('boardid', boardid);
+            // Define the URL for editing a user
+            const editUserUrl = "/admin/user";
             try {
-                // Send a DELETE request to the server
-                const response = await fetch(deleteBoardUrl, {
-                    method: "DELETE"
+                // Send a POST request to the server with URL-encoded form data
+                const response = await fetch(editUserUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: formData
                 });
                 // Check if the request was successful
                 if (response.ok) {
-                    alert("Board deleted successfully");
+                    alert("User group edited successfully");
                 } else {
                     // If the server responds with an error, alert the user
                     const errorText = await response.text(); // Assuming the server sends a textual error message
-                    alert(`Failed to delete board: ${errorText}`);
+                    alert(`Failed to edit user group: ${errorText}`);
                 }
             } catch (error) {
                 // Catch and alert any errors that occur during the fetch operation
@@ -111,7 +194,6 @@
             }
         }
     </script>
-    <hr>
 </fieldset>
 <div id="bans">
 <form>

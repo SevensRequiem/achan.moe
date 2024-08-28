@@ -2,6 +2,7 @@ package bans
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"time"
 
@@ -60,7 +61,6 @@ func GetBans(c echo.Context) []Bans {
 func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		db := database.DB
-
 		var bans []Bans
 		db.Find(&bans)
 		currentTime := time.Now()
@@ -72,7 +72,21 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 					continue
 				}
 				if expiresTime.After(currentTime) {
-					return c.String(http.StatusForbidden, "You are banned :3, reason: "+ban.Reason+" expires: "+ban.Expires)
+					tmpl, err := template.ParseFiles("views/util/banned.html")
+					if err != nil {
+						return c.String(http.StatusInternalServerError, err.Error())
+					}
+					data := map[string]interface{}{
+						"Pagename":   "Banned",
+						"BanReason":  ban.Reason,
+						"BanExpires": ban.Expires,
+					}
+					err = tmpl.Execute(c.Response().Writer, data)
+					if err != nil {
+						fmt.Println("Error executing template:", err)
+						return c.String(http.StatusInternalServerError, err.Error())
+					}
+					return nil
 				}
 			}
 		}

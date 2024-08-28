@@ -29,7 +29,6 @@ func init() {
 }
 
 func main() {
-	runtime.StartCPUProfile
 	e := echo.New()
 	e.Use(bans.BanMiddleware)
 	database.Init()

@@ -1,13 +1,6 @@
+<h1 align="center" id="title">achan.moe</h1>
 
-# achan.moe
-
-A simple imageboard written in golang.
-
-
-
-
-## Installation
-
+<p align="center"><img src="https://socialify.git.ci/SevensRequiem/achan.moe/image?font=Inter&amp;forks=1&amp;issues=1&amp;language=1&amp;name=1&amp;owner=1&amp;pattern=Solid&amp;pulls=1&amp;stargazers=1&amp;theme=Auto" alt="project-image"></p>
 Install achan.moe on ubuntu/debian
 
 ```bash

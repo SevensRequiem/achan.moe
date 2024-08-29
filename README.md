@@ -27,3 +27,6 @@ Install achan.moe on ubuntu/debian
 - board janny / panel
 - ratelimits
 - update system
+
+### contributing
+feel free to contribute whenever, wherever.

@@ -63,8 +63,15 @@ type RecentPosts struct {
 }
 
 type RateLimit struct {
-	IP    string `json:"IP"`
-	Count int    `json:"Count"`
+	IP       string    `json:"IP"`
+	Count    int       `json:"Count"`
+	TimeLast time.Time `json:"Last"`
+}
+
+type RateLimitPost struct {
+	IP       string `json:"IP"`
+	Count    int    `json:"Count"`
+	TimeLast string `json:"Last"`
 }
 
 type PostCounter struct {
@@ -80,7 +87,30 @@ func init() {
 	db.AutoMigrate(&PostCounter{})
 }
 
+var rateLimits = make(map[string]*RateLimit)
+
 func CreateThread(c echo.Context) error {
+	ip := c.RealIP()
+
+	// Retrieve the rate limit data for the IP
+	rate, exists := rateLimits[ip]
+	if !exists {
+		rate = &RateLimit{
+			IP:       ip,
+			Count:    0,
+			TimeLast: time.Now(),
+		}
+		rateLimits[ip] = rate
+	}
+
+	// Check if the rate limit is exceeded
+	if rate.Count > 5 && time.Since(rate.TimeLast).Minutes() < 5 {
+		return c.JSON(http.StatusTooManyRequests, "Rate limit exceeded")
+	}
+
+	// Update the rate limit data
+	rate.Count++
+	rate.TimeLast = time.Now()
 
 	if CheckIfLocked(c.Param("b")) {
 		return c.JSON(http.StatusForbidden, "Board is locked")
@@ -241,6 +271,19 @@ func CreateThread(c echo.Context) error {
 }
 
 func CreateThreadPost(c echo.Context) error {
+	rate := RateLimitPost{}
+	rate.IP = c.RealIP()
+	rate.Count = 0
+	rate.TimeLast = time.Now().Format("01-02-2006 15:04:05")
+
+	timeLastParsed, err := time.Parse("01-02-2006 15:04:05", rate.TimeLast)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "Error parsing time")
+	}
+
+	if rate.Count > 5 && time.Since(timeLastParsed).Minutes() < 5 {
+		return c.JSON(http.StatusTooManyRequests, "Rate limit exceeded")
+	}
 	boardID := c.Param("b")
 	if boardID == "" {
 		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")

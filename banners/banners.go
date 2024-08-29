@@ -9,12 +9,7 @@ import (
 )
 
 func GetRandomBanner(boardid string) string {
-	int := rand.Intn(2)
-	if int == 0 {
-		return GetRandomGlobalBanner()
-	} else {
-		return GetRandomLocalBanner(boardid)
-	}
+	return GetRandomLocalBanner(boardid)
 }
 
 func GetRandomGlobalBanner() string {

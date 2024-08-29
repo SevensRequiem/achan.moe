@@ -3,3 +3,6 @@
 *.sqlite3
 *.env
 *.log
+sitemap.xml
+.env
+access.log

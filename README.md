@@ -21,5 +21,9 @@ Install achan.moe on ubuntu/debian
 - docker
 - anonymous login system
 - plugins
-- better admin page
+- better admin panel
 - realtime / websockets
+- global + per board config files
+- board janny / panel
+- ratelimits
+- update system

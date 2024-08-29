@@ -15,5 +15,11 @@ Install achan.moe on ubuntu/debian
 ```
 ### Running
 ```./home/achan/production/achan.moe or install service with systemd```
-    
+
+
+### todo
+- docker
+- anonymous login system
+- plugins
+- better admin page
 

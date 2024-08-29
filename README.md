@@ -22,4 +22,4 @@ Install achan.moe on ubuntu/debian
 - anonymous login system
 - plugins
 - better admin page
-
+- realtime / websockets

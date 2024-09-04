@@ -26,10 +26,10 @@
 <body>
     <div id="background"></div>
     <header>
-        <span id="logo">achan.moe</span>
-        <span id="subtitle">v0.01</span>
+        <span id="logo">{{.GlobalConfig.Name}}</span>
+        <span id="subtitle">{{.GlobalConfig.Version}}</span>
         <br>
-        <span id="tagline">a simple imageboard written in golang</span>
+        <span id="tagline">{{.GlobalConfig.Description}}</span>
         <br>
         <nav>
         <span id="boardnav">
@@ -50,7 +50,7 @@
             <a href="/login">login</a>
             {{end}}
             {{if .IsAdmin}}
-            <a href="/admin">admin</a>
+            <a href="/admin/dashboard">admin</a>
             {{end}}
         </span>
         </nav>

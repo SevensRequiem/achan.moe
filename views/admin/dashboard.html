@@ -1,0 +1,85 @@
+{{define "page"}}
+<div id="admin-content">
+
+    <div id="dashboard">
+        <div class="dashboard-row">
+            <div class="dashboard-column">
+                <div class="dashboard-box">
+                    <h2>Boards</h2>
+                    {{range .Boards}}
+                    <div class="board">
+                    [<span>/{{.BoardID}}/</span>
+                    <span>{{.Description}}</span>]
+                    <a href="/admin/board/{{.BoardID}}">edit</a>
+                    <a href="/admin/board/{{.BoardID}}/delete">delete</a>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            <div class="dashboard-column">
+                <div class="dashboard-box">
+                    <h2>Posts</h2>
+                    <p>{{.Posts}}</p>
+                </div>
+            </div>
+            <div class="dashboard-column">
+                <div class="dashboard-box">
+                    <h2>Users</h2>
+                    <p>{{.Users}}</p>
+                </div>
+            </div>
+            <div class="dashboard-column">
+                <div class="dashboard-box">
+                    <h2>Statistics</h2>
+                    <p>{{.TotalSize}} MB</p>
+                    <p>{{.IP}}</p>
+                    <p>{{.Version}}</p>
+                    <p>{{.Uptime}}</p>
+                    <p>{{.Build}}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+
+.dashboard-row {
+    display: flex;
+    flex-wrap: wrap;
+}
+.dashboard-column {
+    flex: 1;
+    padding: 10px;
+}
+.dashboard-box {
+    background-color: #1a1a1a;
+    border: 1px solid #e6e6e6;
+    border-radius: 5px;
+    padding: 10px;
+}
+.board {
+    margin: 5px;
+}
+.board span {
+    margin: 0 5px;
+}
+.board a {
+    margin: 0 5px;
+}
+.board a:hover {
+    color: red;
+}
+.board a:visited {
+    color: blue;
+}
+.board a:active {
+    color: green;
+}
+.board a:focus {
+    color: yellow;
+}
+
+
+
+</style>
+{{end}}

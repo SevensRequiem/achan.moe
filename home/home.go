@@ -11,9 +11,9 @@ import (
 
 	"achan.moe/auth"
 	"achan.moe/banners"
-	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/utils"
+	config "achan.moe/utils/config"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 )
@@ -176,6 +176,9 @@ func globaldata(c echo.Context) map[string]interface{} {
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	data["user"] = "Anonymous"
 	data["TotalSize"] = utils.GetProjectSize(".")
+	data["TotalPosts"] = board.GetGlobalPostCount()
+	data["TotalUsers"] = auth.GetTotalUsers()
+	data["GlobalConfig"] = config.ReadGlobalConfig()
 	latestPosts, err := board.GetLatestPosts(1)
 	if err != nil {
 		// Handle the error, for example, log it or return it
@@ -197,7 +200,160 @@ func AdminHandler(c echo.Context) error {
 	data = globaldata(c)
 	data["Pagename"] = "Admin"
 	data["Boards"] = board.GetBoards()
-	data["Bans"] = bans.GetBans(c)
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func AdminDashboardHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/dashboard.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Dashboard"
+	data["Boards"] = board.GetBoards()
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func AdminBoardsHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/boards.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Boards"
+	data["Boards"] = board.GetBoards()
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func AdminUsersHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/users.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Users"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func AdminConfigHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/config.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Config"
+	data["GlobalConfig"] = config.ReadGlobalConfig()
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func AdminBansHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/bans.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Bans"
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func AdminUpdateHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/update.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Update"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func AdminInfoHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/info.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Info"
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {

@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/gob"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -19,7 +19,7 @@ import (
 	"achan.moe/database"
 	"achan.moe/home"
 	"achan.moe/routes"
-	_ "github.com/go-sql-driver/mysql"
+	"achan.moe/utils/schedule"
 )
 
 func init() {
@@ -37,7 +37,6 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 	secret := os.Getenv("SECRET")
-	fmt.Println(secret)
 	if secret == "" {
 		log.Fatal("SECRET is not set")
 	}
@@ -52,8 +51,8 @@ func main() {
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{
-			"http://localhost:1556",
-			"https://localhost:1556",
+			"http://localhost:1313",
+			"https://localhost:1313",
 			"https://achan.moe/*",
 			"https://www.achan.moe",
 			"https://www.achan.moe",
@@ -83,16 +82,6 @@ func main() {
 		CookieSameSite: http.SameSiteStrictMode,
 	})
 
-	fmt.Println("=====================================")
-	//auth.InitDB()
-	fmt.Println("=====================================")
-	//bans.InitDB()
-	//bans.Init()
-	fmt.Println("=====================================")
-	//discord.DiscordBot()
-	fmt.Println("=====================================")
-	//backup.BackupDB()
-
 	accesslog, err := os.OpenFile("access.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		e.Logger.Fatal(err)
@@ -104,6 +93,16 @@ func main() {
 	e.Renderer = home.NewTemplateRenderer("views/*.html")
 	routes.Routes(e)
 	e.HTTPErrorHandler = home.ErrorHandler
+
+	// schedules
+	scheduler := schedule.NewScheduler()
+	scheduler.ScheduleTask(schedule.Task{
+		Action: func() {
+			bans.ExpireCheck()
+		},
+		Duration: 5 * time.Minute,
+	})
+	scheduler.Run()
 
 	portStr := os.Getenv("PORT")
 	port, err := strconv.Atoi(portStr)

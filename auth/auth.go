@@ -32,7 +32,8 @@ func init() {
 	if DiscordClientID == "" {
 		log.Fatal("DISCORD_CLIENT_ID is not set or is empty")
 	} else {
-		log.Printf("Using DISCORD_CLIENT_ID: %s", DiscordClientID)
+		//log.Printf("Using DISCORD_CLIENT_ID: %s", DiscordClientID)
+		return
 	}
 	DiscordClientSecret := os.Getenv("DISCORD_CLIENT_SECRET")
 	DiscordRedirectURI := os.Getenv("DISCORD_REDIRECT_URI")

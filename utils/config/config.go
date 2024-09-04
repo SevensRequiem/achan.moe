@@ -2,26 +2,75 @@ package config
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
 	"log"
 	"os"
-	"strings"
+
+	"github.com/labstack/echo/v4"
 )
 
-// config is a package that handles config file reading and writing
-// layout:
-// config/global.json
-// config/boards/{boardid}.json
-// config/users/{userid}.json
+type GlobalConfig struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+	Fork        string `json:"fork"`
+	Minecraft   string `json:"minecraft"`
+}
 
-// no struct
+type BoardConfig struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Locked      bool   `json:"locked"`
+	AllowImages bool   `json:"allowimages"`
+	ImageOnly   bool   `json:"imageonly"`
+	AllowLinks  bool   `json:"allowlinks"`
+	RateLimit   int    `json:"ratelimit"`
+	MaxThreads  int    `json:"maxthreads"`
+	MaxSize     int    `json:"maxsize"`
+}
 
-// GetConfig reads a config file and returns a map of the config
-var (
-	globalConfig map[string]interface{}
-	boardConfigs map[string]map[string]interface{}
-	userConfigs  map[string]map[string]interface{}
-)
+var globalConfig GlobalConfig
+
+func init() {
+	// Create directories if they don't exist
+	if err := os.MkdirAll("config/boards", 0755); err != nil {
+		log.Fatal(err)
+	}
+
+	// Load default global config into memory
+	file, err := os.Open("config/global.json")
+	if err != nil {
+		log.Println("No global config found, creating default")
+		file, err = os.Create("config/global.json")
+		if err != nil {
+			log.Fatal(err)
+		}
+		// Initialize with default values and write to the file
+		defaultConfig := GlobalConfig{
+			Name:        "achan",
+			Version:     "1.0.0",
+			Description: "a simple imageboard written in go",
+			Fork:        "https://github.com/SevensRequiem/achan.moe",
+			Minecraft:   "1234567890",
+		}
+		if err := WriteJSON(file, defaultConfig); err != nil {
+			log.Fatal(err)
+		}
+		file.Close()
+		// Reopen the file for reading
+		file, err = os.Open("config/global.json")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	defer file.Close()
+
+	// Decode the JSON file into the GlobalConfig struct
+	if err := ReadJSON(file, &globalConfig); err != nil {
+		log.Fatal(err)
+	}
+}
 
 func ReadJSON(file *os.File, config interface{}) error {
 	decoder := json.NewDecoder(file)
@@ -31,6 +80,7 @@ func ReadJSON(file *os.File, config interface{}) error {
 	}
 	return nil
 }
+
 func WriteJSON(file *os.File, config interface{}) error {
 	encoder := json.NewEncoder(file)
 	err := encoder.Encode(config)
@@ -39,116 +89,60 @@ func WriteJSON(file *os.File, config interface{}) error {
 	}
 	return nil
 }
-func ReadGlobalConfig() map[string]interface{} {
-	config := make(map[string]interface{})
+
+func ReadGlobalConfig() GlobalConfig {
 	file, err := os.Open("config/global.json")
 	if err != nil {
-		log.Printf("Error opening config file: %v", err)
-		return config
+		log.Fatal(err)
 	}
 	defer file.Close()
+
+	var config GlobalConfig
 	err = ReadJSON(file, &config)
 	if err != nil {
-		log.Printf("Error reading config file: %v", err)
+		log.Fatal(err)
 	}
-	return make(map[string]interface{})
+	return config
 }
-func ReadBoardConfig(boardid string) map[string]interface{} {
-	config := make(map[string]interface{})
-	file, err := os.Open("config/boards/" + boardid + ".json")
+
+func WriteGlobalConfig(c echo.Context) error {
+	// Parse multipart form
+	err := c.Request().ParseMultipartForm(10 << 20) // 10 MB
 	if err != nil {
-		log.Printf("Error opening config file: %v", err)
-		return config
+		return fmt.Errorf("failed to parse multipart form: %w", err)
+	}
+
+	// Update globalConfig with form values
+	globalConfig.Name = c.FormValue("name")
+	globalConfig.Description = c.FormValue("description")
+	globalConfig.Fork = c.FormValue("fork")
+	globalConfig.Minecraft = c.FormValue("minecraft")
+
+	// Open the global config file for writing
+	file, err := os.OpenFile("config/global.json", os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open global config file for writing: %w", err)
 	}
 	defer file.Close()
+
+	if err := WriteJSON(file, globalConfig); err != nil {
+		return fmt.Errorf("failed to write JSON to config file: %w", err)
+	}
+
+	return nil
+}
+
+func ReadBoardConfig(id string) BoardConfig {
+	file, err := os.Open("config/boards/" + id + ".json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	var config BoardConfig
 	err = ReadJSON(file, &config)
 	if err != nil {
-		log.Printf("Error reading config file: %v", err)
+		log.Fatal(err)
 	}
-	return make(map[string]interface{})
-}
-func ReadUserConfig(userid string) map[string]interface{} {
-	config := make(map[string]interface{})
-	file, err := os.Open("config/users/" + userid + ".json")
-	if err != nil {
-		log.Printf("Error opening config file: %v", err)
-		return config
-	}
-	defer file.Close()
-	err = ReadJSON(file, &config)
-	if err != nil {
-		log.Printf("Error reading config file: %v", err)
-	}
-	return make(map[string]interface{})
-}
-
-func WriteGlobalConfig(config map[string]interface{}) {
-	file, err := os.Create("config/global.json")
-	if err != nil {
-		log.Printf("Error creating config file: %v", err)
-		return
-	}
-	defer file.Close()
-	err = WriteJSON(file, config)
-	if err != nil {
-		log.Printf("Error writing config file: %v", err)
-	}
-}
-
-func WriteBoardConfig(boardid string, config map[string]interface{}) {
-	file, err := os.Create("config/boards/" + boardid + ".json")
-	if err != nil {
-		log.Printf("Error creating config file: %v", err)
-		return
-	}
-	defer file.Close()
-	err = WriteJSON(file, config)
-	if err != nil {
-		log.Printf("Error writing config file: %v", err)
-	}
-}
-
-func WriteUserConfig(userid string, config map[string]interface{}) {
-	file, err := os.Create("config/users/" + userid + ".json")
-	if err != nil {
-		log.Printf("Error creating config file: %v", err)
-		return
-	}
-	defer file.Close()
-	err = WriteJSON(file, config)
-	if err != nil {
-		log.Printf("Error writing config file: %v", err)
-	}
-}
-
-func LoadConfigsInMemory() {
-	globalConfig = ReadGlobalConfig()
-	boardConfigs = make(map[string]map[string]interface{})
-	userConfigs = make(map[string]map[string]interface{})
-
-	// Load board configurations
-	boardFiles, err := ioutil.ReadDir("config/boards/")
-	if err != nil {
-		log.Printf("Error reading boards directory: %v", err)
-		return
-	}
-	for _, file := range boardFiles {
-		if !file.IsDir() && strings.HasSuffix(file.Name(), ".json") {
-			boardID := strings.TrimSuffix(file.Name(), ".json")
-			boardConfigs[boardID] = ReadBoardConfig(boardID)
-		}
-	}
-
-	// Load user configurations
-	userFiles, err := ioutil.ReadDir("config/users/")
-	if err != nil {
-		log.Printf("Error reading users directory: %v", err)
-		return
-	}
-	for _, file := range userFiles {
-		if !file.IsDir() && strings.HasSuffix(file.Name(), ".json") {
-			userID := strings.TrimSuffix(file.Name(), ".json")
-			userConfigs[userID] = ReadUserConfig(userID)
-		}
-	}
+	return config
 }

@@ -502,7 +502,19 @@ func DeleteLastThread(boardID string) {
 		os.Remove(dir + "/" + oldestThread)
 	}
 }
-
+func PurgeBoard(boardID string) {
+	dir := "boards/" + boardID
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, file := range files {
+		if !file.IsDir() {
+			filepath := dir + "/" + file.Name()
+			os.Remove(filepath)
+		}
+	}
+}
 func GetBoards() []Board {
 	db := database.DB
 

@@ -1,0 +1,55 @@
+{{define "page"}}
+<div id="admin-content">
+    <div id="config">
+        <div class="dashboard-row">
+            <div class="dashboard-column">
+                <div class="dashboard-box">
+                        <h1>Configuration</h1>
+                        <ul>
+                            <li>
+                                <label for="name">Name:</label>
+                                <textarea id="name" name="name">{{.GlobalConfig.Name}}</textarea>
+                            </li>
+                            <li>
+                                <label for="description">Description:</label>
+                                <textarea id="description" name="description">{{.GlobalConfig.Description}}</textarea>
+                            </li>
+                            <li>
+                                <label for="fork">Fork:</label>
+                                <textarea id="fork" name="fork">{{.GlobalConfig.Fork}}</textarea>
+                            </li>
+                            <li>
+                                <label for="minecraft">Minecraft:</label>
+                                <textarea id="minecraft" name="minecraft">{{.GlobalConfig.Minecraft}}</textarea>
+                            </li>
+                        </ul>
+                        <button onclick="saveConfig()">Save</button>
+                           <script>
+                        function saveConfig() {
+                            var name = document.getElementById("name").value;
+                            var description = document.getElementById("description").value;
+                            var fork = document.getElementById("fork").value;
+                            var minecraft = document.getElementById("minecraft").value;
+                        
+                            var formData = new FormData();
+                            formData.append("name", name);
+                            formData.append("description", description);
+                            formData.append("fork", fork);
+                            formData.append("minecraft", minecraft);
+                        
+                            var xhr = new XMLHttpRequest();
+                            xhr.open("POST", "/admin/config", true);
+                            xhr.send(formData);
+                            xhr.onreadystatechange = function() {
+                                if (xhr.readyState == 4 && xhr.status == 200) {
+                                    alert("Configuration saved.");
+                                }
+                            }
+                        }
+                        </script>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

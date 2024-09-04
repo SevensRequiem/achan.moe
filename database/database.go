@@ -26,7 +26,7 @@ func Init() *gorm.DB {
 	port := os.Getenv("DB_PORT")
 	dbname := os.Getenv("DB_NAME")
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", username, password, host, port, dbname)
-	fmt.Println(dsn)
+	//fmt.Println(dsn)
 	if dsn == "" {
 		log.Fatal("DSN is empty")
 	}

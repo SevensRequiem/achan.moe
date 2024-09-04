@@ -12,6 +12,8 @@ import (
 )
 
 type Bans struct {
+	ID        uint   `gorm:"primary_key"`
+	Status    string `gorm:"default:'active'"` // active, expired, deleted
 	IP        string `json:"ip"`
 	Reason    string `json:"reason"`
 	Username  string `json:"username"`
@@ -49,13 +51,50 @@ func BanIP(c echo.Context) Bans {
 	return bannedIP
 }
 
-func GetBans(c echo.Context) []Bans {
+func GetBans(c echo.Context) error {
 	db := database.DB
-
 	var bans []Bans
-	db.Find(&bans)
+	if err := db.Find(&bans).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, bans)
+}
 
-	return bans
+func GetBansActive(c echo.Context) error {
+	db := database.DB
+	var bans []Bans
+	if err := db.Where("Status = ?", "active").Find(&bans).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, bans)
+}
+
+func GetBansExpired(c echo.Context) error {
+	db := database.DB
+	var bans []Bans
+	if err := db.Where("Status = ?", "expired").Find(&bans).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, bans)
+}
+
+func GetBansDeleted(c echo.Context) error {
+	db := database.DB
+	var bans []Bans
+	if err := db.Where("Status = ?", "deleted").Find(&bans).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, bans)
+}
+
+func GetBanByIP(c echo.Context) error {
+	db := database.DB
+	ip := c.Param("ip")
+	var bans []Bans
+	if err := db.Where("IP = ?", ip).Find(&bans).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, bans)
 }
 
 func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
@@ -92,4 +131,41 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		return next(c)
 	}
+}
+
+func ExpireCheck() {
+	db := database.DB
+	var bans []Bans
+	db.Find(&bans)
+	currentTime := time.Now()
+	for _, ban := range bans {
+		expiresTime, err := time.Parse("2006-01-02", ban.Expires)
+		if err != nil {
+			fmt.Println("Error parsing time:", err)
+			continue
+		}
+		if expiresTime.Before(currentTime) && ban.Status == "active" {
+			fmt.Println("Ban expired:", ban)
+			result := db.Model(&ban).Where("ID = ?", ban.ID).Update("Status", "expired")
+			if result.Error != nil {
+				fmt.Println("Error updating status:", result.Error)
+			} else if result.RowsAffected == 0 {
+				fmt.Println("No rows were updated. Check if the ID is correct:", ban.ID)
+			} else {
+				fmt.Println("Status updated to 'expired' for ban ID:", ban.ID)
+			}
+		}
+	}
+}
+
+func DeleteBan(c echo.Context) Bans {
+	if !auth.AdminCheck(c) {
+		c.JSON(http.StatusUnauthorized, "Unauthorized")
+	}
+	id := c.Param("id")
+	db := database.DB
+	var ban Bans
+	db.First(&ban, id)
+	db.Where("ID = ?", id).Update("Status", "deleted")
+	return ban
 }

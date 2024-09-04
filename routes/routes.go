@@ -8,6 +8,7 @@ import (
 	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/home"
+	"achan.moe/utils/config"
 	"github.com/labstack/echo/v4"
 )
 
@@ -55,6 +56,38 @@ func Routes(e *echo.Echo) {
 
 	e.GET("/admin", func(c echo.Context) error {
 		return home.AdminHandler(c)
+	})
+
+	e.GET("/admin/dashboard", func(c echo.Context) error {
+		return home.AdminDashboardHandler(c)
+	})
+
+	e.GET("/admin/boards", func(c echo.Context) error {
+		return home.AdminBoardsHandler(c)
+	})
+
+	e.GET("/admin/users", func(c echo.Context) error {
+		return home.AdminUsersHandler(c)
+	})
+
+	e.GET("/admin/config", func(c echo.Context) error {
+		return home.AdminConfigHandler(c)
+	})
+
+	e.POST("/admin/config", func(c echo.Context) error {
+		return config.WriteGlobalConfig(c)
+	})
+
+	e.GET("/admin/bans", func(c echo.Context) error {
+		return home.AdminBansHandler(c)
+	})
+
+	e.GET("/admin/update", func(c echo.Context) error {
+		return home.AdminUpdateHandler(c)
+	})
+
+	e.GET("/admin/info", func(c echo.Context) error {
+		return home.AdminInfoHandler(c)
 	})
 
 	e.POST("/admin/board", func(c echo.Context) error {
@@ -129,5 +162,19 @@ func Routes(e *echo.Echo) {
 	})
 	e.GET("/logout", func(c echo.Context) error {
 		return auth.LogoutHandler(c)
+	})
+
+	// bans
+	e.GET("/api/bans", func(c echo.Context) error {
+		return bans.GetBans(c)
+	})
+	e.GET("/api/bans/active", func(c echo.Context) error {
+		return bans.GetBansActive(c)
+	})
+	e.GET("/api/bans/expired", func(c echo.Context) error {
+		return bans.GetBansExpired(c)
+	})
+	e.GET("/api/bans/deleted", func(c echo.Context) error {
+		return bans.GetBansDeleted(c)
 	})
 }

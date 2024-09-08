@@ -1,0 +1,60 @@
+{{define "content"}}
+
+<fieldset>
+    <legend>Register</legend>
+    <div id="username"></div>
+    <div id="password"></div>
+    <a href="#" onclick="Register()">Register</a>
+    <script>
+        const usrdiv = document.getElementById('username');
+        const pwddiv = document.getElementById('password');
+        const Register = async () => {
+            const response = await fetch('/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+            });
+            const r = await response.json();
+            if (r.error) {
+                usrdiv.innerHTML = '';
+                pwddiv.innerHTML = '';
+                usrdiv.innerHTML = r.error;
+            } else {
+                usrdiv.innerHTML = '';
+                pwddiv.innerHTML = '';
+                usrdiv.innerHTML = `Username: ${r.username}`;
+                pwddiv.innerHTML = `Password: ${r.password}`;
+            }
+        };
+    </script>
+</fieldset>
+    <style>
+        fieldset {
+            width: 50%;
+            margin: 0 auto;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        legend {
+            font-weight: bold;
+        }
+        label {
+            display: inline-block;
+            width: 100px;
+            text-align: right;
+        }
+        input {
+            width: 200px;
+        }
+        button {
+            margin-left: 100px;
+        }
+
+        img {
+            max-width: 200px;
+            max-height: 100px;
+            margin: 0 auto;
+        }
+    </style>
+    {{end}}

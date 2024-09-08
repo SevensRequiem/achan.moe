@@ -164,6 +164,13 @@ func Routes(e *echo.Echo) {
 		return auth.LogoutHandler(c)
 	})
 
+	e.GET("/register", func(c echo.Context) error {
+		return home.RegisterHandler(c)
+	})
+	e.POST("/register", func(c echo.Context) error {
+		return auth.NewUser(c)
+	})
+
 	// bans
 	e.GET("/api/bans", func(c echo.Context) error {
 		return bans.GetBans(c)

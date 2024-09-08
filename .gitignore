@@ -5,8 +5,3 @@
 *.log
 sitemap.xml
 .env
-<<<<<<< HEAD
-access.log
-=======
-access.log
->>>>>>> 19b26fc (some new stuffs)

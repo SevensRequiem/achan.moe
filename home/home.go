@@ -187,7 +187,22 @@ func globaldata(c echo.Context) map[string]interface{} {
 	data["LatestPosts"] = latestPosts
 	return data
 }
+func RegisterHandler(c echo.Context) error {
+	tmpl, err := template.ParseFiles("views/base.html", "views/register.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	data := map[string]interface{}{}
+	data = globaldata(c)
+	data["Pagename"] = "Register"
 
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	return nil
+}
 func AdminHandler(c echo.Context) error {
 	if !auth.AdminCheck(c) {
 		return c.String(http.StatusUnauthorized, "Unauthorized")

@@ -8,7 +8,10 @@ import (
 	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/home"
+	captcha "achan.moe/utils/captcha"
 	"achan.moe/utils/config"
+	"achan.moe/utils/minecraft"
+	"achan.moe/utils/stats"
 	"github.com/labstack/echo/v4"
 )
 
@@ -157,9 +160,6 @@ func Routes(e *echo.Echo) {
 	e.GET("/login", func(c echo.Context) error {
 		return auth.LoginHandler(c)
 	})
-	e.GET("/auth/callback", func(c echo.Context) error {
-		return auth.CallbackHandler(c)
-	})
 	e.GET("/logout", func(c echo.Context) error {
 		return auth.LogoutHandler(c)
 	})
@@ -176,5 +176,24 @@ func Routes(e *echo.Echo) {
 	})
 	e.GET("/api/bans/deleted", func(c echo.Context) error {
 		return bans.GetBansDeleted(c)
+	})
+
+	// statistics
+	e.GET("/api/admin/stats", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(401, "Unauthorized")
+		}
+		return stats.GetStats(c)
+	})
+	e.GET("/api/minecraft", func(c echo.Context) error {
+		return minecraft.JSONStatus(c)
+	})
+
+	// captcha
+	e.GET("/api/gencaptcha", func(c echo.Context) error {
+		return captcha.GenerateCaptchaHandler(c)
+	})
+	e.POST("/api/verifycaptcha", func(c echo.Context) error {
+		return captcha.VerifyCaptchaHandler(c)
 	})
 }

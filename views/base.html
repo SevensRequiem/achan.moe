@@ -54,7 +54,21 @@
             {{end}}
         </span>
         </nav>
+        <br>
+        <div id="search">
+            <form action="/search" method="get">
+                <input type="text" name="q" placeholder="search" />
+                <button type="submit">search</button>
+            </form>
+        </div>
+        <br>
+        <span id="boardnav">
+            <a href="/about">about</a>
+            <a href="/faq">faq</a>
+            <a href="/archive">archive</a>
+        </span>
     </header>
+    </div>
     <div id="content">
         {{template "content" .}}
     </div>

@@ -1,337 +1,300 @@
 package auth
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 
-	"github.com/gorilla/sessions"
-	"github.com/joho/godotenv"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
-	"golang.org/x/oauth2"
-	"gorm.io/gorm"
+	"golang.org/x/exp/rand"
 
 	"encoding/gob"
-	"encoding/json"
 
 	"achan.moe/database"
 )
 
-var oauthConf *oauth2.Config
-
 func init() {
 	gob.Register(User{})
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-	DiscordClientID := os.Getenv("DISCORD_CLIENT_ID")
-	if DiscordClientID == "" {
-		log.Fatal("DISCORD_CLIENT_ID is not set or is empty")
-	} else {
-		//log.Printf("Using DISCORD_CLIENT_ID: %s", DiscordClientID)
-		return
-	}
-	DiscordClientSecret := os.Getenv("DISCORD_CLIENT_SECRET")
-	DiscordRedirectURI := os.Getenv("DISCORD_REDIRECT_URI")
-	oauthConf = &oauth2.Config{
-		ClientID:     DiscordClientID,
-		ClientSecret: DiscordClientSecret,
-		RedirectURL:  DiscordRedirectURI,
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://discord.com/api/oauth2/authorize",
-			TokenURL: "https://discord.com/api/oauth2/token",
-		},
-		Scopes: []string{"identify"},
-	}
-
 	db := database.DB
 	db.AutoMigrate(&User{})
-	userid := 228343232520519680
-	db = db.Exec("UPDATE users SET groups = ? WHERE id = ?", "admin", userid)
-	// Ensure the database is closed after all operations are done
 }
 
 type User struct {
-	ID          string `json:"id"`
+	PrimaryID   uint   `gorm:"primary_key"`
+	UUID        string `json:"uuid"`
 	Username    string `json:"username"`
-	Groups      string `json:"groups"`
-	JannyBoards string `json:"janny_boards"`
-	LastEdit    string `json:"last_edit"`
-	DateCreated string `json:"date_created"`
+	Password    string `json:"password"`
+	Groups      Group
+	DateCreated string `json:"date_created" gorm:"default:CURRENT_TIMESTAMP"`
+	LastLogin   string `json:"last_login"`
 	DoesExist   bool   `json:"does_exist"`
 }
 
-type LoggedInUser struct {
-	ID         string `json:"id"`
-	Username   string `json:"username"`
-	IsLoggedIn bool   `json:"is_logged_in"`
+type Group struct {
+	Admin     bool `json:"admin"`
+	Moderator bool `json:"moderator"`
+	Janny     JannyBoards
 }
 
-func CallbackHandler(c echo.Context) error {
+type JannyBoards struct {
+	Boards []string `json:"boards"`
+}
 
-	code := c.QueryParam("code")
-	token, err := oauthConf.Exchange(oauth2.NoContext, code)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
-	}
+// new user functions
+/////////////////////
 
-	client := oauthConf.Client(oauth2.NoContext, token)
-	resp, err := client.Get("https://discord.com/api/users/@me")
+func getrandid() string {
+	// Generate a random ID and check if it already exists in the database, if it does, generate a new one
+	id := fmt.Sprintf("%d", rand.Intn(1000000000))
+	var user User
+	err := database.DB.Where("id = ?", id).First(&user).Error
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		log.Println(err)
 	}
-	defer resp.Body.Close()
+	if user.UUID != "" {
+		getrandid()
+	}
+	return id
+}
 
-	user := User{}
-	err = json.NewDecoder(resp.Body).Decode(&user)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+func getrandusername() string {
+	// Generate a random username and check if it already exists in the database, if it does, generate a new one
+	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	username := make([]byte, 10)
+	for i := range username {
+		username[i] = chars[rand.Intn(len(chars))]
 	}
-	fmt.Println(user)
+	var user User
+	err := database.DB.Where("username = ?", string(username)).First(&user).Error
+	if err != nil {
+		log.Println(err)
+	}
+	if user.Username != "" {
+		getrandusername()
+	}
+	return string(username)
+}
+
+func getrandpassword() string {
+	enc := os.Getenv("ENCRYPT_KEY")
+
+	// Generate a random password using hmac encryption
+
+	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$"
+	password := make([]byte, 10)
+	for i := range password {
+		password[i] = chars[rand.Intn(len(chars))]
+	}
+	h := hmac.New(sha256.New, []byte(enc))
+	h.Write(password)
+	encpass := h.Sum(nil)
+	return string(encpass)
+
+}
+
+var newid = getrandid()
+var newusername = getrandusername()
+var newpassword = getrandpassword()
+
+func NewUser(c echo.Context) error {
+	// Create a new user with the generated random values
 	db := database.DB
+	user := User{UUID: newid, Username: newusername, Password: newpassword, Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: false}
+	db.Create(&user)
+	// encode in json
+	info := map[string]string{"uuid": user.UUID, "username": user.Username, "password": user.Password, "date_created": user.DateCreated, "last_login": user.LastLogin}
+	encinfo, err := json.Marshal(info)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
-	// Check if the user already exists in the database
-	err = db.Where("id = ?", user.ID).First(&user).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			// If the user doesn't exist, add them to the database
-			db = db.Create(&user)
-			if db.Error != nil {
-				return c.JSON(http.StatusInternalServerError, db.Error)
-			}
-		} else {
-			return c.JSON(http.StatusInternalServerError, err)
-		}
+	log.Println(string(encinfo))
+	return c.JSON(http.StatusOK, info)
+}
+
+// login functions
+//////////////////
+
+func LoginHandler(c echo.Context) error {
+	// Obtain the database connection from the `database` package
+	db := database.DB
+
+	// Retrieve the username and password from the request
+	username := c.FormValue("username")
+	password := c.FormValue("password")
+
+	// Retrieve the user from the database based on the username
+	var user User
+	if err := db.Where("username = ?", username).First(&user).Error; err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid username or password"})
 	}
+
+	// Check if the password is correct
+	h := hmac.New(sha256.New, []byte(os.Getenv("ENCRYPT_KEY")))
+	h.Write([]byte(password))
+	encpass := h.Sum(nil)
+	if user.Password != string(encpass) {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Invalid username or password"})
+	}
+
+	// Update the last login time
+	user.LastLogin = time.Now().Format("2006-01-02 15:04:05")
+	db.Save(&user)
 
 	// Store the user in the session
-	sess, err := session.Get("session", c)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to get session: %s", err.Error()))
-	}
-	sess.Options = &sessions.Options{
-		Path:     "/",
-		MaxAge:   86400 * 7,
-		HttpOnly: true,
-	}
+	sess, _ := session.Get("session", c)
 	sess.Values["user"] = user
+	sess.Save(c.Request(), c.Response())
 
-	err = sess.Save(c.Request(), c.Response())
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to save session: %s", err.Error()))
-	}
-	// Ensure the database is closed after all operations are done
-
+	// Redirect the user to the home page
 	return c.Redirect(http.StatusTemporaryRedirect, "/")
-}
-func LoginHandler(c echo.Context) error {
-	url := oauthConf.AuthCodeURL("state", oauth2.AccessTypeOffline)
-	return c.Redirect(http.StatusTemporaryRedirect, url)
+
 }
 
 func LogoutHandler(c echo.Context) error {
+	// Retrieve the session
 	sess, _ := session.Get("session", c)
-	sess.Options = &sessions.Options{MaxAge: -1}
+
+	// Clear the session
+	sess.Options.MaxAge = -1
 	sess.Save(c.Request(), c.Response())
+
+	// Redirect the user to the home page
 	return c.Redirect(http.StatusTemporaryRedirect, "/")
 }
 
+// checks
+// ////////////
 func AdminCheck(c echo.Context) bool {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
 
+	// Retrieve the user from the session
+	user := sess.Values["user"].(User)
+
+	// Check if the user is an admin
+	return user.Groups.Admin
+}
+
+func ModeratorCheck(c echo.Context) bool {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
+
+	// Retrieve the user from the session
+	user := sess.Values["user"].(User)
+
+	// Check if the user is a moderator
+	return user.Groups.Moderator
+}
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+func JannyCheck(c echo.Context, board string) bool {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
+
+	// Retrieve the user from the session
+	user := sess.Values["user"].(User)
+
+	// Check if the user is a janny for the board
+	return contains(user.Groups.Janny.Boards, board)
+}
+
+func AuthCheck(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// Retrieve the session
+		sess, _ := session.Get("session", c)
+
+		// Check if the user is logged in
+		if sess.Values["user"] == nil {
+			return c.Redirect(http.StatusTemporaryRedirect, "/login")
+		}
+
+		// Call the next handler
+		return next(c)
+	}
+}
+
+// funcs
+// ////////////
+func GetTotalUsers() int64 {
 	// Obtain the database connection from the `database` package
 	db := database.DB
 
-	// Retrieve session
-	sess, err := session.Get("session", c)
-	if err != nil {
-		return false
-	}
-
-	// Check if user is stored in session
-	userSessionValue, ok := sess.Values["user"]
-	if !ok {
-		return false
-	}
-
-	// Assuming userSessionValue is of type User or similar, you need to cast it appropriately
-	user, ok := userSessionValue.(User)
-	if !ok {
-		return false
-	}
-
-	// Retrieve user from database based on ID
-	var userFromDB User
-	if err := db.Where("id = ?", user.ID).First(&userFromDB).Error; err != nil {
-		return false
-	}
-
-	// Check if the user is in the admin group
-	if !strings.Contains(userFromDB.Groups, "admin") {
-		return false
-	}
-
-	// If the user is an admin, return true to indicate success
-	// Ensure the database is closed after all operations are done
-	return true
-}
-
-func GetUserByID(userID string) (*User, error) {
-
-	user := User{}
-	err := database.DB.Where("id = ?", userID).First(&user).Error
-	if err != nil {
-		return nil, err
-	}
-	// Ensure the database is closed after all operations are done
-
-	return &user, nil
-}
-
-func DeleteUser(userID string) error {
-	db := database.DB.Exec("DELETE FROM users WHERE id = ?", userID)
-	if db.Error != nil {
-		return fmt.Errorf("failed to delete user: %v", db.Error)
-	}
-
-	return nil
-}
-
-func GetUsers() ([]User, error) {
-	var users []User
-	err := database.DB.Find(&users).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return users, nil
-}
-
-func GetUsersByGroup(group string) ([]User, error) {
-	var users []User
-	err := database.DB.Where("groups = ?", group).Find(&users).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return users, nil
-}
-func GetTotalUsers() int {
+	// Retrieve the total number of users from the database
 	var count int64
-	err := database.DB.Model(&User{}).Count(&count).Error
-	if err != nil {
-		return 0
-	}
-	return int(count)
-}
-func GetCurrentUser(c echo.Context) (*User, error) {
-	sess, err := session.Get("session", c)
-	if err != nil {
-		return nil, err
-	}
+	db.Model(&User{}).Count(&count)
 
-	userSessionValue, ok := sess.Values["user"]
-	if !ok {
-		return nil, fmt.Errorf("user not found in session")
-	}
-
-	user, ok := userSessionValue.(User)
-	if !ok {
-		return nil, fmt.Errorf("user session value type mismatch")
-	}
-
-	return &user, nil
+	// Return the total number of users
+	return count
 }
 
-func CheckLoggedIn(c echo.Context) (*LoggedInUser, error) {
-	sess, err := session.Get("session", c)
-	if err != nil {
-		return nil, err
-	}
-
-	userSessionValue, ok := sess.Values["user"]
-	if !ok {
-		return &LoggedInUser{IsLoggedIn: false}, nil
-	}
-
-	user, ok := userSessionValue.(User)
-	if !ok {
-		return nil, fmt.Errorf("user session value type mismatch")
-	}
-
-	return &LoggedInUser{ID: user.ID, Username: user.Username, IsLoggedIn: true}, nil
-}
-
-func UpdateGroups(c echo.Context) error {
-	if !AdminCheck(c) {
-		return fmt.Errorf("user is not an admin")
-	}
-	groups := c.FormValue("groups")
-	userID := c.FormValue("userID")
-
-	db := database.DB.Exec("UPDATE users SET groups = ? WHERE id = ?", groups, userID)
-	if db.Error != nil {
-		return fmt.Errorf("failed to update user groups: %v", db.Error)
-	}
-
-	return nil
-}
-
-func UpdateJannyBoards(c echo.Context) error {
-	if !AdminCheck(c) {
-		return fmt.Errorf("user is not an admin")
-	}
-	jannyBoard := c.FormValue("boardID")
-	userID := c.FormValue("userID")
-
-	db := database.DB.Exec("UPDATE users SET janny_boards = ? WHERE id = ?", jannyBoard, userID)
-	if db.Error != nil {
-		return fmt.Errorf("failed to update user janny boards: %v", db.Error)
-	}
-
-	return nil
-}
-
-func JannyCheck(c echo.Context, boardID string) bool {
-
+func GetUserByID(uuid uint) User {
 	// Obtain the database connection from the `database` package
 	db := database.DB
 
-	// Retrieve session
-	sess, err := session.Get("session", c)
-	if err != nil {
-		return false
-	}
+	// Retrieve the user from the database based on the ID
+	var user User
+	db.First(&user, uuid)
 
-	// Check if user is stored in session
-	userSessionValue, ok := sess.Values["user"]
-	if !ok {
-		return false
-	}
+	// Return the user
+	return user
+}
 
-	// Assuming userSessionValue is of type User or similar, you need to cast it appropriately
-	user, ok := userSessionValue.(User)
-	if !ok {
-		return false
-	}
+func GetUserByUsername(username string) User {
+	// Obtain the database connection from the `database` package
+	db := database.DB
 
-	// Retrieve user from database based on ID
-	var userFromDB User
-	if err := db.Where("id = ?", user.ID).First(&userFromDB).Error; err != nil {
-		return false
-	}
+	// Retrieve the user from the database based on the username
+	var user User
+	db.Where("username = ?", username).First(&user)
 
-	// Check if the user is in the janny group
-	if !strings.Contains(userFromDB.JannyBoards, boardID) {
-		return false
-	}
+	// Return the user
+	return user
+}
 
-	// If the user is an admin, return true to indicate success
-	// Ensure the database is closed after all operations are done
-	return true
+func ListAdmins() []User {
+	// Obtain the database connection from the `database` package
+	db := database.DB
+
+	// Retrieve the admins from the database
+	var admins []User
+	db.Where("groups.admin = ?", true).Find(&admins)
+
+	// Return the admins
+	return admins
+}
+
+func ListModerators() []User {
+	// Obtain the database connection from the `database` package
+	db := database.DB
+
+	// Retrieve the moderators from the database
+	var moderators []User
+	db.Where("groups.moderator = ?", true).Find(&moderators)
+
+	// Return the moderators
+	return moderators
+}
+
+func ListJannies() []User {
+	// Obtain the database connection from the `database` package
+	db := database.DB
+
+	// Retrieve the jannies from the database
+	var jannies []User
+	db.Where("groups.janny = ?", true).Find(&jannies)
+
+	// Return the jannies
+	return jannies
 }

@@ -354,7 +354,12 @@ func AdminInfoHandler(c echo.Context) error {
 
 	data := globaldata(c)
 	data["Pagename"] = "Admin Info"
-
+	systemInfo, err := utils.GetSystemInfo()
+	if err != nil {
+		log.Printf("Error retrieving system info: %v", err)
+		return c.String(http.StatusInternalServerError, "Internal Server Error")
+	}
+	data["System"] = systemInfo
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
 		fmt.Println("Error executing template:", err)

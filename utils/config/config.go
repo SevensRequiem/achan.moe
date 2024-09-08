@@ -5,16 +5,48 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 )
 
 type GlobalConfig struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Description string `json:"description"`
-	Fork        string `json:"fork"`
-	Minecraft   string `json:"minecraft"`
+	Name          string `json:"name"`
+	Version       string `json:"version"`
+	Description   string `json:"description"`
+	Fork          string `json:"fork"`
+	MinecraftIP   string `json:"minecraft-ip"`
+	MinecraftPort int    `json:"minecraft-port"`
+}
+
+// Custom unmarshalling method for GlobalConfig
+func (gc *GlobalConfig) UnmarshalJSON(data []byte) error {
+	type Alias GlobalConfig
+	aux := &struct {
+		MinecraftPort interface{} `json:"minecraft-port"`
+		*Alias
+	}{
+		Alias: (*Alias)(gc),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	switch v := aux.MinecraftPort.(type) {
+	case string:
+		port, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid minecraft-port: %w", err)
+		}
+		gc.MinecraftPort = port
+	case float64:
+		gc.MinecraftPort = int(v)
+	default:
+		return fmt.Errorf("invalid type for minecraft-port")
+	}
+
+	return nil
 }
 
 type BoardConfig struct {
@@ -48,11 +80,12 @@ func init() {
 		}
 		// Initialize with default values and write to the file
 		defaultConfig := GlobalConfig{
-			Name:        "achan",
-			Version:     "1.0.0",
-			Description: "a simple imageboard written in go",
-			Fork:        "https://github.com/SevensRequiem/achan.moe",
-			Minecraft:   "1234567890",
+			Name:          "achan",
+			Version:       "1.0.0",
+			Description:   "a simple imageboard written in go",
+			Fork:          "https://github.com/SevensRequiem/achan.moe",
+			MinecraftIP:   "69.164.202.38",
+			MinecraftPort: 25565,
 		}
 		if err := WriteJSON(file, defaultConfig); err != nil {
 			log.Fatal(err)
@@ -116,7 +149,7 @@ func WriteGlobalConfig(c echo.Context) error {
 	globalConfig.Name = c.FormValue("name")
 	globalConfig.Description = c.FormValue("description")
 	globalConfig.Fork = c.FormValue("fork")
-	globalConfig.Minecraft = c.FormValue("minecraft")
+	globalConfig.MinecraftIP = c.FormValue("minecraft")
 
 	// Open the global config file for writing
 	file, err := os.OpenFile("config/global.json", os.O_WRONLY|os.O_TRUNC, 0644)

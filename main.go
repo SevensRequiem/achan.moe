@@ -19,6 +19,7 @@ import (
 	"achan.moe/database"
 	"achan.moe/home"
 	"achan.moe/routes"
+	"achan.moe/utils/minecraft"
 	"achan.moe/utils/schedule"
 )
 
@@ -99,6 +100,7 @@ func main() {
 	scheduler.ScheduleTask(schedule.Task{
 		Action: func() {
 			bans.ExpireCheck()
+			minecraft.GetServerStatus()
 		},
 		Duration: 5 * time.Minute,
 	})

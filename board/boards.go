@@ -30,6 +30,7 @@ type Board struct {
 	Locked      bool   `json:"locked"`       //todo
 	Archived    bool   `json:"archived"`     //todo
 	LatestPosts bool   `json:"latest_posts"` //todo
+	Pages       int    `json:"pages"`        //todo
 }
 
 type Post struct {
@@ -46,6 +47,7 @@ type Post struct {
 	IP             string `json:"IP"`
 	Sticky         bool   `json:"Sticky"`
 	Locked         bool   `json:"Locked"`
+	Page           int    `json:"Page"`
 }
 
 type RecentPosts struct {
@@ -61,7 +63,6 @@ type RecentPosts struct {
 	ParentID       string `json:"ParentID"`
 	Timestamp      string `json:"Timestamp"`
 }
-
 type RateLimit struct {
 	IP       string    `json:"IP"`
 	Count    int       `json:"Count"`
@@ -751,4 +752,12 @@ func GetBoardDescription(boardID string) string {
 	var board Board
 	db.Where("board_id = ?", boardID).First(&board)
 	return board.Description
+}
+
+func GetTotalPostCount() int64 {
+	db := database.DB
+
+	var PostCount PostCounter
+	db.First(&PostCount)
+	return PostCount.PostCount
 }

@@ -51,6 +51,15 @@ func BanIP(c echo.Context) Bans {
 	return bannedIP
 }
 
+func GetTotalBans(c echo.Context) error {
+	db := database.DB
+	var count int64
+	if err := db.Model(&Bans{}).Count(&count).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, count)
+}
+
 func GetBans(c echo.Context) error {
 	db := database.DB
 	var bans []Bans
@@ -97,6 +106,20 @@ func GetBanByIP(c echo.Context) error {
 	return c.JSON(http.StatusOK, bans)
 }
 
+func GetTotalBanCount() int64 {
+	db := database.DB
+	var count int64
+	db.Model(&Bans{}).Count(&count)
+	return count
+}
+
+func GetActiveBanCount() int64 {
+	db := database.DB
+	var count int64
+	db.Model(&Bans{}).Where("Status = ?", "active").Count(&count)
+	return count
+}
+
 func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		db := database.DB
@@ -134,6 +157,7 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func ExpireCheck() {
+	fmt.Println("Checking for expired bans...")
 	db := database.DB
 	var bans []Bans
 	db.Find(&bans)

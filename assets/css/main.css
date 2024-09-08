@@ -173,6 +173,42 @@ header a {
 header a:hover {
   color: #ff0000;
 }
+header #search {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+header #search form {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+header #search input {
+  background-color: #1b1b1b7a;
+  color: #00c3ff;
+  border: 1px solid #035d79;
+  margin: 0 auto;
+  height: 100%;
+}
+header #search button {
+  background-color: #035d79;
+  color: rgb(26, 26, 26);
+  border: 1px solid #035d79;
+  margin: 0 auto;
+}
+header #search button:hover {
+  background-color: #024877;
+}
+header #search button:active {
+  background-color: #024877;
+}
+header #search button:focus {
+  background-color: #024877;
+}
 #content {
   grid-area: content;
   width: 100%;

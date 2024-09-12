@@ -12,8 +12,8 @@ import (
 	"achan.moe/auth"
 	"achan.moe/banners"
 	"achan.moe/board"
-	"achan.moe/utils"
 	config "achan.moe/utils/config"
+	"achan.moe/utils/stats"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 )
@@ -175,7 +175,7 @@ func globaldata(c echo.Context) map[string]interface{} {
 	data["IP"] = c.RealIP()
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	data["user"] = "Anonymous"
-	data["TotalSize"] = utils.GetProjectSize(".")
+	data["TotalSize"] = stats.GetContentSize()
 	data["TotalPosts"] = board.GetGlobalPostCount()
 	data["TotalUsers"] = auth.GetTotalUsers()
 	data["GlobalConfig"] = config.ReadGlobalConfig()
@@ -369,12 +369,6 @@ func AdminInfoHandler(c echo.Context) error {
 
 	data := globaldata(c)
 	data["Pagename"] = "Admin Info"
-	systemInfo, err := utils.GetSystemInfo()
-	if err != nil {
-		log.Printf("Error retrieving system info: %v", err)
-		return c.String(http.StatusInternalServerError, "Internal Server Error")
-	}
-	data["System"] = systemInfo
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
 		fmt.Println("Error executing template:", err)

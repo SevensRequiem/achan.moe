@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"achan.moe/bans"
 	"achan.moe/board"
@@ -98,4 +99,58 @@ func GetStats(c echo.Context) error {
 	stats.TotalBanCount = fmt.Sprintf("%d", totalBanCount)
 
 	return c.JSON(http.StatusOK, stats)
+}
+
+func GetBinarySize(c echo.Context) error {
+	binaryPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("error getting executable path: %w", err)
+	}
+
+	binaryInfo, err := os.Stat(binaryPath)
+	if err != nil {
+		return fmt.Errorf("error getting binary info: %w", err)
+	}
+
+	return c.JSON(http.StatusOK, binaryInfo.Size())
+}
+
+func GetBinarySum(c echo.Context) error {
+	binaryPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("error getting executable path: %w", err)
+	}
+
+	binaryData, err := ioutil.ReadFile(binaryPath)
+	if err != nil {
+		return fmt.Errorf("error reading binary file: %w", err)
+	}
+
+	hash := sha256.Sum256(binaryData)
+	return c.JSON(http.StatusOK, hex.EncodeToString(hash[:]))
+}
+
+func GetContentSize() float64 {
+	wd, err := os.Getwd()
+	if err != nil {
+		return 0
+	}
+
+	dir := filepath.Join(wd, "boards")
+	var size int64
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		size += info.Size()
+		return nil
+	})
+	if err != nil {
+		return 0
+	}
+
+	sizemb := float64(size) / (1024 * 1024)
+	// round to 2 decimal places
+	sizemb = math.Round(sizemb*100) / 100
+	return sizemb
 }

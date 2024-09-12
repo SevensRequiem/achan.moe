@@ -1,6 +1,6 @@
 {{define "content"}}
 
-<fieldset>
+<fieldset id="register">
     <legend>Register</legend>
     <div id="username"></div>
     <div id="password"></div>
@@ -30,31 +30,35 @@
     </script>
 </fieldset>
     <style>
-        fieldset {
+
+#register fieldset {
             width: 50%;
             margin: 0 auto;
             padding: 10px;
+            border: 1px solid #000;
             border-radius: 5px;
         }
-        legend {
+
+        #register legend {
+            font-size: 20px;
             font-weight: bold;
         }
-        label {
-            display: inline-block;
-            width: 100px;
-            text-align: right;
-        }
-        input {
-            width: 200px;
-        }
-        button {
-            margin-left: 100px;
+
+        #register div {
+            margin: 10px 0;
         }
 
-        img {
-            max-width: 200px;
-            max-height: 100px;
-            margin: 0 auto;
+        #register a {
+            display: inline-block;
+            padding: 5px 10px;
+            background-color: #000;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+
+        #register a:hover {
+            background-color: #333;
         }
     </style>
     {{end}}

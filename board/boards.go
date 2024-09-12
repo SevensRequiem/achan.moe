@@ -273,7 +273,6 @@ func CreateThread(c echo.Context) error {
 
 func CreateThreadPost(c echo.Context) error {
 	rate := RateLimitPost{}
-	rate.IP = c.RealIP()
 	rate.Count = 0
 	rate.TimeLast = time.Now().Format("01-02-2006 15:04:05")
 
@@ -285,6 +284,7 @@ func CreateThreadPost(c echo.Context) error {
 	if rate.Count > 5 && time.Since(timeLastParsed).Minutes() < 5 {
 		return c.JSON(http.StatusTooManyRequests, "Rate limit exceeded")
 	}
+	rate.Count++
 	boardID := c.Param("b")
 	if boardID == "" {
 		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")

@@ -72,14 +72,18 @@ func main() {
 	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Level: 5,
 	}))
-	e.Use(middleware.Secure())
+	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
+		XSSProtection:         "1; mode=block",
+		ContentTypeNosniff:    "nosniff",
+		ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; img-src 'self' data: cdn.jsdelivr.net; connect-src 'self' cdn.jsdelivr.net; font-src 'self' cdn.jsdelivr.net; frame-src 'self' cdn.jsdelivr.net; media-src 'self' cdn.jsdelivr.net; object-src 'self'; worker-src 'self'; frame-ancestors 'self'; form-action 'self'; base-uri 'self'; manifest-src 'self';",
+	}))
 	baseUrl := os.Getenv("BASE_URL")
 	middleware.CSRFWithConfig(middleware.CSRFConfig{
 		TokenLookup:    "cookie:_csrf",
 		CookiePath:     "/",
 		CookieDomain:   baseUrl,
 		CookieSecure:   true,
-		CookieHTTPOnly: false,
+		CookieHTTPOnly: true,
 		CookieSameSite: http.SameSiteStrictMode,
 	})
 
@@ -111,6 +115,8 @@ func main() {
 	if err != nil {
 		log.Fatal("PORT is not set")
 	}
-
-	e.Start(":" + strconv.Itoa(port))
+	//go env.RegenEncryptedKey()
+	//go env.RegenSecretKey()
+	//go plugins.LoadPlugins(e)
+	e.StartTLS(":"+strconv.Itoa(port), "certificates/cert.pem", "certificates/key.pem")
 }

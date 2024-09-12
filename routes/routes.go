@@ -160,6 +160,9 @@ func Routes(e *echo.Echo) {
 	e.GET("/login", func(c echo.Context) error {
 		return auth.LoginHandler(c)
 	})
+	e.POST("/login", func(c echo.Context) error {
+		return auth.LoginHandler(c)
+	})
 	e.GET("/logout", func(c echo.Context) error {
 		return auth.LogoutHandler(c)
 	})

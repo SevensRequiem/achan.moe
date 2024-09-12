@@ -1,7 +1,7 @@
 {{define "content"}}
     <fieldset id="home">
         <legend>Welcome, {{.IP}}</legend>
-        <span>Here you can view the latest posts and boards.</span>
+        <div id="rules">
         <h3>Rules</h3>
         <ol>
             <li>No illegal content.</li>
@@ -12,10 +12,29 @@
             <li>No off-topic posts.</li>
             <li>No advertising.</li>
         </ol>
-
+        </div>
+        <div id="minecraft">
+            <h3>Join our Minecraft server!</h3>
+            <p>Server IP: {{.GlobalConfig.MinecraftIP}}:{{.GlobalConfig.MinecraftPort}}</p>
+            <p>Version: <span id="mcversion"></span></p>
+            <span><span id="mcplayers"></span>/<span id="mcmaxplayers"></span> players online</span>
+        </div>
+        <script>
+            const url = "/api/minecraft";
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("mcversion").innerText = data.Version;
+                    document.getElementById("mcplayers").innerText = data.Players;
+                    document.getElementById("mcmaxplayers").innerText = data.MaxPlayers;
+                });
+        </script>
     </fieldset>
         <br>
     <fieldset id="boards">
+        <span>
+            All posts are the responsibility of the poster. Please report any posts you see breaking the rules.
+        </span>
         <legend>Boards</legend>
         <ul>
             {{range .Boards}}
@@ -44,7 +63,7 @@
                 {{end}}
                 <span class="subject">{{.Subject}}</span>
                 <p>{{.PartialContent}}</p>
-                <span>{{.Timestamp}}</span></a>
+                <span class="timestamp">{{.Timestamp}}</span></a>
             </li>
             {{else}}
             <li>
@@ -54,7 +73,7 @@
                 <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image" class="postfile">
                 {{end}}
                 <p>{{.PartialContent}}</p>
-                <span>{{.Timestamp}}</span></a>
+                <span class="timestamp">{{.Timestamp}}</span></a>
             </li>
             {{end}}
         {{end}}
@@ -77,17 +96,24 @@
     <style>
             .subject {
         font-weight: bold;
-        color: #AAF;
+        color: #cccccc;
     }
         #boards {
             width: 70%;
             margin: 0 auto;
-            border-top: 5px solid #024877;
-            border-left: 1px solid #024877;
-            border-right: 1px solid #024877;
-            border-bottom: 1px solid #024877;
+            border-top: 5px solid #494949;
+            border-left: 1px solid #494949;
+            border-right: 1px solid #494949;
+            border-bottom: 1px solid #494949;
 
             background-color: #1b1b1b7a;
+        }
+
+        #boards span {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
         }
         #boards ul {
             display: flex;
@@ -112,10 +138,10 @@
         }
         #boards a {
             text-decoration: none;
-            color: rgb(16, 197, 128);
+            color: #02ff6b;
         }
         #boards a:hover {
-            text-decoration: underline;
+            color: #ffffff;
         }
 
         #stats {
@@ -126,20 +152,20 @@
 
             width: 70%;
             margin: 0 auto;
-            border-top: 5px solid #024877;
-            border-left: 1px solid #024877;
-            border-right: 1px solid #024877;
-            border-bottom: 1px solid #024877;
+            border-top: 5px solid #494949;
+            border-left: 1px solid #494949;
+            border-right: 1px solid #494949;
+            border-bottom: 1px solid #494949;
             background-color: #1b1b1b7a;
         }
 
         #latest {
             width: 70%;
             margin: 0 auto;
-            border-top: 5px solid #024877;
-            border-left: 1px solid #024877;
-            border-right: 1px solid #024877;
-            border-bottom: 1px solid #024877;
+            border-top: 5px solid #494949;
+            border-left: 1px solid #494949;
+            border-right: 1px solid #494949;
+            border-bottom: 1px solid #494949;
             background-color: #1b1b1b7a;
         }
         #latest ul {
@@ -159,16 +185,64 @@
 
         #latest li a {
             text-decoration: none;
-            color: rgb(16, 197, 128);
+            color: #02ff6b;
             height: 300px;
             width: 300px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            border: 1px solid #1f1f1f;
+            border-top: 5px solid #494949;
+            border-left: 1px solid #494949;
+            border-right: 1px solid #494949;
+            border-bottom: 1px solid #494949;
             margin: 10px;
             padding: 10px;
+        }
+
+        #latest li a:hover {
+            border-top: 5px solid #ffffff;
+            border-left: 1px solid #ffffff;
+            border-right: 1px solid #ffffff;
+            border-bottom: 1px solid #ffffff;
+        }
+
+        #latest li a img {
+            max-width: 200px;
+            max-height: 200px;
+        }
+
+        #latest li a .subject {
+            font-weight: bold;
+            color: #02ff6b;
+        }
+        #latest li a .subject:hover {
+            font-weight: bold;
+            color: #ffffff;
+        }
+
+
+        #latest li a .subject::before {
+            content: "[";
+            margin-right: 5px;
+            color: #AAF;
+        }
+
+        #latest li a .subject::after {
+            content: "]";
+            margin-left: 5px;
+            color: #AAF;
+        }
+
+        #latest li a p {
+            margin: 0;
+            padding: 0;
+            color: rgb(255, 255, 255);
+        }
+
+        #latest li a .timestamp {
+            color: rgb(97, 97, 97);
+            font-size: 0.8em;
         }
 
         #latest video {
@@ -194,13 +268,14 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            border-top: 5px solid #024877;
-            border-left: 1px solid #024877;
-            border-right: 1px solid #024877;
-            border-bottom: 1px solid #024877;
+            border-top: 5px solid #494949;
+            border-left: 1px solid #494949;
+            border-right: 1px solid #494949;
+            border-bottom: 1px solid #494949;
             background-color: #1b1b1b7a;
             width: 70%;
             margin: 0 auto;
+            margin-top: 1.5rem;
         }
         #home p {
             margin: 0;
@@ -215,6 +290,30 @@
     .postfile {
         max-width: 250px;
         max-height: 250px;
+    }
+
+    #minecraft {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    #minecraft p {
+        margin: 0;
+        padding: 0;
+    }
+    #minecraft span {
+        color: rgb(170, 228, 255);
+    }
+    #minecraft img {
+        max-width: 250px;
+        max-height: 250px;
+    }
+    #rules {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
     }
     </style>
 {{end}}

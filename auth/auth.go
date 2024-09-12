@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/exp/rand"
+	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 
 	"encoding/gob"
@@ -67,6 +68,12 @@ type Group struct {
 
 type JannyBoards struct {
 	Boards []string `json:"boards"`
+}
+
+type RateLimit struct {
+	IP       string    `json:"ip"`
+	Count    int       `json:"count"`
+	TimeLast time.Time `json:"time_last"`
 }
 
 // Implement the Scanner interface for Group
@@ -153,16 +160,21 @@ func getrandusername() string {
 }
 
 func getrandpassword() string {
-	enc := os.Getenv("ENCRYPT_KEY")
 	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$"
 	password := make([]byte, 10)
+	seed := uint64(rand.Intn(1000000000000000000))
+	rand.Seed(seed)
 	for i := range password {
-		password[i] = chars[rand.Intn(len(chars))]
+		num := rand.Intn(len(chars))
+		password[i] = chars[num]
 	}
+	return string(password)
+}
+func encryptPassword(password string) string {
+	enc := os.Getenv("ENCRYPT_KEY")
 	h := hmac.New(sha256.New, []byte(enc))
-	h.Write(password)
+	h.Write([]byte(password))
 	encpass := h.Sum(nil)
-	// Encode the hash in Base64
 	encodedPass := base64.StdEncoding.EncodeToString(encpass)
 	return encodedPass
 }
@@ -176,21 +188,36 @@ func ManualGenPassword(password string) string {
 	return encodedPass
 }
 
+var limiter = rate.NewLimiter(1/60.0, 1)
+
 func NewUser(c echo.Context) error {
+	if !limiter.Allow() {
+		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "One Minute cooldown"})
+	}
+
 	var newid = getrandid()
 	var newusername = getrandusername()
 	var newpassword = getrandpassword()
+	var encpass = encryptPassword(newpassword)
 	db := database.DB
-	user := User{UUID: newid, Username: newusername, Password: newpassword, Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
+	user := User{UUID: newid, Username: newusername, Password: encpass, Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
 	db.Create(&user)
-	// encode in json
-	info := map[string]string{"username": user.Username, "password": user.Password}
-	encinfo, err := json.Marshal(info)
+	info := map[string]string{"username": user.Username, "password": newpassword}
+	return c.JSON(http.StatusOK, info)
+}
+
+func DecodePassword(encrypted_password string) string {
+	enc := os.Getenv("ENCRYPT_KEY")
+	decoded, err := base64.StdEncoding.DecodeString(encrypted_password)
+
 	if err != nil {
 		log.Println(err)
+		return ""
 	}
-	log.Println(string(encinfo))
-	return c.JSON(http.StatusOK, info)
+	h := hmac.New(sha256.New, []byte(enc))
+	h.Write(decoded)
+	encpass := h.Sum(nil)
+	return base64.StdEncoding.EncodeToString(encpass)
 }
 
 // login functions
@@ -200,47 +227,37 @@ func LoginHandler(c echo.Context) error {
 	// Retrieve the session
 	sess, _ := session.Get("session", c)
 
-	// Check if the user is already logged in
-	if sess.Values["user"] != nil {
-		// Redirect the user to the home page
-		return c.Redirect(http.StatusTemporaryRedirect, "/")
-	}
-
-	// Retrieve the username and password from the form
+	// Parse the request parameters
 	username := c.FormValue("username")
 	password := c.FormValue("password")
 
-	// Obtain the database connection from the `database` package
-	db := database.DB
-
-	// Retrieve the user from the database based on the username
-	var user User
-	db.Where("username = ?", username).First(&user)
-
-	// Check if the user exists and the password is correct
-	if user.DoesExist && checkPassword(password, user) {
-		// Update the user's last login time
-		user.LastLogin = time.Now().Format("2006-01-02 15:04:05")
-		db.Save(&user)
-
-		// Store the user in the session
-		sess.Values["user"] = user
-		sess.Save(c.Request(), c.Response())
-
-		// Redirect the user to the home page
-		return c.Redirect(http.StatusTemporaryRedirect, "/")
+	if username == "" || password == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid username or password"})
 	}
 
-	// Redirect the user to the login page
-	return c.Redirect(http.StatusTemporaryRedirect, "/login")
+	// Retrieve the user from the database based on the username
+	user := GetUserByUsername(username)
 
+	// Check if the password is correct
+	if !checkPassword(password, user) {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid username or password"})
+	}
+
+	// Update the last login time
+	user.LastLogin = time.Now().Format("2006-01-02 15:04:05")
+
+	// Save the user to the session
+	sess.Values["user"] = user
+	sess.Save(c.Request(), c.Response())
+
+	// Redirect the user to the home page
+	return c.JSON(http.StatusOK, map[string]string{"success": "Logged in"})
 }
 func checkPassword(password string, user User) bool {
 	enc := os.Getenv("ENCRYPT_KEY")
 	h := hmac.New(sha256.New, []byte(enc))
 	h.Write([]byte(password))
 	encpass := h.Sum(nil)
-	// Encode the hash in Base64
 	encodedPass := base64.StdEncoding.EncodeToString(encpass)
 	return encodedPass == user.Password
 }

@@ -7,7 +7,9 @@
         <img src="/banner/{{.BoardID}}/{{.Banner}}" alt="Banner">
     </div>
     </div>
-    
+    <hr>
+    <a href="#" onclick="loadForm(); return false;" class="createpost">Post a Reply</a>
+    <hr>
     <div class="container">
         <fieldset id="thread">
             <legend>{{.Thread.Author}} // {{.Thread.Subject}} - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
@@ -158,7 +160,9 @@
                 });
             </script>
         </div>
+        <hr>
         <a href="#" onclick="loadForm(); return false;" class="createpost">Post a Reply</a>
+        <hr>
         <fieldset class="reply">
             <legend>Reply</legend>
             <form action="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}" method="post" enctype="multipart/form-data">
@@ -173,7 +177,15 @@
             </form>
         </fieldset>
     </div>
-    
+    <script>
+
+          document.addEventListener("DOMContentLoaded", function() {
+            const postContents = document.getElementsByClassName('postcontent');
+            for (let i = 0; i < postContents.length; i++) {
+              postContents[i].innerHTML = marked.parse(postContents[i].innerHTML);
+            }
+          });
+ </script>
 </div>
 <div id="cirno">
     <img src="/assets/cirno.png" alt="Cirno">
@@ -185,8 +197,15 @@
         justify-content: center;
         overflow: hidden;
         width: 100%;
+        margin-top: 1.5rem;
     }
 
+    .banners {
+margin: 0 auto;
+width: 100%;
+margin-top: 2rem;
+margin-bottom: 2rem;
+    }
 
 
     #thread {
@@ -195,12 +214,12 @@
         justify-content: left;
         align-items: center;
         word-break: break-all;
-        border-top: 5px solid #027733;
-            border-left: 1px solid #027733;
-            border-right: 1px solid #027733;
-            border-bottom: 1px solid #027733;
+        border-top: 5px solid #494949;
+        border-left: 1px solid #494949;
+        border-right: 1px solid #494949;
+        border-bottom: 1px solid #494949;
 
-            background-color: #1b1b1b7a;
+        background-color: #1b1b1b7a;
 
     }
     #thread img {
@@ -213,14 +232,14 @@
         justify-content: left;
         align-items: center;
         word-break: break-all;
-        border-top: 5px solid #024877;
-            border-left: 1px solid #024877;
-            border-right: 1px solid #024877;
-            border-bottom: 1px solid #024877;
+        border-top: 5px solid #494949;
+        border-left: 1px solid #494949;
+        border-right: 1px solid #494949;
+        border-bottom: 1px solid #494949;
 
-            background-color: #1b1b1b7a;
-            width: 70%;
-            min-height: 100px;
+        background-color: #1b1b1b7a;
+        width: 100%;
+        min-height: 100px;
     }
     .post a:hover {
         color: #FFF;
@@ -235,7 +254,6 @@
     }
     .post p {
         margin: 10px;
-        color: #AAF;
     }
     
     .createpost {
@@ -244,16 +262,16 @@
         justify-content: center;
         margin: 0 auto;
 
-        width: 100px;
+        width: 200px;
         text-align: center;
         padding: 10px;
-        background-color: #0245647a;
+        background-color: #494949;
         border: 1px solid #1a1a1a;
         color: #AAF;
         text-decoration: none;
     }
     .createpost:hover {
-        background-color: #024877;
+        background-color: #1a1a1a;
     }
     
     #cirno {
@@ -268,6 +286,10 @@
     .mod {
         color: rgb(255, 0, 0);
         text-decoration: none;
+    }
+    hr {
+        border: 1px solid #494949;
+        width: 100%;
     }
 </style>
 <script>
@@ -300,5 +322,44 @@
         content.value = `>>${postid}\n`;
         content.focus();
     }
+
+    //draggable reply form
+    const reply = document.querySelector('.reply');
+    let isDown = false;
+    let offset = [0, 0];
+    let currentPos = {
+        x: 0,
+        y: 0
+    };
+
+    reply.addEventListener('mousedown', (e) => {
+        isDown = true;
+        offset = [
+            reply.offsetLeft - e.clientX,
+            reply.offsetTop - e.clientY
+        ];
+    }, true);
+
+    document.addEventListener('mouseup', () => {
+        isDown = false;
+    }, true);
+
+    document.addEventListener('mousemove', (event) => {
+        event.preventDefault();
+        if (isDown) {
+            currentPos.x = event.clientX;
+            currentPos.y = event.clientY;
+            reply.style.left = (currentPos.x + offset[0]) + 'px';
+            reply.style.top = (currentPos.y + offset[1]) + 'px';
+        }
+    }, true);
+
+    // markdown rendering
+    document.addEventListener("DOMContentLoaded", function() {
+        const postContents = document.getElementsByClassName('postcontent');
+        for (let i = 0; i < postContents.length; i++) {
+            postContents[i].innerHTML = marked.parse(postContents[i].innerHTML);
+        }
+    });
 </script>
 {{end}}

@@ -29,6 +29,7 @@ Install achan.moe on ubuntu/debian
 - update system
 - json config system (replace DB)
 - cache system
+- markdown support
 
 ### contributing
 feel free to contribute whenever, wherever.

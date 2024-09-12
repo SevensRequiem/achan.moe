@@ -5,3 +5,4 @@
 *.log
 sitemap.xml
 .env
+.pem

@@ -2,6 +2,10 @@
   font-family: vector;
   src: url(/assets/fonts/TerminalVector.ttf);
 }
+@font-face {
+  font-family: monocraft;
+  src: url(/assets/fonts/Monocraft.otf);
+}
 @keyframes rainbow {
   12.5%,
   100% {
@@ -35,29 +39,21 @@
     opacity: 0;
   }
 }
+
+* a {
+  text-decoration: none;
+}
+
 html,
 body {
   margin: 0;
   padding: 0;
   height: 100%;
   width: 100%;
-  color: #84a7be;
-  font-family: vector;
+  color: #cccccc;
+  font-family: monocraft;
   font-size: 1em;
-  z-index: -1;
-  background-color: #000000;
-}
-#background {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  background-image: url("/assets/bg2.jpg");
-  background-size: cover;
-  background-position: center;
-  filter: blur(2px);
+  z-index: -10;
 }
 body {
   display: grid;
@@ -150,9 +146,11 @@ header nav #boardnav {
 }
 header nav #boardnav::before {
   content: "[";
+  color: #AAF;
 }
 header nav #boardnav::after {
   content: "]";
+  color: #AAF;
 }
 header nav #mainnav {
   font-size: 0.7em;
@@ -162,16 +160,18 @@ header nav #mainnav {
 }
 header nav #mainnav::before {
   content: "[";
+  color: #AAF;
 }
 header nav #mainnav::after {
   content: "]";
+  color: #AAF;
 }
 header a {
   text-decoration: none;
-  color: #029aff;
+  color: #02ff6b;
 }
 header a:hover {
-  color: #ff0000;
+  color: #ffffff;
 }
 header #search {
   display: flex;
@@ -189,25 +189,25 @@ header #search form {
 }
 header #search input {
   background-color: #1b1b1b7a;
-  color: #00c3ff;
-  border: 1px solid #035d79;
+  color: #AAF;
+  border: 1px solid #494949;
   margin: 0 auto;
   height: 100%;
 }
 header #search button {
-  background-color: #035d79;
+  background-color: #494949;
   color: rgb(26, 26, 26);
-  border: 1px solid #035d79;
+  border: 1px solid #494949;
   margin: 0 auto;
 }
 header #search button:hover {
-  background-color: #024877;
+  background-color: #1b1b1b7a;
 }
 header #search button:active {
-  background-color: #024877;
+  background-color: #1b1b1b7a;
 }
 header #search button:focus {
-  background-color: #024877;
+  background-color: #1b1b1b7a;
 }
 #content {
   grid-area: content;
@@ -233,19 +233,6 @@ footer {
   z-index: 2;
 }
 
-footer a {
-  text-decoration: none;
-  color: #029aff;
-}
-footer a:hover {
-  color: #ff0000;
-}
-footer span::before {
-  content: "[";
-}
-footer span::after {
-  content: "]";
-}
 .title {
   font-size: 1.5em;
   font-weight: 700;
@@ -257,14 +244,19 @@ footer span::after {
 
 .reply {
   display: none;
-  border-top: 5px solid #024877;
-      border-left: 1px solid #024877;
-      border-right: 1px solid #024877;
-      border-bottom: 1px solid #024877;
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  transform: translate(-50%, 0);
+  border-top: 5px solid #1b1b1b7a;
+  border-left: 1px solid #1b1b1b7a;
+  border-right: 1px solid #1b1b1b7a;
+  border-bottom: 1px solid #1b1b1b7a;
 
-      background-color: #1b1b1b7a;
-      width: 400px;
-      margin: 0 auto;
+  background-color: #1b1b1b7a;
+  width: 400px;
+  margin: 0 auto;
+  z-index: 55;
 }
 form {
   display: flex;
@@ -284,8 +276,8 @@ form label {
 }
 form input {
   background-color: rgb(26, 26, 26);
-  color: #00c3ff;
-  border: 1px solid #035d79;
+  color: #AAF;
+  border: 1px solid #494949;
   padding: 0 5px;
   margin: 0 auto;
   height: 60px;
@@ -293,13 +285,13 @@ form input {
 }
 form textarea {
   background-color: rgb(26, 26, 26);
-  color: #00c3ff;
-  border: 1px solid #035d79;
+  color: #AAF;
+  border: 1px solid #494949;
 }
 form button {
-  background-color: #035d79;
+  background-color: #494949;
   color: rgb(26, 26, 26);
-  border: 1px solid #035d79;
+  border: 1px solid #494949;
   width: 50%;
   margin: 0 auto;
 }

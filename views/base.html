@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="title" content="achan.moe">
+    <meta name="description" content="An anonymous imageboard written in Go.">
+    <meta name="keywords" content="anonymous, imageboard, 4chan, achan">
+    <meta name="robots" content="index, follow">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="language" content="English">
+    <meta name="revisit-after" content="1 days">
+
+    <link rel="icon" type="image/png" href="https://achan.moe/assets/img/favicon.png" />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="canonical" href="https://achan.moe" />
+
+    <title>achan.moe</title>
+    <link rel="stylesheet" href="http://dev123.achan.moe/assets/css/main.css" />
+</head>
+
+<body>
+    <div id="staticbg"></div>
+    <div id="staticoverlay"></div>
+    <div id="scanlines"></div>
+    <header>
+        <span id="logo">{{.GlobalConfig.Name}}</span>
+        <span id="subtitle">{{.GlobalConfig.Version}}</span>
+        <br>
+        <span id="tagline">{{.GlobalConfig.Description}}</span>
+        <br>
+        <nav>
+            <span id="boardnav">
+                {{range .Boards}}
+                <a href="/board/{{.BoardID}}">/{{.BoardID}}/</a>
+                {{end}}
+            </span>
+            <br>
+            <br>
+            <br>
+            <span id="mainnav">
+                <a href="/">home</a>
+                <a href="/donate">donate</a>
+                {{if .User}}
+                <span class="user">[{{.User}}]</span>
+                <a href="/logout">logout</a>
+                {{else}}
+                    <a href="#" onclick="ToggleLoginDropdown()">login</a>
+                    {{end}}
+                    {{if .IsAdmin}}
+                    <a href="/admin/dashboard">admin</a>
+                    {{end}}
+            </span>
+
+        </nav>
+        <br>
+        <!---
+        <div id="search">
+            <form action="/search" method="get">
+                <input type="text" name="q" placeholder="search" />
+                <button type="submit">search</button>
+            </form>
+        </div>-->
+        <div id="marquee">
+            <marquee behavior="scroll" direction="left" scrollamount="10">
+                <span id="news">
+                    <span id="server-status">Server Status: </span>
+                    <span id="server-status-text">Loading...</span>
+                    <span> | </span>
+                    <span id="server-time">Server Time: </span>
+                    <span id="server-time-text">Loading...</span>
+                    <span> | </span>
+                    <span id="server-uptime">Server Uptime: </span>
+                    <span id="server-uptime-text">Loading...</span>
+                </span>
+            </marquee>
+        </div>
+    </header>
+    <div id="logindropdown" style="display: none;">
+        <a href="#" onclick="ToggleLoginDropdown()">close</a>
+        <a href="/register">register</a>
+        <form action="/login" method="post">
+            <input type="text" name="username" placeholder="username" />
+            <input type="password" name="password" placeholder="password" />
+            <button type="submit">login</button>
+        </form>
+        <script>
+            // login
+            document.getElementById("logindropdown").addEventListener("submit", function (event) {
+                event.preventDefault();
+                var form = event.target;
+                var data = new FormData(form);
+                fetch(form.action, {
+                    method: form.method,
+                    body: data
+                }).then(response => response.json()).then(data => {
+                    if (data.Status === "success") {
+                        window.location.reload();
+                    } else {
+                        alert(data.Message);
+                    }
+                });
+            });
+        </script>
+    </div>
+    </div>
+    <div id="content">
+        {{template "content" .}}
+    </div>
+    <footer>
+        <span id="page-url">
+            >> achan.moe/{{.Pagename}}
+        </span>
+        <span id="minecraft-stats">
+            <span id="mcplayerstat"></span>/<span id="mcmaxstat"></span> players online
+        </span>
+        <script>
+            const mcurl = "/api/minecraft";
+            function mcstats() {
+                fetch(mcurl)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        const mcplayersElement = document.getElementById("mcplayerstat");
+                        const mcmaxplayersElement = document.getElementById("mcmaxstat");
+                        if (mcplayersElement && mcmaxplayersElement) {
+                            mcplayersElement.innerText = data.Players;
+                            mcmaxplayersElement.innerText = data.MaxPlayers;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('There was a problem with the fetch operation:', error);
+                    });
+            }
+            setInterval(mcstats, 300000);
+            mcstats();
+        </script>
+        <span id="footer-links">
+            <a href="/terms">terms</a>
+            <a href="/privacy">privacy</a>
+            <a href="/contact">contact</a>
+            <a href="https://github.com/SevensRequiem/achan.moe" target="_blank">source</a>
+        </span>
+        <span id="site-data">
+            <span>Total: {{.TotalSize}} MB</span>
+            <span>IP: {{.IP}}</span>
+        </span>
+    </footer>
+</body>
+<script>
+    function ToggleLoginDropdown() {
+        var dropdown = document.getElementById("logindropdown");
+        if (dropdown.style.display === "none") {
+            dropdown.style.display = "block";
+        } else {
+            dropdown.style.display = "none";
+        }
+    }
+</script>
+
+</html>
+<style>
+
+    #marquee {
+        position: fixed;
+        top: 1.5rem;
+        left: 0;
+        width: 100%;
+        background-color: #00000088;
+        z-index: 3;
+    }
+
+    #logindropdown {
+        position: fixed;
+        top: 0;
+        left: 10%;
+        z-index: 5;
+        background-color: #00000088;
+    }
+
+    #logindropdown a {
+        color: #02ff6b;
+    }
+
+    #logindropdown a:hover {
+        color: #ffffffff;
+    }
+
+    #logindropdown a::before {
+        content: "[";
+        margin-right: 5px;
+        color: #AAF;
+    }
+
+    #logindropdown a::after {
+        content: "]";
+        margin-left: 5px;
+        color: #AAF;
+    }
+
+    #logindropdown form {
+        display: flex;
+        flex-direction: column;
+    }
+
+    #logindropdown input {
+        margin: 5px;
+    }
+
+    #logindropdown button {
+        margin: 5px;
+    }
+
+    #logindropdown button:hover {
+        background-color: #AAF;
+        color: #000;
+    }
+
+    #logindropdown button:active {
+        background-color: #000;
+        color: #AAF;
+    }
+
+
+    #staticbg {
+        background-image: url("/assets/static.gif");
+        background-repeat: repeat;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -2;
+    }
+
+    #staticoverlay {
+        background-color: #000;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        opacity: 0.85;
+    }
+
+    #site-data {
+        display: flex;
+        justify-content: space-between;
+    }
+    #site-data span::before {
+        content: "[";
+        margin-right: 5px;
+        color: #AAF;
+    }
+    #site-data span::after {
+        content: "]";
+        margin-left: 5px;
+        color: #AAF;
+    }
+    #page-url {
+        color: #AAF;
+    }
+    #page-url::before {
+        content: "[";
+        margin-right: 5px;
+    }
+    #page-url::after {
+        content: "]";
+        margin-left: 5px;
+    }
+    #footer-links {
+        display: flex;
+        justify-content: space-between;
+    }
+    #footer-links a {
+        color: #02ff6b;
+    }
+    #footer-links a:hover {
+        color: rgb(250, 250, 250);
+    }
+    #footer-links a::before {
+        content: "[";
+        color: #AAF;
+        margin-right: 5px;
+    }
+    #footer-links a::after {
+        content: "]";
+        color: #AAF;
+        margin-left: 5px;
+    }
+</style>

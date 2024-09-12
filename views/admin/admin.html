@@ -1,0 +1,50 @@
+{{define "content"}}
+<fieldset id="admin">
+    <legend>
+        Admin Panel
+    </legend>
+    <nav>
+        <ul>
+            <li><a href="/admin/dashboard">Dashboard</a></li>
+            <li><a href="/admin/boards">Boards</a></li>
+            <li><a href="/admin/users">Users</a></li>
+            <li><a href="/admin/config">Configuration</a></li>
+            <li><a href="/admin/update">Update</a></li>
+            <li><a href="/admin/bans">Bans</a></li>
+            <li><a href="/admin/info">Info</a></li>
+            <li><a href="/admin/inbox">Inbox</a></li>
+        </ul>
+    </nav>
+    {{template "page" .}}
+</fieldset>
+<style>
+    #admin {
+    margin: 0 auto;
+    width: 80%;
+}
+#admin-content {
+    margin-top: 20px;
+}
+
+#admin nav ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #1a1a1a;
+}
+
+#admin nav ul li {
+    float: left;
+}
+
+#admin nav ul li a {
+    display: block;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+</style>
+{{end}}
+

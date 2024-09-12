@@ -1,0 +1,274 @@
+{{define "content"}}
+<div id="top-content">
+    <h1>/{{.BoardID}}/</h1>
+    <h2>{{.BoardDesc}}</h2>
+</div>
+<div class="banners">
+    <div id="banner">
+        <img src="/banner/{{.BoardID}}/{{.Banner}}" alt="Banner">
+    </div>
+    </div>
+    <a href="#" onclick="loadForm(); return false;" class="createpost">Create Thread</a>
+    <fieldset class="reply">
+        <form action="/board/{{.BoardID}}" method="post" enctype="multipart/form-data">
+            <div>
+            <label for="subject">Subject:</label>
+            <input type="text" id="subject" name="subject" required><br><br>
+            <label for="author">Username:</label>
+            <input type="text" id="author" name="author" value="Anonymous"><br><br>
+            </div>
+            <label for="content">Post:</label>
+            <textarea id="content" name="content" required></textarea><br><br>
+            <div id="options">
+            {{if .IsAdmin}}
+            <label for="isSticky">Sticky:</label>
+            <input type="checkbox" id="isSticky" name="isSticky"><br><br>
+            <label for="isLocked">Locked:</label>
+            <input type="checkbox" id="isLocked" name="isLocked"><br><br>
+            {{else if .IsJanny}}
+            <label for="isSticky">Sticky:</label>
+            <input type="checkbox" id="isSticky" name="isSticky"><br><br>
+            <label for="isLocked">Locked:</label>
+            <input type="checkbox" id="isLocked" name="isLocked"><br><br>
+            {{end}}
+            
+            <label for="image">Image:</label>
+            
+            <input type="file" id="image" name="image" accept="image/*" required><br><br>
+            </div>
+            
+            <button type="submit">Submit Post</button>
+        </form>
+    </fieldset>
+    <script>
+        const loadForm = () => {
+            const form = document.querySelector('.reply');
+            if (form.style.display === 'flex') {
+                form.style.display = 'none';
+            } else {
+                form.style.display = 'flex';
+            }
+        }
+    </script>
+<div id="options">
+    <a href="/board/{{.BoardID}}">Refresh</a>
+</div>
+<fieldset id="threads">
+    <ul>
+        {{if .IsAdmin}}
+            <!-- Render sticky threads first for admin -->
+            {{range .Threads}}
+                {{if .Sticky}}
+                <li class="sticky">
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">
+                    <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                    <span class="subject">{{.Subject}}</span>
+                    <p>{{.PartialContent}}</p>
+                    </a>
+                </li>
+                {{end}}
+            {{end}}
+            <!-- Render non-sticky threads -->
+            {{range .Threads}}
+                {{if not .Sticky}}
+                <li>
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">
+                        <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <span class="subject">{{.Subject}}</span>
+                        <p>{{.PartialContent}}</p>
+                        </a>
+                </li>
+                {{end}}
+            {{end}}
+        {{else}}
+            <!-- Render sticky threads first for non-admin -->
+            {{range .Threads}}
+                {{if .Sticky}}
+                <li class="sticky">
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">
+                        <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <span class="subject">{{.Subject}}</span>
+                        <p>{{.PartialContent}}</p>
+                        </a>
+                </li>
+                {{end}}
+            {{end}}
+            <!-- Render non-sticky threads -->
+            {{range .Threads}}
+                {{if not .Sticky}}
+                <li>
+                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">
+                        <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <span class="subject">{{.Subject}}</span>
+                        <p>{{.PartialContent}}</p>
+                        </a>
+                </li>
+                {{end}}
+            {{end}}
+        {{end}}
+
+
+    </ul>
+</fieldset>
+<div id="cirno">
+    <img src="/assets/cirno.png" alt="Cirno">
+</div>
+<style>
+    .createpost {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        width: 20%;
+        text-align: center;
+        padding: 10px;
+        background-color: #0245647a;
+        border: 1px solid #1a1a1a;
+        color: #AAF;
+        text-decoration: none;
+    }
+    .createpost:hover {
+        background-color: #494949;
+    }
+    #top-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        width: 50%;
+    }
+
+    #top-content hr {
+        width: 100%;
+    }
+    #top-nav {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #top-nav a {
+        text-decoration: none;
+        color: #AAF;
+        padding: 5px;
+    }
+    .subject {
+        font-weight: bold;
+        color: #AAF;
+    }
+    #board {
+        display: flex;
+        align-items: center; /* Vertically center the content */
+        justify-content: center; /* Horizontally center the content */
+        flex-direction: column; /* Stack the content vertically */
+        margin: 0 auto; /* Center the fieldset */
+        width: 50%; /* Adjust as necessary */
+    }
+    #threads {
+        display: flex;
+        list-style-type: none;
+        padding: 15px;
+        margin: 0;
+        border: 0;
+    }
+    #threads ul {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+
+    }
+    #threads li a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
+        border: 1px solid #1a1a1a;
+        margin: 5px;
+        padding: 5px;
+
+        border-top: 5px solid #494949;
+        border-left: 1px solid #494949;
+        border-right: 1px solid #494949;
+        border-bottom: 1px solid #494949;
+
+        background-color: #1b1b1b7a;
+            width: 200px;
+            height: 250px;
+    }
+    #threads li a p {
+        color: rgb(58, 58, 110);
+    }
+    #threads li a span {
+        color: rgb(255, 255, 255);
+    }
+    #threads a {
+        text-decoration: none;
+        color: rgb(16, 197, 128);
+        padding: 5px;
+
+    }
+    #threads a:hover {
+        border-top: 5px solid #ffffff;
+        border-left: 1px solid #ffffff;
+        border-right: 1px solid #ffffff;
+        border-bottom: 1px solid #ffffff;
+    }
+
+    #threads img {
+        max-height: 150px;
+        max-width: 150px;
+    }
+
+    #options {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+    }
+    .container {
+        display: flex;
+        flex-direction: column;
+        align-items: left;
+        width: 30%;
+        margin: 0 auto;
+    }
+
+    #banner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        width: 50%;
+    }
+    #banner img {
+        width: 500px;
+        height: 100px;
+    }
+
+    #cirno {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+    }
+    #cirno img {
+        max-width: 100px;
+        max-height: 100px;
+    }
+
+    #options a {
+        text-decoration: none;
+        color: rgb(0, 225, 255);
+        padding: 5px;
+    }
+    #options a:hover {
+        text-decoration: underline;
+    }
+
+</style>
+
+{{end}}

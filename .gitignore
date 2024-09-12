@@ -1,0 +1,11 @@
+*.db
+*.sqlite
+*.sqlite3
+*.env
+*.log
+sitemap.xml
+.env
+*.pem
+*.key
+*.csr
+*.crt

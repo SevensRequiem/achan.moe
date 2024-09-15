@@ -1,0 +1,26 @@
+{{define "content"}}
+<fieldset id="success"></fieldset>
+    <legend>Success</legend>
+    <h1>Thank you for your purchase!</h1>
+    <p>Your payment was successful.</p>
+    <p>Your account has been made! You can now enjoy premium features.</p>
+    <p>Your username: <span>{{.SuccessUser.Username}}</span></p>
+    <p>If you have any questions, please contact support.</p>
+
+    </fieldset>
+    <style>
+        #success {
+            width: 50%;
+            margin: 0 auto;
+            margin-top: 1.7rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #success span {
+            margin: 10px 0;
+            color: #00ffbf;
+        }
+    </style>
+{{end}}

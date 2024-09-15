@@ -69,7 +69,6 @@ func GetServerStatus() (*ServerStatus, error) {
 	fmt.Println("Fetched MC server status")
 	return status, nil
 }
-
 func JSONStatus(c echo.Context) error {
 	// Check if currentStatus is nil
 	if currentStatus == nil {

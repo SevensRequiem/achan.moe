@@ -21,10 +21,10 @@ type Board struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	PostCount   int64  `json:"post_count"`
-	ImageOnly   bool   `json:"image_only"`   //todo
-	Locked      bool   `json:"locked"`       //todo
-	Archived    bool   `json:"archived"`     //todo
-	LatestPosts bool   `json:"latest_posts"` //todo
+	ImageOnly   bool   `json:"image_only" gorm:"default:false"`
+	Locked      bool   `json:"locked" gorm:"default:false"`
+	Archived    bool   `json:"archived"	gorm:"default:false"`
+	LatestPosts bool   `json:"latest_posts" gorm:"default:false"`
 }
 
 type Post struct {
@@ -81,7 +81,11 @@ func CreateBoard(c echo.Context) error {
 	if recentposts == "" {
 		return c.JSON(http.StatusBadRequest, "Recentposts cannot be empty")
 	}
-	// Convert recentposts to an integer
+
+	imgonly := c.FormValue("imageonly")
+	if imgonly == "" {
+		return c.JSON(http.StatusBadRequest, "Imageonly cannot be empty")
+	}
 
 	// check if board exists
 	var board Board
@@ -92,7 +96,7 @@ func CreateBoard(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, "Record found, operation not allowed")
 	} else if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		// Record not found, proceed with your operation
-		if err := database.DB.Exec("INSERT INTO boards (board_id, name, description, latest_posts) VALUES (?, ?, ?, ?)", boardID, name, description, recentposts).Error; err != nil {
+		if err := database.DB.Exec("INSERT INTO boards (board_id, name, description, latest_posts, image_only) VALUES (?, ?, ?, ?, ?)", boardID, name, description, recentposts, imgonly).Error; err != nil {
 			return c.JSON(http.StatusInternalServerError, "Failed to insert record")
 		}
 		os.Mkdir("boards/"+boardID, 0755)            // Consider error handling for directory creation

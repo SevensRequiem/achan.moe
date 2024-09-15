@@ -21,16 +21,24 @@ type Bans struct {
 	Expires   string `json:"expires"`
 }
 
+type OldBans struct {
+	ID        uint   `gorm:"primary_key"`
+	Status    string `gorm:"default:'inactive'"` // active, expired, deleted
+	IP        string `json:"ip"`
+	Reason    string `json:"reason"`
+	Username  string `json:"username"`
+	Timestamp string `json:"timestamp"`
+	Expires   string `json:"expires"`
+}
+
 func init() {
 	db := database.DB
 
 	db.AutoMigrate(&Bans{})
+	db.AutoMigrate(&OldBans{})
 }
 
 func BanIP(c echo.Context) Bans {
-	if !auth.AdminCheck(c) {
-		c.JSON(http.StatusUnauthorized, "Unauthorized")
-	}
 	ip := c.FormValue("ip")
 	reason := c.FormValue("reason")
 	username := c.FormValue("username")
@@ -51,6 +59,28 @@ func BanIP(c echo.Context) Bans {
 	return bannedIP
 }
 
+func UnbanIP(c echo.Context) Bans {
+	id := c.Param("id")
+	db := database.DB
+	var ban Bans
+	db.First(&ban, id)
+	db.Where("ID = ?", id).Update("Status", "deleted")
+	// Move to OldBans table
+	oldBan := OldBans{
+		ID:        ban.ID,
+		Status:    "deleted",
+		IP:        ban.IP,
+		Reason:    ban.Reason,
+		Username:  ban.Username,
+		Timestamp: ban.Timestamp,
+		Expires:   ban.Expires,
+	}
+	db.Create(&oldBan)
+	// Delete from Bans table
+	db.Delete(&ban)
+	return ban
+}
+
 func GetTotalBans(c echo.Context) error {
 	db := database.DB
 	var count int64
@@ -67,6 +97,15 @@ func GetBans(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, bans)
+}
+
+func GetBansOld(c echo.Context) error {
+	db := database.DB
+	var oldBans []OldBans
+	if err := db.Find(&oldBans).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, oldBans)
 }
 
 func GetBansActive(c echo.Context) error {
@@ -171,12 +210,23 @@ func ExpireCheck() {
 		if expiresTime.Before(currentTime) && ban.Status == "active" {
 			fmt.Println("Ban expired:", ban)
 			result := db.Model(&ban).Where("ID = ?", ban.ID).Update("Status", "expired")
+			// Move to OldBans table
+			oldBan := OldBans{
+				ID:        ban.ID,
+				Status:    "expired",
+				IP:        ban.IP,
+				Reason:    ban.Reason,
+				Username:  ban.Username,
+				Timestamp: ban.Timestamp,
+				Expires:   ban.Expires,
+			}
+			db.Create(&oldBan)
+			// Delete from Bans table
+			db.Delete(&ban)
+			// Check for errors
+
 			if result.Error != nil {
-				fmt.Println("Error updating status:", result.Error)
-			} else if result.RowsAffected == 0 {
-				fmt.Println("No rows were updated. Check if the ID is correct:", ban.ID)
-			} else {
-				fmt.Println("Status updated to 'expired' for ban ID:", ban.ID)
+				fmt.Println("Error updating ban status:", result.Error)
 			}
 		}
 	}

@@ -170,7 +170,7 @@
                 <label for="author">Username:</label>
                 <input type="text" id="author" name="author" value="Anonymous" required><br><br>
                 <label for="content">Post:</label>
-                <textarea id="formcontent" name="content" required></textarea><br><br>
+                <textarea id="formcontent" name="content"></textarea><br><br>
                 <label for="image">Image:</label>
                 <input type="file" id="image" name="image" accept="image/*"><br><br>
                 <button type="submit">Submit Post</button>
@@ -333,11 +333,13 @@ margin-bottom: 2rem;
     };
 
     reply.addEventListener('mousedown', (e) => {
-        isDown = true;
-        offset = [
-            reply.offsetLeft - e.clientX,
-            reply.offsetTop - e.clientY
-        ];
+        if (e.target.tagName.toLowerCase() !== 'input' && e.target.tagName.toLowerCase() !== 'textarea') {
+            isDown = true;
+            offset = [
+                reply.offsetLeft - e.clientX,
+                reply.offsetTop - e.clientY
+            ];
+        }
     }, true);
 
     document.addEventListener('mouseup', () => {
@@ -361,5 +363,11 @@ margin-bottom: 2rem;
             postContents[i].innerHTML = marked.parse(postContents[i].innerHTML);
         }
     });
+
+    // if text begins with >, change color
+    postcontent.forEach(post => {
+        post.innerHTML = post.innerHTML.replace(/^&gt;(?!&gt;).*$/gm, match => `<span style="color: #4CAF50;">${match}</span>`);
+    });
+
 </script>
 {{end}}

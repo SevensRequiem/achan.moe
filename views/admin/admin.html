@@ -9,10 +9,7 @@
             <li><a href="/admin/boards">Boards</a></li>
             <li><a href="/admin/users">Users</a></li>
             <li><a href="/admin/config">Configuration</a></li>
-            <li><a href="/admin/update">Update</a></li>
             <li><a href="/admin/bans">Bans</a></li>
-            <li><a href="/admin/info">Info</a></li>
-            <li><a href="/admin/inbox">Inbox</a></li>
         </ul>
     </nav>
     {{template "page" .}}
@@ -21,12 +18,16 @@
     #admin {
     margin: 0 auto;
     width: 80%;
+    margin-top: 1.7rem;
 }
 #admin-content {
     margin-top: 20px;
 }
 
 #admin nav ul {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
     list-style-type: none;
     margin: 0;
     padding: 0;
@@ -43,6 +44,21 @@
     text-align: center;
     padding: 14px 16px;
     text-decoration: none;
+    color: #02ff6b;
+}
+
+#admin nav ul li a:hover {
+    color: #ffffffff;
+}
+
+#admin nav ul li a::before {
+    content: "[";
+    color: #AAF;
+}
+
+#admin nav ul li a::after {
+    content: "]";
+    color: #AAF;
 }
 
 </style>

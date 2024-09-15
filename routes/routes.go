@@ -2,21 +2,28 @@ package routes
 
 import (
 	"fmt"
+	"net/http"
 
 	"achan.moe/admin"
 	"achan.moe/auth"
 	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/home"
+	"achan.moe/stripe"
 	captcha "achan.moe/utils/captcha"
 	"achan.moe/utils/config"
+	"achan.moe/utils/hitcounter"
 	"achan.moe/utils/minecraft"
 	"achan.moe/utils/stats"
+	"achan.moe/utils/websocket"
 	"github.com/labstack/echo/v4"
 )
 
 func Routes(e *echo.Echo) {
+	hc := hitcounter.NewHitCounter()
+
 	e.GET("/", func(c echo.Context) error {
+		hc.Hit(c.RealIP())
 		return home.HomeHandler(c)
 	})
 
@@ -58,77 +65,161 @@ func Routes(e *echo.Echo) {
 	// admin
 
 	e.GET("/admin", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return home.AdminHandler(c)
 	})
 
 	e.GET("/admin/dashboard", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return home.AdminDashboardHandler(c)
 	})
 
 	e.GET("/admin/boards", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return home.AdminBoardsHandler(c)
 	})
 
 	e.GET("/admin/users", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return home.AdminUsersHandler(c)
 	})
 
+	e.POST("/admin/user/edit", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return auth.EditUser(c)
+	})
+
 	e.GET("/admin/config", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return home.AdminConfigHandler(c)
 	})
 
 	e.POST("/admin/config", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return config.WriteGlobalConfig(c)
 	})
 
 	e.GET("/admin/bans", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return home.AdminBansHandler(c)
 	})
 
 	e.GET("/admin/update", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return home.AdminUpdateHandler(c)
 	})
 
-	e.GET("/admin/info", func(c echo.Context) error {
-		return home.AdminInfoHandler(c)
-	})
-
 	e.POST("/admin/board", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		admin.CreateBoard(c)
 		return nil
 	})
 
 	e.POST("/admin/user", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		admin.UpdateUserRole(c)
 		return nil
 	})
 
 	e.DELETE("/admin/delete/:b", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		admin.DeleteBoard(c)
 		return nil
 	})
 
 	e.DELETE("/admin/delete/:b/:t", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		admin.DeleteThread(c)
 		return nil
 	})
 
 	e.DELETE("/admin/delete/:b/:t/:p", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		admin.DeletePost(c)
 		return nil
 	})
 
 	e.POST("/admin/ban", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		bans.BanIP(c)
+		return nil
+	})
+	e.POST("/admin/unban", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		bans.UnbanIP(c)
+		return nil
+	})
+	// moderator
+	e.POST("/mod/ban", func(c echo.Context) error {
+		if !auth.ModCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		bans.BanIP(c)
+		return nil
+	})
+
+	e.POST("/mod/delete/:b/:t", func(c echo.Context) error {
+		if !auth.ModCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		admin.DeleteThread(c)
+		return nil
+	})
+
+	e.POST("/mod/delete/:b/:t/:p", func(c echo.Context) error {
+		if !auth.ModCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		admin.DeletePost(c)
 		return nil
 	})
 	// janny
 	e.DELETE("/janny/delete/:b/:t", func(c echo.Context) error {
+		board := c.Param("b")
+		if !auth.JannyCheck(c, board) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		admin.JannyDeleteThread(c)
 		return nil
 	})
 
 	e.DELETE("/janny/delete/:b/:t/:p", func(c echo.Context) error {
+		board := c.Param("b")
+		if !auth.JannyCheck(c, board) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		admin.JannyDeletePost(c)
 		return nil
 	})
@@ -176,15 +267,33 @@ func Routes(e *echo.Echo) {
 
 	// bans
 	e.GET("/api/bans", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return bans.GetBans(c)
 	})
+	e.GET("/api/bans/old", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return bans.GetBansOld(c)
+	})
 	e.GET("/api/bans/active", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return bans.GetBansActive(c)
 	})
 	e.GET("/api/bans/expired", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return bans.GetBansExpired(c)
 	})
 	e.GET("/api/bans/deleted", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
 		return bans.GetBansDeleted(c)
 	})
 
@@ -206,4 +315,32 @@ func Routes(e *echo.Echo) {
 	e.POST("/api/verifycaptcha", func(c echo.Context) error {
 		return captcha.VerifyCaptchaHandler(c)
 	})
+
+	// server status
+	e.GET("/api/status", func(c echo.Context) error {
+		return stats.ServerStatus(c)
+	})
+
+	// websocket
+	e.GET("/ws", func(c echo.Context) error {
+		return websocket.WebsocketHandler(c)
+	})
+
+	// store
+	e.GET("/store", func(c echo.Context) error {
+		return home.StoreHandler(c)
+	})
+	e.GET("/success", func(c echo.Context) error {
+		return stripe.SuccessHandler(c)
+	})
+
+	// profile
+	e.GET("/profile", func(c echo.Context) error {
+		return home.ProfileHandler(c)
+	})
+
+	e.POST("/profile/edit", func(c echo.Context) error {
+		return auth.UpdateUser(c)
+	})
+
 }

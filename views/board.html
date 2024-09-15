@@ -18,7 +18,7 @@
             <input type="text" id="author" name="author" value="Anonymous"><br><br>
             </div>
             <label for="content">Post:</label>
-            <textarea id="content" name="content" required></textarea><br><br>
+            <textarea id="content" name="content"></textarea><br><br>
             <div id="options">
             {{if .IsAdmin}}
             <label for="isSticky">Sticky:</label>
@@ -86,6 +86,7 @@
                 {{if .Sticky}}
                 <li class="sticky">
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
+                        <img class="stickyimg" src="/assets/icons/message_tack-0.png" alt="Sticky">
                         <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
@@ -119,17 +120,18 @@
         align-items: center;
         justify-content: center;
         margin: 0 auto;
-        width: 20%;
+        width: 200px;
         text-align: center;
         padding: 10px;
-        background-color: #0245647a;
+        background-color: #494949;
         border: 1px solid #1a1a1a;
         color: #AAF;
         text-decoration: none;
     }
     .createpost:hover {
-        background-color: #494949;
+        background-color: #1a1a1a;
     }
+    
     #top-content {
         display: flex;
         flex-direction: column;
@@ -160,14 +162,16 @@
     }
     #board {
         display: flex;
-        align-items: center; /* Vertically center the content */
-        justify-content: center; /* Horizontally center the content */
-        flex-direction: column; /* Stack the content vertically */
-        margin: 0 auto; /* Center the fieldset */
-        width: 50%; /* Adjust as necessary */
+        align-items: center; 
+        justify-content: center; 
+        flex-direction: column;
+        margin: 0 auto;
+        width: 50%;
     }
     #threads {
         display: flex;
+        flex-direction: column;
+        align-items: center;
         list-style-type: none;
         padding: 15px;
         margin: 0;
@@ -237,7 +241,15 @@
         width: 30%;
         margin: 0 auto;
     }
-
+    .banners {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        margin-top: 1.7rem;
+        margin-bottom: 1.7rem;
+    }
     #banner {
         display: flex;
         align-items: center;

@@ -44,7 +44,7 @@
             <br>
             <span id="mainnav">
                 <a href="/">home</a>
-                <a href="/donate">donate</a>
+                <a href="/store">store</a>
                 {{if .User}}
                 <span class="user">[{{.User}}]</span>
                 <a href="/logout">logout</a>
@@ -68,17 +68,107 @@
         <div id="marquee">
             <marquee behavior="scroll" direction="left" scrollamount="10">
                 <span id="news">
-                    <span id="server-status">Server Status: </span>
-                    <span id="server-status-text">Loading...</span>
-                    <span> | </span>
-                    <span id="server-time">Server Time: </span>
-                    <span id="server-time-text">Loading...</span>
-                    <span> | </span>
-                    <span id="server-uptime">Server Uptime: </span>
-                    <span id="server-uptime-text">Loading...</span>
+                    <span class="server-status">Connection: </span>
+                    <span class="server-status-text status">Loading...</span>
+                    <span class="server-status">Online: </span>
+                    <span class="server-status-users status">Loading...</span>
                 </span>
             </marquee>
         </div>
+        <!--<script>
+        const serverurl = "/api/status";
+        let previousError = false;
+        
+        async function serverstatus() {
+            try {
+                const response = await fetch(serverurl);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                const serverstatusElement = document.querySelector(".server-status-text");
+                const servertimeElement = document.querySelector(".server-time-text");
+                const serveruptimeElement = document.querySelector(".server-uptime-text");
+                if (serverstatusElement && servertimeElement && serveruptimeElement) {
+                    serverstatusElement.innerText = data.status;
+                    servertimeElement.innerText = data.server_time;
+                    serveruptimeElement.innerText = data.uptime;
+                    if (previousError) {
+                        serverstatusElement.style.color = "orange";
+                        servertimeElement.style.color = "orange";
+                        serveruptimeElement.style.color = "orange";
+                        previousError = false;
+                    }
+                }
+            } catch (error) {
+                console.error('There was a problem with the fetch operation:', error);
+                const serverstatusElement = document.querySelector(".server-status-text");
+                const servertimeElement = document.querySelector(".server-time-text");
+                const serveruptimeElement = document.querySelector(".server-uptime-text");
+                if (serverstatusElement && servertimeElement && serveruptimeElement) {
+                    serverstatusElement.innerText = "NIL";
+                    servertimeElement.innerText = "NIL";
+                    serveruptimeElement.innerText = "NIL";
+                    serverstatusElement.style.color = "red";
+                    servertimeElement.style.color = "red";
+                    serveruptimeElement.style.color = "red";
+                    previousError = true;
+                }
+            }
+        }
+        
+        setInterval(serverstatus, 300000);
+        serverstatus();
+        </script>-->
+            <script>
+                const serverstatusElement = document.querySelector(".server-status-text");
+                const serverusers = document.querySelector(".server-status-users");
+                const wsurl = "wss://dev123.achan.moe/ws";
+                const ws = new WebSocket(wsurl);
+            
+                ws.onopen = function () {
+                    console.log("WebSocket connection established");
+                    serverstatusElement.innerText = "OK";
+                };
+            
+                ws.onmessage = function (event) {
+                    try {
+                        const message = event.data;
+                        console.log("Received message:", message);
+            
+                        // Check if the message is in JSON format
+                        if (message.startsWith("{") && message.endsWith("}")) {
+                            const parsedMessage = JSON.parse(message);
+                            if (parsedMessage.connections !== undefined) {
+                                serverusers.innerText = `${parsedMessage.connections}`;
+                            }
+                        } else {
+                            console.warn("Received non-JSON message:", message);
+                        }
+                    } catch (error) {
+                        console.error("Error parsing message:", error);
+                    }
+                };
+            
+                ws.onclose = function () {
+                    console.log("WebSocket connection closed");
+                    serverstatusElement.innerText = "NIL";
+                    serverstatusElement.style.color = "red";
+                };
+            
+                ws.onerror = function (error) {
+                    console.error("WebSocket error:", error);
+                    serverstatusElement.innerText = "ERR";
+                    serverstatusElement.style.color = "red";
+                };
+            
+                // Keep the connection alive
+                setInterval(function () {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send("keep-alive");
+                    }
+                }, 30000);
+            </script>
     </header>
     <div id="logindropdown" style="display: none;">
         <a href="#" onclick="ToggleLoginDropdown()">close</a>
@@ -98,7 +188,7 @@
                     method: form.method,
                     body: data
                 }).then(response => response.json()).then(data => {
-                    if (data.Status === "success") {
+                    if (data.success === "Logged in") {
                         window.location.reload();
                     } else {
                         alert(data.Message);
@@ -178,9 +268,28 @@
         z-index: 3;
     }
 
+    #marquee marquee {
+        display: flex;
+        justify-content: space-between;
+    }
+    
+    .status {
+        color: #02ff6b;
+    }
+
+    .status::before {
+        content: "[";
+        margin-right: 5px;
+        color: #AAF;
+    }
+    .status::after {
+        content: "]";
+        margin-left: 5px;
+        color: #AAF;
+    }
     #logindropdown {
         position: fixed;
-        top: 0;
+        top: 3rem;
         left: 10%;
         z-index: 5;
         background-color: #00000088;

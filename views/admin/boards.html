@@ -1,7 +1,7 @@
 {{define "page"}}
 <div id="admin-content">
     <form action="/admin/board" method="post">
-        <div>
+        <div id="board">
             <div>
             <label for="board">Board:</label>
             <input type="text" id="name" name="name" required><br><br>
@@ -17,17 +17,26 @@
                 <input type="checkbox" name="LatestPostsCheckbox" id="LatestPosts" onchange="updateLatestPostsValue()">
                 <label for="LatestPosts">Disable Latest Posts</label>
                 <input type="hidden" name="LatestPosts" id="recentposts" value="0">
+                <input type="checkbox" name="ImageOnlyCheckbox" id="ImageOnly" onchange="updateImageOnlyValue()">
+                <label for="ImageOnly">Image Only</label>
+                <input type="hidden" name="ImageOnly" id="imageonly" value="0">
+                
                 <script>
                 function updateLatestPostsValue() {
                     var checkbox = document.getElementById('LatestPosts');
                     var hiddenInput = document.getElementById('recentposts');
                     hiddenInput.value = checkbox.checked ? "1" : "0";
                 }
+                function updateImageOnlyValue() {
+                    var checkbox = document.getElementById('ImageOnly');
+                    var hiddenInput = document.getElementById('imageonly');
+                    hiddenInput.value = checkbox.checked ? "1" : "0";
+                }
                 </script>
             </div>
         </div>
 
-        <a href="#" onclick="createBoard(); return false;">Create Board</a>
+        <a href="#" onclick="createBoard(); return false;" class="button">Create Board</a>
             </form>
             <script>
                 // Define createBoard as an async function to handle board creation
@@ -48,6 +57,7 @@
                         formData.append('id', id);
                         formData.append('description', description);
                         formData.append('recentposts', document.getElementById("recentposts").value);
+                        formData.append('imageonly', document.getElementById("imageonly").value);
                         
                         // Define the URL for creating a board
                         const createBoardUrl = "/admin/board";
@@ -96,4 +106,55 @@
         </div>
     </div>
 </div>
+<style>
+    #admin-content {
+        padding: 20px;
+    }
+    #options {
+        margin-top: 10px;
+    }
+    .dashboard-row {
+        display: flex;
+        flex-wrap: wrap;
+    }
+    .dashboard-column {
+        flex: 1;
+        margin: 10px;
+    }
+    .dashboard-box {
+        border: 1px solid #ccc;
+        padding: 10px;
+        border-radius: 5px;
+    }
+    .board {
+        margin: 5px 0;
+    }
+
+    .button {
+        background-color: #4CAF50; /* Green */
+        border: none;
+        color: white;
+        padding: 10px 20px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+        margin: 4px 2px;
+        cursor: pointer;
+        border-radius: 5px;
+    }
+
+    #board {
+        margin-bottom: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    #options {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+</style>
 {{end}}

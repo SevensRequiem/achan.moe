@@ -3,10 +3,10 @@
 <div id="admin-content"></div>
 <div id="bans">
 <form>
-    <input type="text" name="ip" placeholder="IP Address">
-    <input type="text" name="reason" placeholder="Reason">
-    <input hidden type="text" name="username" value="{{.User}}">
-    <input type="date" name="expires" placeholder="Expires">
+    <input type="text" name="ip" placeholder="IP Address" required>
+    <input type="text" name="reason" placeholder="Reason" required>
+    <input hidden type="text" name="username" value="{{.User}}" required>
+    <input type="date" name="expires" placeholder="Expires" required>
     <a href="#" onclick="return false;">Ban IP</a>
 </form>
 <script>
@@ -45,6 +45,20 @@
                             <th>Status</th>
                             <th>IP</th>
                             <th>Reason</th>
+                            <th>Staff</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </table>
+                    <hr>
+                    <h2>Historic Bans</h2>
+                    <table>
+                        <tr>
+                            <th>Time</th>
+                            <th>Status</th>
+                            <th>IP</th>
+                            <th>Reason</th>
+                            <th>Staff</th>
                             <th>Expires</th>
                             <th>Actions</th>
                         </tr>
@@ -65,7 +79,7 @@
                     time.textContent = ban.time;
                     row.appendChild(time);
                     const status = document.createElement("td");
-                    status.textContent = ban.status;
+                    status.textContent = ban.Status;
                     row.appendChild(status);
                     const ip = document.createElement("td");
                     ip.textContent = ban.ip;
@@ -73,6 +87,10 @@
                     const reason = document.createElement("td");
                     reason.textContent = ban.reason;
                     row.appendChild(reason);
+                    const staff = document.createElement("td");
+                    staff.textContent = ban.username;
+                    row.appendChild(staff);
+
                     const expires = document.createElement("td");
                     expires.textContent = ban.expires;
                     row.appendChild(expires);
@@ -109,179 +127,85 @@
         }
         loadBans();
 
-        async function loadActiveBans() {
-            const response = await fetch("/api/bans/active");
-            if (response.ok) {
-                const activeBans = await response.json();
-                const table = document.querySelector("#bans table");
-                activeBans.forEach(ban => {
-                    const row = document.createElement("tr");
-                    const time = document.createElement("td");
-                    time.textContent = ban.time;
-                    row.appendChild(time);
-                    const status = document.createElement("td");
-                    status.textContent = ban.status;
-                    row.appendChild(status);
-                    const ip = document.createElement("td");
-                    ip.textContent = ban.ip;
-                    row.appendChild(ip);
-                    const reason = document.createElement("td");
-                    reason.textContent = ban.reason;
-                    row.appendChild(reason);
-                    const expires = document.createElement("td");
-                    expires.textContent = ban.expires;
-                    row.appendChild(expires);
-                    const actions = document.createElement("td");
-                    const unban = document.createElement("a");
-                    unban.href = "#";
-                    unban.textContent = "Unban";
-                    unban.addEventListener("click", async () => {
-                        const formData = new URLSearchParams();
-                        formData.append('ip', ban.ip);
-                        const response = await fetch("/api/bans/delete", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/x-www-form-urlencoded"
-                            },
-                            body: formData
-                        });
-                        if (response.ok) {
-                            alert("IP unbanned successfully");
-                            loadBans();
-                        } else {
-                            const errorText = await response.text();
-                            alert(`Failed to unban IP: ${errorText}`);
-                        }
+        function loadHistoricBans() {
+            const histurl = "/api/bans/old";
+            fetch(histurl)
+                .then(response => response.json())
+                .then(data => {
+                    const table = document.querySelector("#bans table:nth-of-type(2)");
+                    data.forEach(ban => {
+                        const row = document.createElement("tr");
+                        const time = document.createElement("td");
+                        time.textContent = ban.time;
+                        row.appendChild(time);
+                        const status = document.createElement("td");
+                        status.textContent = ban.Status;
+                        row.appendChild(status);
+                        const ip = document.createElement("td");
+                        ip.textContent = ban.ip;
+                        row.appendChild(ip);
+                        const reason = document.createElement("td");
+                        reason.textContent = ban.reason;
+                        row.appendChild(reason);
+                        const staff = document.createElement("td");
+                        staff.textContent = ban.username;
+                        row.appendChild(staff);
+
+                        const expires = document.createElement("td");
+                        expires.textContent = ban.expires;
+                        row.appendChild(expires);
+                        const actions = document.createElement("td");
+                        actions.textContent = "N/A"; // No actions for historic bans
+                        row.appendChild(actions);
+                        table.appendChild(row);
                     });
-                    actions.appendChild(unban);
-                    row.appendChild(actions);
-                    table.appendChild(row);
+                })
+                .catch(error => {
+                    console.error('Error loading historic bans:', error);
                 });
-            } else {
-                const errorText = await response.text();
-                alert(`Failed to load active bans: ${errorText}`);
-            }
+                
         }
 
-        async function loadExpiredBans() {
-            const response = await fetch("/api/bans/expired");
-            if (response.ok) {
-                const expiredBans = await response.json();
-                const table = document.querySelector("#bans table");
-                expiredBans.forEach(ban => {
-                    const row = document.createElement("tr");
-                    const time = document.createElement("td");
-                    time.textContent = ban.time;
-                    row.appendChild(time);
-                    const status = document.createElement("td");
-                    status.textContent = ban.status;
-                    row.appendChild(status);
-                    const ip = document.createElement("td");
-                    ip.textContent = ban.ip;
-                    row.appendChild(ip);
-                    const reason = document.createElement("td");
-                    reason.textContent = ban.reason;
-                    row.appendChild(reason);
-                    const expires = document.createElement("td");
-                    expires.textContent = ban.expires;
-                    row.appendChild(expires);
-                    const actions = document.createElement("td");
-                    const unban = document.createElement("a");
-                    unban.href = "#";
-                    unban.textContent = "Unban";
-                    unban.addEventListener("click", async () => {
-                        const formData = new URLSearchParams();
-                        formData.append('ip', ban.ip);
-                        const response = await fetch("/api/bans/delete", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/x-www-form-urlencoded"
-                            },
-                            body: formData
-                        });
-                        if (response.ok) {
-                            alert("IP unbanned successfully");
-                            loadBans();
-                        } else {
-                            const errorText = await response.text();
-                            alert(`Failed to unban IP: ${errorText}`);
-                        }
-                    });
-                    actions.appendChild(unban);
-                    row.appendChild(actions);
-                    table.appendChild(row);
-                });
-            } else {
-                const errorText = await response.text();
-                alert(`Failed to load expired bans: ${errorText}`);
-            }
-        }
-
+        loadHistoricBans();
     </script>
 
 </div>
 <style>
-#admin {
-    margin: 0 auto;
-    width: 80%;
-}
-#admin-content {
-    margin-top: 20px;
-}
-#bans {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-#bans form {
-    display: flex;
-    flex-direction: row;
+    #bans {
+        margin: 0 auto;
+        width: 80%;
+        margin-top: 1.7rem;
+    }
+    #bans table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    #bans th, #bans td {
+        border: 1px solid #ddd;
+        padding: 8px;
+    }
+    #bans th {
+        background-color: #494949;
+    }
 
-}
+    #bans a {
+        color: #02ff6b;
+        text-decoration: none;
+    }
 
+    #bans a:hover {
+        color: #ffffffff;
+    }
 
-#bans form a {
-    background-color: #1a1a1a;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    color: white;
-    padding: 10px;
-    text-decoration: none;
-    width: 100px;
-}
+    #bans a::before {
+        content: "[";
+        color: #AAF;
+    }
 
-#bans form a:hover {
-    background-color: #333;
-}
-
-
-.dashboard-row {
-    display: flex;
-    flex-wrap: wrap;
-}
-.dashboard-column {
-    flex: 1;
-    margin: 0 10px;
-}
-.dashboard-box {
-    background-color: #1a1a1a;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    margin: 10px 0;
-    padding: 10px;
-}
-table {
-    width: 100%;
-}
-table th {
-    background-color: #1a1a1a;
-    border-bottom: 1px solid #ddd;
-    padding: 10px;
-    text-align: left;
-}
-
-
+    #bans a::after {
+        content: "]";
+        color: #AAF;
+    }
 
 
 </style>

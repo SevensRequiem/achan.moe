@@ -1,0 +1,38 @@
+{{define "content"}}
+<fieldset id="store">
+    <legend>Store</legend>
+    <span>Purchase a permanent account to avoid deletion after 30 days of inactivity.</span>
+    <span>All purchases are final.</span>
+    <span>Click the button below to proceed with your purchase.</span>
+<a href="https://buy.stripe.com/test_5kAcQ4bleed12M86oo">Buy account</a>
+</fieldset>
+<style>
+    #store {
+        width: 50%;
+        margin: 0 auto;
+        margin-top: 1.7rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+    #store a {
+        margin-top: 1rem;
+        padding: 0.5rem 1rem;
+        background-color: #4CAF50;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+    }
+    #store a:hover {
+        background-color: #45a049;
+    }
+
+    #store span {
+        margin: 0.5rem 0;
+    }
+
+    
+
+</style>
+{{end}}

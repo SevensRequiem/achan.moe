@@ -41,11 +41,11 @@ func DefaultAdmin() {
 }
 func dummydata() {
 	db := database.DB
-	user := User{UUID: getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: true, Moderator: true, Janny: JannyBoards{Boards: []string{"a", "b"}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
+	user := User{UUID: Getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: true, Moderator: true, Janny: JannyBoards{Boards: []string{"a", "b"}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
 	db.Create(&user)
-	user = User{UUID: getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: false, Moderator: true, Janny: JannyBoards{Boards: []string{"c", "d"}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
+	user = User{UUID: Getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: false, Moderator: true, Janny: JannyBoards{Boards: []string{"c", "d"}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
 	db.Create(&user)
-	user = User{UUID: getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
+	user = User{UUID: Getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
 	db.Create(&user)
 }
 
@@ -58,6 +58,7 @@ type User struct {
 	DateCreated string `json:"date_created" gorm:"default:CURRENT_TIMESTAMP"`
 	LastLogin   string `json:"last_login"`
 	DoesExist   bool   `json:"does_exist"`
+	Premium     bool   `json:"premium" gorm:"default:false"`
 }
 
 type Group struct {
@@ -115,7 +116,7 @@ func (jb JannyBoards) Value() (driver.Value, error) {
 // new user functions
 /////////////////////
 
-func getrandid() string {
+func Getrandid() string {
 	// Generate a random ID
 	id := fmt.Sprintf("%d", rand.Intn(1000000000))
 	var user User
@@ -132,7 +133,7 @@ func getrandid() string {
 	}
 
 	// If the ID exists, generate a new one
-	return getrandid()
+	return Getrandid()
 }
 
 func getrandusername() string {
@@ -195,7 +196,7 @@ func NewUser(c echo.Context) error {
 		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "One Minute cooldown"})
 	}
 
-	var newid = getrandid()
+	var newid = Getrandid()
 	var newusername = getrandusername()
 	var newpassword = getrandpassword()
 	var encpass = encryptPassword(newpassword)
@@ -205,7 +206,11 @@ func NewUser(c echo.Context) error {
 	info := map[string]string{"username": user.Username, "password": newpassword}
 	return c.JSON(http.StatusOK, info)
 }
-
+func NewManualUser(userID string, username string, password string) {
+	db := database.DB
+	user := User{UUID: userID, Username: username, Password: ManualGenPassword(password), Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
+	db.Create(&user)
+}
 func DecodePassword(encrypted_password string) string {
 	enc := os.Getenv("ENCRYPT_KEY")
 	decoded, err := base64.StdEncoding.DecodeString(encrypted_password)
@@ -323,7 +328,19 @@ func JannyCheck(c echo.Context, board string) bool {
 	// Check if the user is a janny
 	return contains(user.Groups.Janny.Boards, board)
 }
+func ModCheck(c echo.Context) bool {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
 
+	// Check if the user is in the session and not nil
+	user, ok := sess.Values["user"].(User)
+	if !ok {
+		return false
+	}
+
+	// Check if the user is a moderator
+	return user.Groups.Moderator
+}
 func AuthCheck(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// Retrieve the session
@@ -341,6 +358,73 @@ func AuthCheck(next echo.HandlerFunc) echo.HandlerFunc {
 
 // funcs
 // ////////////
+
+func EditUser(c echo.Context) error {
+	db := database.DB
+	var user User
+	username := c.FormValue("username")
+	password := c.FormValue("password")
+
+	// Validate input parameters
+	if username == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Username is required"})
+	}
+
+	// Retrieve user by username
+	user = GetUserByUsername(username)
+
+	// Check if user exists
+	if user.UUID == "" {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+	}
+
+	// Update password if provided
+	if password != "" {
+		user.Password = ManualGenPassword(password)
+	}
+
+	// Save updated user to the database
+	if err := db.Save(&user).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, user)
+}
+
+func UpdateUser(c echo.Context) error {
+	// get user from session
+	sess, err := session.Get("session", c)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get session"})
+	}
+
+	user, ok := sess.Values["user"].(User)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "User not found in session"})
+	}
+
+	// update user fields
+	if username := c.FormValue("username"); username != "" {
+		user.Username = username
+	}
+	if password := c.FormValue("password"); password != "" {
+		user.Password = ManualGenPassword(password)
+	}
+
+	// save user to database
+	db := database.DB
+	if err := db.Save(&user).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	// delete session
+	sess.Options.MaxAge = -1
+	if err := sess.Save(c.Request(), c.Response()); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save session"})
+	}
+
+	return c.JSON(http.StatusOK, user)
+}
 func GetTotalUsers() int64 {
 	// Obtain the database connection from the `database` package
 	db := database.DB
@@ -359,7 +443,7 @@ func GetUserByID(uuid uint) User {
 
 	// Retrieve the user from the database based on the ID
 	var user User
-	db.First(&user, uuid)
+	db.Where("uuid = ?", uuid).First(&user)
 
 	// Return the user
 	return user
@@ -413,7 +497,8 @@ func ListJannies() []User {
 	return jannies
 }
 
-func ExpireUser() {
+func ExpireUsers() {
+	fmt.Println("Checking user login expirations....")
 	db := database.DB
 
 	var users []User
@@ -421,15 +506,28 @@ func ExpireUser() {
 
 	// Iterate over the users
 	for _, user := range users {
-		lastLogin, err := time.Parse("2006-01-02 15:04:05", user.LastLogin)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
+		if !user.Premium {
+			lastLogin, err := time.Parse("2006-01-02 15:04:05", user.LastLogin)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
 
-		if time.Since(lastLogin).Hours() > 720 {
-
-			db.Delete(&user)
+			if time.Since(lastLogin).Hours() > 720 {
+				db.Delete(&user)
+			}
 		}
 	}
+}
+
+func NewPremiumUser(c echo.Context) {
+	userID := Getrandid()
+	db := database.DB
+	user := User{UUID: userID, Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true, Premium: true}
+	db.Create(&user)
+	//login the user
+	sess, _ := session.Get("session", c)
+	sess.Values["user"] = user
+	sess.Save(c.Request(), c.Response())
+	c.Redirect(http.StatusTemporaryRedirect, "/profile")
 }

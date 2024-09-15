@@ -15,6 +15,7 @@ type GlobalConfig struct {
 	Version       string `json:"version"`
 	Description   string `json:"description"`
 	Fork          string `json:"fork"`
+	Path          string `json:"path"`
 	MinecraftIP   string `json:"minecraft-ip"`
 	MinecraftPort int    `json:"minecraft-port"`
 }

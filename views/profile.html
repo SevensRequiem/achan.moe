@@ -1,0 +1,88 @@
+{{define "content"}}
+<fieldset id="profile">
+    <legend>Profile</legend>
+    <span>Welcome to your profile page!</span>
+    <span>Here you can view and edit your personal information.</span>
+    <span>To update your information, please fill out the form below.</span>
+    <form action="/profile/edit" method="POST">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        <br>
+        <label for="password">Password:</label>
+        <input type="text" id="password" name="password" required>
+        <br>
+        <input type="submit" value="Update Profile">
+    </form>
+</fieldset>
+
+<script>
+    const updateurl = "/profile/edit";
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        const formData = new FormData(form);
+        fetch(updateurl, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Profile updated successfully!');
+            } else {
+                alert('Error updating profile: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    });
+
+
+
+
+
+
+</script>
+
+<style>
+    #profile {
+        width: 50%;
+        margin: 0 auto;
+        margin-top: 1.7rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+    #profile form {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+    #profile label {
+        margin: 0.5rem 0;
+    }
+    #profile input[type="text"],
+    #profile input[type="email"],
+    #profile textarea {
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    #profile input[type="submit"] {
+        margin-top: 1rem;
+        padding: 0.5rem 1rem;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    #profile input[type="submit"]:hover {
+        background-color: #45a049;
+    }
+
+</style>
+
+{{end}}

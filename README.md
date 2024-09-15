@@ -19,17 +19,18 @@ Install achan.moe on ubuntu/debian
 
 ### todo
 - docker
-- anonymous login system
+- anonymous login system (DONE)
 - plugins
 - better admin panel
 - realtime / websockets
 - global + per board config files
 - board janny / panel
-- ratelimits
+- ratelimits (DONE)
 - update system
 - json config system (replace DB)
 - cache system
-- markdown support
+- markdown support (DONE)
+- ping check for minecraft / servers
 
 ### contributing
 feel free to contribute whenever, wherever.

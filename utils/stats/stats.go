@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"achan.moe/bans"
 	"achan.moe/board"
@@ -17,6 +18,12 @@ import (
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
 )
+
+var startTime = time.Now()
+
+func init() {
+	startTime = time.Now()
+}
 
 type Stats struct {
 	HDDFree            uint64  `json:"hdd_free"`
@@ -153,4 +160,26 @@ func GetContentSize() float64 {
 	// round to 2 decimal places
 	sizemb = math.Round(sizemb*100) / 100
 	return sizemb
+}
+
+func ServerStatus(c echo.Context) error {
+	status := "OK"
+	servertime := time.Now().Format("15:04:05")
+	uptime := uptime() // No need to call String() on uptime
+
+	response := map[string]string{
+		"status":      status,
+		"server_time": servertime,
+		"uptime":      uptime,
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+func uptime() string {
+	duration := time.Since(startTime).Round(time.Second)
+	hours := int(duration.Hours())
+	minutes := int(duration.Minutes()) % 60
+	seconds := int(duration.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 }

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"html/template"
 	"io/ioutil"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"achan.moe/utils/sitemap"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"golang.org/x/time/rate"
 )
 
 type Board struct {
@@ -88,30 +91,11 @@ func init() {
 	db.AutoMigrate(&PostCounter{})
 }
 
-var rateLimits = make(map[string]*RateLimit)
-
 func CreateThread(c echo.Context) error {
-	ip := c.RealIP()
-
-	// Retrieve the rate limit data for the IP
-	rate, exists := rateLimits[ip]
-	if !exists {
-		rate = &RateLimit{
-			IP:       ip,
-			Count:    0,
-			TimeLast: time.Now(),
-		}
-		rateLimits[ip] = rate
+	var limiter = rate.NewLimiter(rate.Every(15*time.Minute), 1)
+	if !limiter.Allow() {
+		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "15 Minute cooldown"})
 	}
-
-	// Check if the rate limit is exceeded
-	if rate.Count > 5 && time.Since(rate.TimeLast).Minutes() < 5 {
-		return c.JSON(http.StatusTooManyRequests, "Rate limit exceeded")
-	}
-
-	// Update the rate limit data
-	rate.Count++
-	rate.TimeLast = time.Now()
 
 	if CheckIfLocked(c.Param("b")) {
 		return c.JSON(http.StatusForbidden, "Board is locked")
@@ -127,6 +111,10 @@ func CreateThread(c echo.Context) error {
 	boardID := c.Param("b")
 	if boardID == "" {
 		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
+	}
+	imgonly := CheckIfImageOnly(boardID)
+	if imgonly && c.FormValue("content") != "" {
+		return c.JSON(http.StatusBadRequest, "This board only allows image posts")
 	}
 	// get thread id
 	boardDir := "boards/" + boardID
@@ -149,7 +137,7 @@ func CreateThread(c echo.Context) error {
 	}
 	// get post content
 	content := c.FormValue("content")
-	if content == "" {
+	if content == "" && !imgonly {
 		return c.JSON(http.StatusBadRequest, "Content cannot be empty")
 	}
 	// get post subject
@@ -189,27 +177,27 @@ func CreateThread(c echo.Context) error {
 	// /img/:b/:f
 	sticky := false
 	if !auth.AdminCheck(c) {
-		stickyValue := c.FormValue("sticky")
-		if stickyValue == "true" {
+		stickyValue := c.FormValue("isSticky")
+		if stickyValue == "on" {
 			sticky = true
 		}
 	}
 	if !auth.JannyCheck(c, boardID) {
-		stickyValue := c.FormValue("sticky")
-		if stickyValue == "true" {
+		stickyValue := c.FormValue("isSticky")
+		if stickyValue == "on" {
 			sticky = true
 		}
 	}
 	locked := false
 	if !auth.AdminCheck(c) {
-		lockedValue := c.FormValue("locked")
-		if lockedValue == "true" {
+		lockedValue := c.FormValue("isLocked")
+		if lockedValue == "on" {
 			locked = true
 		}
 	}
 	if !auth.JannyCheck(c, boardID) {
-		lockedValue := c.FormValue("locked")
-		if lockedValue == "true" {
+		lockedValue := c.FormValue("isLocked")
+		if lockedValue == "on" {
 			locked = true
 		}
 	}
@@ -272,22 +260,17 @@ func CreateThread(c echo.Context) error {
 }
 
 func CreateThreadPost(c echo.Context) error {
-	rate := RateLimitPost{}
-	rate.Count = 0
-	rate.TimeLast = time.Now().Format("01-02-2006 15:04:05")
-
-	timeLastParsed, err := time.Parse("01-02-2006 15:04:05", rate.TimeLast)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Error parsing time")
+	var limiter = rate.NewLimiter(rate.Every(5*time.Minute), 1)
+	if !limiter.Allow() {
+		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
 	}
-
-	if rate.Count > 5 && time.Since(timeLastParsed).Minutes() < 5 {
-		return c.JSON(http.StatusTooManyRequests, "Rate limit exceeded")
-	}
-	rate.Count++
 	boardID := c.Param("b")
 	if boardID == "" {
 		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
+	}
+
+	if CheckIfThreadLocked(c, boardID, c.Param("t")) {
+		return c.JSON(http.StatusForbidden, "Thread is locked")
 	}
 
 	if CheckIfLocked(boardID) {
@@ -297,6 +280,10 @@ func CreateThreadPost(c echo.Context) error {
 	if CheckIfArchived(boardID) {
 		return c.JSON(http.StatusForbidden, "Board is archived")
 	}
+	imgonly := CheckIfImageOnly(boardID)
+	if imgonly && c.FormValue("content") != "" {
+		return c.JSON(http.StatusBadRequest, "This board only allows image posts")
+	}
 
 	threadID, err := strconv.Atoi(c.Param("t"))
 	if err != nil {
@@ -304,7 +291,7 @@ func CreateThreadPost(c echo.Context) error {
 	}
 
 	content := c.FormValue("content")
-	if content == "" {
+	if content == "" && !imgonly {
 		return c.JSON(http.StatusBadRequest, "Content cannot be empty")
 	}
 
@@ -388,6 +375,18 @@ func LatestPostsCheck(c echo.Context, boardID string) bool {
 	}
 	return true
 
+}
+
+func CheckIfThreadLocked(c echo.Context, boardID string, threadID string) bool {
+	filepath := "boards/" + boardID + "/" + threadID + ".json"
+	file, err := os.Open(filepath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	var posts []Post
+	json.NewDecoder(file).Decode(&posts)
+	return posts[0].Locked
 }
 
 func CheckLatestPosts(boardID string) bool {
@@ -558,32 +557,51 @@ func GetBoardID(boardID string) string {
 	return board.BoardID
 }
 
+// need to fix ai hallucination here
 func GetThreads(boardID string) []Post {
 	dir := "boards/" + boardID
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
+
 	var threads []Post
+
 	for _, file := range files {
 		if !file.IsDir() {
 			filepath := dir + "/" + file.Name()
 			f, err := os.Open(filepath)
 			if err != nil {
-				return nil
+				continue // Skip file if unable to open
 			}
+
 			var posts []Post
 			if err := json.NewDecoder(f).Decode(&posts); err != nil || len(posts) == 0 {
-				f.Close() // Close the file before returning the error
-				continue  // Skip to the next file if an error occurs or the file is empty
+				f.Close()
+				continue // Skip file if unable to decode JSON or if the array is empty
 			}
-			f.Close()                           // Ensure file is closed after processing
-			threads = append(threads, posts[0]) // Append only the first post
+			f.Close()
+
+			// Append the first post of the thread to the threads slice
+			threads = append(threads, posts[0])
 		}
 	}
+
+	// Sort the threads slice based on the parsed Timestamp
+	sort.Slice(threads, func(i, j int) bool {
+		timeI, errI := time.Parse("01-02-2006 15:04:05", threads[i].Timestamp)
+		if errI != nil {
+			log.Fatalf("Error parsing timestamp for thread %d: %v", i, errI)
+		}
+		timeJ, errJ := time.Parse("01-02-2006 15:04:05", threads[j].Timestamp)
+		if errJ != nil {
+			log.Fatalf("Error parsing timestamp for thread %d: %v", j, errJ)
+		}
+		return timeI.After(timeJ)
+	})
+
 	return threads
 }
-
 func GetPosts(boardID string, threadID int) []Post {
 	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".json"
 	file, err := os.Open(filepath)

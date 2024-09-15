@@ -2,8 +2,11 @@
 
 <fieldset id="register">
     <legend>Register</legend>
-    <div id="username"></div>
-    <div id="password"></div>
+    <span>All usernames and passwords are randomly generated.</span>
+    <span>All accounts will be deleted after 30days of inactivity.</span>
+    <span>If you would like a permanent account, you can purchase one <a href="/store">here</a>.</span>
+    <div id="username">Username: ...</div>
+    <div id="password">Password: ...</div>
     <a href="#" onclick="Register()">Register</a>
     <script>
         const usrdiv = document.getElementById('username');
@@ -30,35 +33,49 @@
     </script>
 </fieldset>
     <style>
-
-#register fieldset {
+        
+        #register {
             width: 50%;
             margin: 0 auto;
-            padding: 10px;
-            border: 1px solid #000;
-            border-radius: 5px;
+            margin-top: 1.7rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
-
-        #register legend {
-            font-size: 20px;
-            font-weight: bold;
-        }
-
-        #register div {
+        #register span {
             margin: 10px 0;
+            color: #ffffff;
         }
-
         #register a {
-            display: inline-block;
-            padding: 5px 10px;
-            background-color: #000;
-            color: #fff;
-            text-decoration: none;
-            border-radius: 5px;
-        }
+            text-align: center;
+        color: #02ff6b;
+    }
 
-        #register a:hover {
-            background-color: #333;
-        }
+    #register a:hover {
+        color: #ffffffff;
+    }
+
+    #register a::before {
+        content: "[";
+        margin-right: 5px;
+        color: #AAF;
+    }
+
+    #register a::after {
+        content: "]";
+        margin-left: 5px;
+        color: #AAF;
+    }
+
+    #username, #password {
+        color: #ffffff;
+        margin: 10px 0;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        width: 100%;
+        text-align: center;
+    }
     </style>
     {{end}}

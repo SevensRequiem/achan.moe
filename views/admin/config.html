@@ -20,7 +20,11 @@
                             </li>
                             <li>
                                 <label for="minecraft">Minecraft:</label>
-                                <textarea id="minecraft" name="minecraft">{{.GlobalConfig.Minecraft}}</textarea>
+                                <textarea id="minecraftip" name="minecraft">{{.GlobalConfig.MinecraftIP}}</textarea>
+                            </li>
+                            <li>
+                                <label for="port">Minecraft Port:</label>
+                                <textarea id="minecraftport" name="port">{{.GlobalConfig.MinecraftPort}}</textarea>
                             </li>
                         </ul>
                         <button onclick="saveConfig()">Save</button>
@@ -29,13 +33,15 @@
                             var name = document.getElementById("name").value;
                             var description = document.getElementById("description").value;
                             var fork = document.getElementById("fork").value;
-                            var minecraft = document.getElementById("minecraft").value;
+                            var minecraftip = document.getElementById("minecraftip").value;
+                            var minecraftport = document.getElementById("minecraftport").value;
                         
                             var formData = new FormData();
                             formData.append("name", name);
                             formData.append("description", description);
                             formData.append("fork", fork);
-                            formData.append("minecraft", minecraft);
+                            formData.append("minecraftip", minecraftip);
+                            formData.append("minecraftport", minecraftport);
                         
                             var xhr = new XMLHttpRequest();
                             xhr.open("POST", "/admin/config", true);
@@ -52,4 +58,40 @@
         </div>
     </div>
 </div>
+<style>
+    #config {
+        margin: 0 auto;
+        width: 80%;
+        margin-top: 1.7rem;
+    }
+    #config ul {
+        list-style-type: none;
+        padding: 0;
+    }
+    #config li {
+        margin-bottom: 1rem;
+    }
+    #config label {
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+    #config textarea {
+        width: 60%;
+        height: 30px;
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+    #config button {
+        padding: 0.5rem 1rem;
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    #config button:hover {
+        background-color: #218838;
+    }
+</style>
 {{end}}

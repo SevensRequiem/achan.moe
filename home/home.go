@@ -13,6 +13,7 @@ import (
 	"achan.moe/banners"
 	"achan.moe/board"
 	config "achan.moe/utils/config"
+	"achan.moe/utils/hitcounter"
 	"achan.moe/utils/stats"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
@@ -40,6 +41,7 @@ func HomeHandler(c echo.Context) error {
 	data := map[string]interface{}{}
 	data = globaldata(c)
 	data["Pagename"] = "Home"
+	data["Hits"] = hitcounter.NewHitCounter().GetHits()
 
 	data["PostCount"] = board.GetGlobalPostCount()
 	data["UserCount"] = auth.GetTotalUsers()
@@ -357,27 +359,6 @@ func AdminUpdateHandler(c echo.Context) error {
 	return nil
 }
 
-func AdminInfoHandler(c echo.Context) error {
-	if !auth.AdminCheck(c) {
-		return c.String(http.StatusUnauthorized, "Unauthorized")
-	}
-
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/info.html")
-	if err != nil {
-		return c.String(http.StatusInternalServerError, err.Error())
-	}
-
-	data := globaldata(c)
-	data["Pagename"] = "Admin Info"
-	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
-	if err != nil {
-		fmt.Println("Error executing template:", err)
-		return c.String(http.StatusInternalServerError, err.Error())
-	}
-
-	return nil
-}
-
 func DonateHandler(c echo.Context) error {
 	tmpl, err := template.ParseFiles("views/base.html", "views/donate.html")
 	if err != nil {
@@ -440,6 +421,60 @@ func ContactHandler(c echo.Context) error {
 	data := map[string]interface{}{}
 	data = globaldata(c)
 	data["Pagename"] = "Contact"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func StoreHandler(c echo.Context) error {
+	tmpl, err := template.ParseFiles("views/base.html", "views/store.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	data := map[string]interface{}{}
+	data = globaldata(c)
+	data["Pagename"] = "Store"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func SuccessHandler(c echo.Context) error {
+	tmpl, err := template.ParseFiles("views/base.html", "views/success.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	data := map[string]interface{}{}
+	data = globaldata(c)
+	data["Pagename"] = "Success"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+
+func ProfileHandler(c echo.Context) error {
+	tmpl, err := template.ParseFiles("views/base.html", "views/profile.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	data := map[string]interface{}{}
+	data = globaldata(c)
+	data["Pagename"] = "Profile"
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {

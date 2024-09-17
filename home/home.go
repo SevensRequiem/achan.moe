@@ -187,6 +187,7 @@ func globaldata(c echo.Context) map[string]interface{} {
 		log.Fatalf("Error fetching latest posts: %v", err)
 	}
 	data["LatestPosts"] = latestPosts
+	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	return data
 }
 func RegisterHandler(c echo.Context) error {

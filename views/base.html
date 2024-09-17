@@ -24,6 +24,26 @@
 </head>
 
 <body>
+    <div id="consent">
+        <div id="consent-message">
+            <p>This site relies on cookies to function properly. By clicking "Accept", you consent to the use of cookies.</p>
+            <p>By clicking "Accept" you also accept our <a href="/terms">terms</a> and <a href="/privacy">privacy policy</a>.</p>
+            <button id="accept-cookies">Accept</button>
+        </div>
+    </div>
+    <script>
+        document.getElementById("accept-cookies").onclick = function () {
+            document.getElementById("consent").style.display = "none";
+    
+            document.cookie = "cookies_accepted=true; path=/; max-age=" + 60 * 60 * 24 * 30; //30 days
+
+        };
+
+        if (document.cookie.split(';').some((item) => item.trim().startsWith('cookies_accepted='))) {
+            document.getElementById("consent").style.display = "none";
+        }
+    </script>
+    
     <div id="staticbg"></div>
     <div id="staticoverlay"></div>
     <div id="scanlines"></div>
@@ -259,6 +279,45 @@
 </html>
 <style>
 
+    #consent {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+    }
+
+    #consent::backdrop {
+        filter: blur(15px);
+    }
+    #consent-message {
+        text-align: center;
+    }
+
+    #accept-cookies {
+        background-color: #02ff6b;
+        color: black;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    #accept-cookies:hover {
+        background-color: #ffffff;
+        color: black;
+    }
+
+    #accept-cookies:active {
+        background-color: #000000;
+        color: #02ff6b;
+    }
     #marquee {
         position: fixed;
         top: 1.5rem;

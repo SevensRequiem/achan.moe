@@ -1,10 +1,15 @@
 {{define "content"}}
 <fieldset id="store">
     <legend>Store</legend>
-    <span>Purchase a permanent account to avoid deletion after 30 days of inactivity.</span>
-    <span>All purchases are final.</span>
-    <span>Click the button below to proceed with your purchase.</span>
-<a href="https://buy.stripe.com/test_5kAcQ4bleed12M86oo">Buy account</a>
+    <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+    <script>
+      kofiWidgetOverlay.draw('sevensrequiem', {
+        'type': 'floating-chat',
+        'floating-chat.donateButton.text': 'Donate',
+        'floating-chat.donateButton.background-color': '#00b9fe',
+        'floating-chat.donateButton.text-color': '#fff'
+      });
+    </script>
 </fieldset>
 <style>
     #store {

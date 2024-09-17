@@ -12,8 +12,13 @@
     <fieldset class="reply">
         <form action="/board/{{.BoardID}}" method="post" enctype="multipart/form-data">
             <div>
+            <select name="country" id="country">
+                <option value="{{.Country}}">{{.Country}}</option>
+                <option value="Anonymous">Anonymous</option>
+                <option value="User">User</option>
+            </select><br><br>
             <label for="subject">Subject:</label>
-            <input type="text" id="subject" name="subject" required><br><br>
+            <input type="text" id="subject" name="subject"><br><br>
             <label for="author">Username:</label>
             <input type="text" id="author" name="author" value="Anonymous"><br><br>
             </div>
@@ -61,7 +66,7 @@
                 {{if .Sticky}}
                 <li class="sticky">
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                    <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                    <img src="/thumb/{{.ImageURL}}" alt="Image">
                     <span class="subject">{{.Subject}}</span>
                     <p>{{.PartialContent}}</p>
                     </a>
@@ -73,7 +78,7 @@
                 {{if not .Sticky}}
                 <li>
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <img src="/thumb/{{.ImageURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
                         </a>
@@ -86,8 +91,7 @@
                 {{if .Sticky}}
                 <li class="sticky">
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img class="stickyimg" src="/assets/icons/message_tack-0.png" alt="Sticky">
-                        <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <img src="/thumb/{{.ImageURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
                         </a>
@@ -99,7 +103,7 @@
                 {{if not .Sticky}}
                 <li>
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image">
+                        <img src="/thumb/{{.ImageURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
                         </a>
@@ -204,6 +208,7 @@
             width: 200px;
             height: 250px;
     }
+    
     #threads li a p {
         color: rgb(58, 58, 110);
     }
@@ -215,6 +220,10 @@
         color: rgb(16, 197, 128);
         padding: 5px;
 
+    }
+
+    .sticky a {
+        border-top: 5px solid #ffd000 !important;
     }
     #threads a:hover {
         border-top: 5px solid #ffffff;

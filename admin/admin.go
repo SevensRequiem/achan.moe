@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"encoding/json"
+	"encoding/gob"
 	"errors"
 	"log"
 	"net/http"
@@ -17,41 +17,41 @@ import (
 
 // Board is a struct for a board
 type Board struct {
-	BoardID     string `json:"id" gorm:"column:board_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	PostCount   int64  `json:"post_count"`
-	ImageOnly   bool   `json:"image_only" gorm:"default:false"`
-	Locked      bool   `json:"locked" gorm:"default:false"`
-	Archived    bool   `json:"archived"	gorm:"default:false"`
-	LatestPosts bool   `json:"latest_posts" gorm:"default:false"`
+	BoardID     string `gob:"id" gorm:"column:board_id"`
+	Name        string `gob:"name"`
+	Description string `gob:"description"`
+	PostCount   int64  `gob:"post_count"`
+	ImageOnly   bool   `gob:"image_only" gorm:"default:false"`
+	Locked      bool   `gob:"locked" gorm:"default:false"`
+	Archived    bool   `gob:"archived"	gorm:"default:false"`
+	LatestPosts bool   `gob:"latest_posts" gorm:"default:false"`
 }
 
 type Post struct {
-	BoardID   string `json:"BoardID"`
-	ThreadID  string `json:"ThreadID"`
-	PostID    int64  `json:"PostID"`
-	Content   string `json:"Content"`
-	ImageURL  string `json:"ImageURL"`
-	Subject   string `json:"Subject"`
-	Author    string `json:"Author"`
-	ParentID  string `json:"ParentID"`
-	Timestamp string `json:"Timestamp"`
-	IP        string `json:"IP"`
-	Sticky    bool   `json:"Sticky"`
-	Locked    bool   `json:"Locked"`
+	BoardID   string `gob:"BoardID"`
+	ThreadID  string `gob:"ThreadID"`
+	PostID    int64  `gob:"PostID"`
+	Content   string `gob:"Content"`
+	ImageURL  string `gob:"ImageURL"`
+	Subject   string `gob:"Subject"`
+	Author    string `gob:"Author"`
+	ParentID  string `gob:"ParentID"`
+	Timestamp string `gob:"Timestamp"`
+	IP        string `gob:"IP"`
+	Sticky    bool   `gob:"Sticky"`
+	Locked    bool   `gob:"Locked"`
 }
 
 type RecentPosts struct {
-	BoardID   string `json:"BoardID"`
-	ThreadID  string `json:"ThreadID"`
-	PostID    string `json:"PostID"`
-	Content   string `json:"Content"`
-	ImageURL  string `json:"ImageURL"`
-	Subject   string `json:"Subject"`
-	Author    string `json:"Author"`
-	ParentID  string `json:"ParentID"`
-	Timestamp string `json:"Timestamp"`
+	BoardID   string `gob:"BoardID"`
+	ThreadID  string `gob:"ThreadID"`
+	PostID    string `gob:"PostID"`
+	Content   string `gob:"Content"`
+	ImageURL  string `gob:"ImageURL"`
+	Subject   string `gob:"Subject"`
+	Author    string `gob:"Author"`
+	ParentID  string `gob:"ParentID"`
+	Timestamp string `gob:"Timestamp"`
 }
 
 var db = database.DB
@@ -140,18 +140,18 @@ func DeleteThread(c echo.Context) error {
 	RemoveFromRecentPosts(0, threadIDInt)
 
 	// Construct the path to the thread's JSON file
-	threadFilePath := filepath.Join("boards", board, threadID+".json")
+	threadFilePath := filepath.Join("boards", board, threadID+".gob")
 
 	// Open and decode the thread's JSON file
-	jsonFile, err := os.Open(threadFilePath)
+	gobFile, err := os.Open(threadFilePath)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "Internal server error")
 	}
-	defer jsonFile.Close()
+	defer gobFile.Close()
 
 	var posts []Post
-	if err := json.NewDecoder(jsonFile).Decode(&posts); err != nil {
-		return c.JSON(http.StatusInternalServerError, "Error decoding JSON")
+	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
+		return c.JSON(http.StatusInternalServerError, "Error decoding GOB")
 	}
 
 	// Delete images associated with the thread
@@ -160,6 +160,9 @@ func DeleteThread(c echo.Context) error {
 			imagePath := filepath.Join("boards", board, post.ImageURL)
 			if err := os.Remove(imagePath); err != nil {
 				return c.JSON(http.StatusInternalServerError, "Failed to delete image")
+			}
+			if err := os.Remove("thumbs/" + post.ImageURL); err != nil {
+				return c.JSON(http.StatusInternalServerError, "Failed to delete thumbnail")
 			}
 		}
 	}
@@ -181,18 +184,18 @@ func DeletePost(c echo.Context) error {
 	board := c.Param("b")
 
 	// Construct the file path
-	filePath := "boards/" + board + "/" + threadid + ".json"
+	filePath := "boards/" + board + "/" + threadid + ".gob"
 	// Open the JSON file
-	jsonFile, err := os.Open(filePath)
+	gobFile, err := os.Open(filePath)
 	if err != nil {
 		log.Printf("Failed to open file: %s, error: %v", filePath, err)
 		return c.JSON(http.StatusInternalServerError, "Internal server error")
 	}
-	defer jsonFile.Close()
+	defer gobFile.Close()
 
 	// Decode the JSON file into posts
 	var posts []Post
-	if err := json.NewDecoder(jsonFile).Decode(&posts); err != nil {
+	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
 		log.Printf("Error decoding JSON from file: %s, error: %v", filePath, err)
 		return c.JSON(http.StatusInternalServerError, "Error decoding JSON")
 	}
@@ -226,20 +229,24 @@ func DeletePost(c echo.Context) error {
 		if err := os.Remove("boards/" + board + "/" + imageURL); err != nil {
 			return c.JSON(http.StatusInternalServerError, "Failed to delete image")
 		}
+
+		if err := os.Remove("thumbs/" + imageURL); err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to delete thumbnail")
+		}
 	}
 
 	// Database operations (omitted for brevity)
 	RemoveFromRecentPosts(postidInt, 0)
 	// Recreate the JSON file to update it
-	jsonFile, err = os.Create(filePath)
+	gobFile, err = os.Create(filePath)
 	if err != nil {
 		log.Printf("Failed to create file: %s, error: %v", filePath, err)
 		return c.JSON(http.StatusInternalServerError, "Internal server error")
 	}
-	defer jsonFile.Close()
+	defer gobFile.Close()
 
 	// Encode the updated posts back into the JSON file
-	if err := json.NewEncoder(jsonFile).Encode(posts); err != nil {
+	if err := gob.NewEncoder(gobFile).Encode(posts); err != nil {
 		log.Printf("Error encoding JSON to file: %s, error: %v", filePath, err)
 		return c.JSON(http.StatusInternalServerError, "Error encoding JSON")
 	}
@@ -263,15 +270,15 @@ func JannyDeleteThread(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, "Unauthorized")
 	}
 	RemoveFromRecentPosts(0, threadidInt)
-	//read the json file and fetch the image url
-	jsonFile, err := os.Open("boards/" + board + "/" + threadid + ".json")
+	//read the gob file and fetch the image url
+	gobFile, err := os.Open("boards/" + board + "/" + threadid + ".gob")
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "Internal server error")
 	}
 	// delete image
-	defer jsonFile.Close()
+	defer gobFile.Close()
 	var posts []Post
-	if err := json.NewDecoder(jsonFile).Decode(&posts); err != nil {
+	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
 		return c.JSON(http.StatusInternalServerError, "Error decoding JSON")
 	}
 	// get image url from post
@@ -286,7 +293,7 @@ func JannyDeleteThread(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, "Failed to delete image")
 		}
 	}
-	if err := os.Remove("boards/" + board + "/" + threadid + ".json"); err != nil {
+	if err := os.Remove("boards/" + board + "/" + threadid + ".gob"); err != nil {
 		// Handle the error, for example, log it and return an appropriate error message to the client
 		return c.JSON(http.StatusInternalServerError, "Failed to delete thread")
 	}
@@ -308,15 +315,15 @@ func JannyDeletePost(c echo.Context) error {
 	}
 
 	// Open the JSON file
-	jsonFile, err := os.Open("boards/" + board + "/" + threadid)
+	gobFile, err := os.Open("boards/" + board + "/" + threadid)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "Internal server error")
 	}
-	defer jsonFile.Close()
+	defer gobFile.Close()
 
 	// Decode the JSON file into posts
 	var posts []Post
-	if err := json.NewDecoder(jsonFile).Decode(&posts); err != nil {
+	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
 		return c.JSON(http.StatusInternalServerError, "Error decoding JSON")
 	}
 	// get image url from post
@@ -352,14 +359,14 @@ func JannyDeletePost(c echo.Context) error {
 	}
 	RemoveFromRecentPosts(postidInt, 0)
 	// Recreate the JSON file to update it
-	jsonFile, err = os.Create("boards/" + board + "/" + threadid)
+	gobFile, err = os.Create("boards/" + board + "/" + threadid)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "Internal server error")
 	}
-	defer jsonFile.Close()
+	defer gobFile.Close()
 
 	// Encode the updated posts back into the JSON file
-	if err := json.NewEncoder(jsonFile).Encode(posts); err != nil {
+	if err := gob.NewEncoder(gobFile).Encode(posts); err != nil {
 		return c.JSON(http.StatusInternalServerError, "Error encoding JSON")
 	}
 
@@ -390,9 +397,8 @@ func RemoveFromRecentPosts(postID, threadID int64) {
 
 // Helper function to remove a recent post by a specific field (e.g., post_id or thread_id)
 func removeRecentPostByField(db *gorm.DB, field string, value int64) {
-	var recentPost RecentPosts
-	db.Where(field+" = ?", value).First(&recentPost)
-	db.Where(field+" = ?", value).Delete(&recentPost)
+	// Construct the query dynamically based on the field
+	db.Where(field+" = ?", value).Delete(&RecentPosts{})
 }
 
 // UpdateUserRole updates a user's role

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo-contrib/session"
@@ -21,6 +22,7 @@ import (
 	"encoding/gob"
 
 	"achan.moe/database"
+	"achan.moe/utils/mail"
 )
 
 func init() {
@@ -50,15 +52,16 @@ func dummydata() {
 }
 
 type User struct {
-	PrimaryID   uint   `gorm:"primary_key"`
-	UUID        string `json:"uuid"`
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	Groups      Group  `json:"groups" gorm:"type:json"`
-	DateCreated string `json:"date_created" gorm:"default:CURRENT_TIMESTAMP"`
-	LastLogin   string `json:"last_login"`
-	DoesExist   bool   `json:"does_exist"`
-	Premium     bool   `json:"premium" gorm:"default:false"`
+	UUID          string
+	Username      string
+	Password      string
+	Groups        Group
+	DateCreated   string
+	LastLogin     string
+	DoesExist     bool
+	Premium       bool
+	Email         string
+	TransactionID string
 }
 
 type Group struct {
@@ -201,14 +204,37 @@ func NewUser(c echo.Context) error {
 	var newpassword = getrandpassword()
 	var encpass = encryptPassword(newpassword)
 	db := database.DB
-	user := User{UUID: newid, Username: newusername, Password: encpass, Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
+	user := User{
+		UUID:          newid,
+		Username:      newusername,
+		Password:      encpass,
+		Groups:        Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}},
+		DateCreated:   time.Now().Format("2006-01-02 15:04:05"),
+		LastLogin:     time.Now().Format("2006-01-02 15:04:05"),
+		DoesExist:     true,
+		Premium:       false,
+		Email:         "",
+		TransactionID: "",
+	}
+
 	db.Create(&user)
 	info := map[string]string{"username": user.Username, "password": newpassword}
 	return c.JSON(http.StatusOK, info)
 }
 func NewManualUser(userID string, username string, password string) {
 	db := database.DB
-	user := User{UUID: userID, Username: username, Password: ManualGenPassword(password), Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
+	user := User{
+		UUID:          userID,
+		Username:      username,
+		Password:      ManualGenPassword(password),
+		Groups:        Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}},
+		DateCreated:   time.Now().Format("2006-01-02 15:04:05"),
+		LastLogin:     time.Now().Format("2006-01-02 15:04:05"),
+		DoesExist:     true,
+		Premium:       false,
+		Email:         "",
+		TransactionID: "",
+	}
 	db.Create(&user)
 }
 func DecodePassword(encrypted_password string) string {
@@ -356,6 +382,20 @@ func AuthCheck(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+func PremiumCheck(c echo.Context) bool {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
+
+	// Check if the user is in the session and not nil
+	user, ok := sess.Values["user"].(User)
+	if !ok {
+		return false
+	}
+
+	// Check if the user is premium
+	return user.Premium
+}
+
 // funcs
 // ////////////
 
@@ -384,7 +424,7 @@ func EditUser(c echo.Context) error {
 	}
 
 	// Save updated user to the database
-	if err := db.Save(&user).Error; err != nil {
+	if err := db.Where("uuid = ?", user.UUID).Updates(user).Error; err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
@@ -520,14 +560,30 @@ func ExpireUsers() {
 	}
 }
 
-func NewPremiumUser(c echo.Context) {
+func NewPremiumUser(c echo.Context, email string, transactionid string) {
 	userID := Getrandid()
 	db := database.DB
-	user := User{UUID: userID, Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true, Premium: true}
+	user := User{
+		UUID:     userID,
+		Username: strings.Split(email, "@")[0],
+		Password: ManualGenPassword("password"), // Set a default password or generate one
+		Groups: Group{
+			Admin:     false,
+			Moderator: false,
+			Janny:     JannyBoards{Boards: []string{}},
+		},
+		DateCreated:   time.Now().Format("2006-01-02 15:04:05"),
+		LastLogin:     time.Now().Format("2006-01-02 15:04:05"),
+		DoesExist:     true,
+		Premium:       true,
+		Email:         email,
+		TransactionID: transactionid,
+	}
 	db.Create(&user)
 	//login the user
 	sess, _ := session.Get("session", c)
 	sess.Values["user"] = user
 	sess.Save(c.Request(), c.Response())
+	go mail.SendEmail(email, "Welcome to achan.moe!", "Your account has been created successfully! Your username is: "+user.Username+" and your password is: "+user.Password+" You can change both your username and password after logging in.")
 	c.Redirect(http.StatusTemporaryRedirect, "/profile")
 }

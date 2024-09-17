@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/gob"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -19,8 +20,8 @@ import (
 	"achan.moe/bans"
 	"achan.moe/database"
 	"achan.moe/home"
-	"achan.moe/paypal"
 	"achan.moe/routes"
+	"achan.moe/utils/cache"
 	"achan.moe/utils/minecraft"
 	"achan.moe/utils/schedule"
 )
@@ -39,16 +40,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
-	clientID := os.Getenv("PAYPAL_CLIENT_ID")
-	clientSecret := os.Getenv("PAYPAL_CLIENT_SECRET")
-	mode := "sandbox" // Change to "live" for production
-	client := paypal.NewClient(clientID, clientSecret, mode)
-	client.SetupRoutes(e)
 	secret := os.Getenv("SECRET")
 	if secret == "" {
 		log.Fatal("SECRET is not set")
 	}
-	e.Use(session.Middleware(sessions.NewCookieStore([]byte(secret))))
+	store := sessions.NewCookieStore([]byte(secret))
+	store.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   3600, // 1 hour
+		HttpOnly: true,
+		Secure:   false,                // Set to true if using HTTPS
+		SameSite: http.SameSiteLaxMode, // Adjust according to your needs
+	}
+
+	e.Use(session.Middleware(store))
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "${id} ${time_rfc3339} ${remote_ip} > ${method} > ${uri} > ${status} ${latency_human}\n",
 	}))
@@ -119,7 +124,18 @@ func main() {
 	if err != nil {
 		log.Fatal("PORT is not set")
 	}
+	//mail.TestMail()
+	c := cache.New()
 
+	c.Set("foo", "bar")
+	c.Set("baz", "qux")
+
+	fmt.Println("Cache items:")
+	items := c.ListAll()
+	for k, v := range items {
+		fmt.Printf("%s: %s\n", k, v)
+	}
+	//go tests.Test()
 	//go env.RegenEncryptedKey()
 	//go env.RegenSecretKey()
 	//go plugins.LoadPlugins(e)

@@ -1,7 +1,8 @@
 package board
 
 import (
-	"encoding/json"
+	"encoding/gob"
+	"encoding/hex"
 	"errors"
 	"html/template"
 	"io/ioutil"
@@ -18,69 +19,63 @@ import (
 
 	"achan.moe/auth"
 	"achan.moe/database"
+	"achan.moe/images"
 	"achan.moe/utils/sitemap"
 	"github.com/google/uuid"
+	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
+	"golang.org/x/exp/rand"
 	"golang.org/x/time/rate"
 )
 
 type Board struct {
-	BoardID     string `json:"id" gorm:"column:board_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	PostCount   int64  `json:"post_count"`
-	ImageOnly   bool   `json:"image_only"`   //todo
-	Locked      bool   `json:"locked"`       //todo
-	Archived    bool   `json:"archived"`     //todo
-	LatestPosts bool   `json:"latest_posts"` //todo
-	Pages       int    `json:"pages"`        //todo
+	BoardID     string `gob:"id" gorm:"column:board_id"`
+	Name        string `gob:"name"`
+	Description string `gob:"description"`
+	PostCount   int64  `gob:"post_count"`
+	ImageOnly   bool   `gob:"image_only"`   //todo
+	Locked      bool   `gob:"locked"`       //todo
+	Archived    bool   `gob:"archived"`     //todo
+	LatestPosts bool   `gob:"latest_posts"` //todo
+	Pages       int    `gob:"pages"`        //todo
 }
 
 type Post struct {
-	BoardID        string `json:"BoardID"`
-	ThreadID       string `json:"ThreadID"`
-	PostID         int64  `json:"PostID"`
-	Content        string `json:"Content"`
-	PartialContent string `json:"PartialContent"`
-	ImageURL       string `json:"ImageURL"`
-	Subject        string `json:"Subject"`
-	Author         string `json:"Author"`
-	ParentID       string `json:"ParentID"`
-	Timestamp      string `json:"Timestamp"`
-	IP             string `json:"IP"`
-	Sticky         bool   `json:"Sticky"`
-	Locked         bool   `json:"Locked"`
-	Page           int    `json:"Page"`
+	BoardID        string `gob:"BoardID"`
+	ThreadID       string `gob:"ThreadID"`
+	PostID         string `gob:"PostID"`
+	Content        string `gob:"Content"`
+	PartialContent string `gob:"PartialContent"`
+	ImageURL       string `gob:"ImageURL"`
+	ThumbURL       string `gob:"ThumbURL"`
+	Subject        string `gob:"Subject"`
+	Author         string `gob:"Author"`
+	ParentID       string `gob:"ParentID"`
+	Timestamp      string `gob:"Timestamp"`
+	IP             string `gob:"IP"`
+	Sticky         bool   `gob:"Sticky"`
+	Locked         bool   `gob:"Locked"`
+	Page           int    `gob:"Page"`
 }
 
 type RecentPosts struct {
-	ID             int64  `json:"ID"`
-	BoardID        string `json:"BoardID"`
-	ThreadID       string `json:"ThreadID"`
-	PostID         int64  `json:"PostID"`
-	Content        string `json:"Content"`
-	PartialContent string `json:"PartialContent"`
-	ImageURL       string `json:"ImageURL"`
-	Subject        string `json:"Subject"`
-	Author         string `json:"Author"`
-	ParentID       string `json:"ParentID"`
-	Timestamp      string `json:"Timestamp"`
-}
-type RateLimit struct {
-	IP       string    `json:"IP"`
-	Count    int       `json:"Count"`
-	TimeLast time.Time `json:"Last"`
-}
-
-type RateLimitPost struct {
-	IP       string `json:"IP"`
-	Count    int    `json:"Count"`
-	TimeLast string `json:"Last"`
+	ID             int64  `gob:"ID"`
+	BoardID        string `gob:"BoardID"`
+	ThreadID       string `gob:"ThreadID"`
+	PostID         string `gob:"PostID"`
+	Content        string `gob:"Content"`
+	PartialContent string `gob:"PartialContent"`
+	ImageURL       string `gob:"ImageURL"`
+	ThumbURL       string `gob:"ThumbURL"`
+	Subject        string `gob:"Subject"`
+	Author         string `gob:"Author"`
+	ParentID       string `gob:"ParentID"`
+	Timestamp      string `gob:"Timestamp"`
 }
 
 type PostCounter struct {
-	ID        int   `json:"ID"`
-	PostCount int64 `json:"PostCount"`
+	ID        int   `gob:"ID" gorm:"primaryKey"`
+	PostCount int64 `gob:"PostCount" gorm:"default:0"`
 }
 
 func init() {
@@ -89,12 +84,15 @@ func init() {
 	db.AutoMigrate(&Board{})
 	db.AutoMigrate(&RecentPosts{})
 	db.AutoMigrate(&PostCounter{})
+
 }
 
 func CreateThread(c echo.Context) error {
-	var limiter = rate.NewLimiter(rate.Every(15*time.Minute), 1)
-	if !limiter.Allow() {
-		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "15 Minute cooldown"})
+	if auth.PremiumCheck(c) {
+		var limiter = rate.NewLimiter(rate.Every(5*time.Minute), 1)
+		if !limiter.Allow() {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
+		}
 	}
 
 	if CheckIfLocked(c.Param("b")) {
@@ -118,16 +116,16 @@ func CreateThread(c echo.Context) error {
 	}
 	// get thread id
 	boardDir := "boards/" + boardID
-	// scan all files in the board directory each json file is a thread, titled with an integer
+	// scan all files in the board directory each gob file is a thread, titled with an integer
 	files, err := ioutil.ReadDir(boardDir)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "Internal server error2")
 	}
 
-	// get the thread id by counting the number of json files in the board directory
+	// get the thread id by counting the number of gob files in the board directory
 	threadID := 1
 	for _, file := range files {
-		if !file.IsDir() && strings.HasSuffix(file.Name(), ".json") {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".gob") {
 			threadID++
 		}
 	}
@@ -143,7 +141,7 @@ func CreateThread(c echo.Context) error {
 	// get post subject
 	subject := c.FormValue("subject")
 	if subject == "" {
-		return c.JSON(http.StatusBadRequest, "Subject cannot be empty")
+		subject = "No Subject"
 	}
 	// get post author
 	author := c.FormValue("author")
@@ -160,7 +158,10 @@ func CreateThread(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, "There was an error retrieving the file")
 		}
 	}
-
+	// max filesize
+	if image != nil && image.Size > 11<<20 {
+		return c.JSON(http.StatusBadRequest, "File is too large")
+	}
 	// make sure image is only the following formats, gif, jpg, jpeg, png, webm, mp4, webp, pdf
 	if image != nil {
 		imageExt := filepath.Ext(image.Filename)
@@ -173,6 +174,8 @@ func CreateThread(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
+
+	go images.GenerateThumbnail("boards/"+boardID+"/"+imageURL, "thumbs/"+imageURL, 200, 200)
 	// save the image to the board directory
 	// /img/:b/:f
 	sticky := false
@@ -203,19 +206,22 @@ func CreateThread(c echo.Context) error {
 	}
 	AddGlobalPostCount()
 	AddBoardPostCount(boardID)
-	var postCount int64
-	postCount = GetGlobalPostCount()
-	safeEndIndex := len(content)
-	if safeEndIndex > 20 {
-		safeEndIndex = 20
+
+	// Use the safeEndIndex for slicing content
+
+	safeEndIndex := 20
+	if len(content) < safeEndIndex {
+		safeEndIndex = len(content)
 	}
+
 	post := Post{
 		BoardID:        boardID,
 		ThreadID:       strconv.Itoa(threadID),
-		PostID:         int64(postCount),
+		PostID:         GenUUID(),
 		Content:        content,
 		PartialContent: content[:safeEndIndex],
 		ImageURL:       imageURL,
+		ThumbURL:       "thumbs/" + imageURL,
 		Subject:        subject,
 		Author:         author,
 		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
@@ -223,8 +229,9 @@ func CreateThread(c echo.Context) error {
 		Sticky:         sticky,
 		Locked:         locked,
 	}
-	// create a json file for the thread
-	jsonFilePath := boardDir + "/" + strconv.Itoa(threadID) + ".json"
+	SetSessionSelfPostID(c, post.PostID)
+	// create a gob file for the thread
+	jsonFilePath := boardDir + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.OpenFile(jsonFilePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, "Internal server error6")
@@ -242,7 +249,7 @@ func CreateThread(c echo.Context) error {
 	if _, err := file.Seek(0, os.SEEK_SET); err != nil {
 		return c.JSON(http.StatusInternalServerError, "Error seeking file")
 	}
-	if err := json.NewEncoder(file).Encode(posts); err != nil {
+	if err := gob.NewEncoder(file).Encode(posts); err != nil {
 		return c.JSON(http.StatusInternalServerError, "Error encoding JSON")
 	}
 
@@ -258,17 +265,32 @@ func CreateThread(c echo.Context) error {
 	sitemap.AddURL("https://achan.moe/board/"+boardName+"/"+threadIDStr, "daily", "0.5")
 	return c.Redirect(http.StatusFound, redirectURL)
 }
+func checkReplyID(id string) bool {
+	db := database.DB
+	return db.Where("post_id = ?", id).First(&Post{}).RowsAffected > 0
+}
 
 func CreateThreadPost(c echo.Context) error {
-	var limiter = rate.NewLimiter(rate.Every(5*time.Minute), 1)
-	if !limiter.Allow() {
-		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
-	}
 	boardID := c.Param("b")
+	if auth.PremiumCheck(c) {
+		var limiter = rate.NewLimiter(rate.Every(5*time.Minute), 1)
+		if !limiter.Allow() {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
+		}
+	}
+
+	replyto := c.FormValue("replyto")
+	if replyto == "" {
+		replyto = ""
+	}
+
+	if replyto != "" && !checkReplyID(replyto) {
+		return c.JSON(http.StatusBadRequest, "Invalid reply ID")
+	}
+
 	if boardID == "" {
 		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
 	}
-
 	if CheckIfThreadLocked(c, boardID, c.Param("t")) {
 		return c.JSON(http.StatusForbidden, "Thread is locked")
 	}
@@ -310,7 +332,9 @@ func CreateThreadPost(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, "There was an error retrieving the file")
 		}
 	}
-
+	if image != nil && image.Size > 11<<20 {
+		return c.JSON(http.StatusBadRequest, "File is too large")
+	}
 	if threadIsFull(boardID, threadID) {
 		return c.JSON(http.StatusForbidden, "Thread is full")
 	}
@@ -324,32 +348,32 @@ func CreateThreadPost(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
-
-	postCount := AddGlobalPostCount()
+	go images.GenerateThumbnail("boards/"+boardID+"/"+imageURL, "thumbs/"+imageURL, 200, 200)
+	AddGlobalPostCount()
 	AddBoardPostCount(boardID)
 
-	// Calculate the safe slice end index
-	safeEndIndex := len(content)
-	if safeEndIndex > 20 {
-		safeEndIndex = 20
-	}
-
 	// Use the safeEndIndex for slicing content
+	safeEndIndex := 20
+	if len(content) < safeEndIndex {
+		safeEndIndex = len(content)
+	}
 	post := Post{
 		BoardID:        boardID,
 		ThreadID:       strconv.Itoa(threadID),
-		PostID:         postCount,
+		PostID:         GenUUID(),
 		Content:        content,
-		PartialContent: content[:safeEndIndex], // Use safe slice
+		PartialContent: content[:safeEndIndex],
 		ImageURL:       imageURL,
+		ThumbURL:       "thumbs/" + imageURL,
 		Author:         author,
 		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
 		IP:             c.RealIP(),
+		ParentID:       replyto,
 	}
 	if err := addPostToFile(boardID, threadID, post); err != nil {
 		return c.JSON(http.StatusInternalServerError, "Failed to add post to thread")
 	}
-
+	SetSessionSelfPostID(c, post.PostID)
 	boardName := url.PathEscape(boardID)
 	threadIDStr := strconv.Itoa(threadID)
 	redirectURL := "/board/" + boardName + "/" + threadIDStr
@@ -359,7 +383,19 @@ func CreateThreadPost(c echo.Context) error {
 
 	return c.Redirect(http.StatusFound, redirectURL)
 }
-
+func GenUUID() string {
+	b := make([]byte, 4) // 16 bytes = 128 bits
+	_, err := rand.Read(b)
+	if err != nil {
+		log.Fatalf("Failed to generate random bytes: %v", err)
+	}
+	id := hex.EncodeToString(b)
+	db := database.DB
+	if db.Where("post_id = ?", id).First(&Post{}).RowsAffected > 0 {
+		return GenUUID()
+	}
+	return id
+}
 func LatestPostsCheck(c echo.Context, boardID string) bool {
 	if CheckIfArchived(boardID) {
 		return false
@@ -378,14 +414,14 @@ func LatestPostsCheck(c echo.Context, boardID string) bool {
 }
 
 func CheckIfThreadLocked(c echo.Context, boardID string, threadID string) bool {
-	filepath := "boards/" + boardID + "/" + threadID + ".json"
+	filepath := "boards/" + boardID + "/" + threadID + ".gob"
 	file, err := os.Open(filepath)
 	if err != nil {
 		return false
 	}
 	defer file.Close()
 	var posts []Post
-	json.NewDecoder(file).Decode(&posts)
+	gob.NewDecoder(file).Decode(&posts)
 	return posts[0].Locked
 }
 
@@ -398,7 +434,7 @@ func CheckLatestPosts(boardID string) bool {
 }
 
 func addPostToFile(boardID string, threadID int, post Post) error {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".json"
+	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return errors.New("Error opening file")
@@ -406,7 +442,7 @@ func addPostToFile(boardID string, threadID int, post Post) error {
 	defer file.Close()
 
 	var posts []Post
-	if err := json.NewDecoder(file).Decode(&posts); err != nil {
+	if err := gob.NewDecoder(file).Decode(&posts); err != nil {
 		return errors.New("Error decoding JSON")
 	}
 
@@ -418,7 +454,7 @@ func addPostToFile(boardID string, threadID int, post Post) error {
 	if _, err := file.Seek(0, os.SEEK_SET); err != nil {
 		return errors.New("Error seeking file")
 	}
-	if err := json.NewEncoder(file).Encode(posts); err != nil {
+	if err := gob.NewEncoder(file).Encode(posts); err != nil {
 		return errors.New("Error encoding JSON")
 	}
 
@@ -456,14 +492,14 @@ func saveImage(boardID string, image *multipart.FileHeader) (string, error) {
 }
 
 func threadIsFull(boardID string, threadID int) bool {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".json"
+	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.Open(filepath)
 	if err != nil {
 		return true
 	}
 	defer file.Close()
 	var posts []Post
-	json.NewDecoder(file).Decode(&posts)
+	gob.NewDecoder(file).Decode(&posts)
 	return len(posts) >= 300
 }
 
@@ -483,7 +519,7 @@ func DeleteLastThread(boardID string) {
 				continue
 			}
 			var posts []Post
-			if err := json.NewDecoder(f).Decode(&posts); err != nil || len(posts) == 0 {
+			if err := gob.NewDecoder(f).Decode(&posts); err != nil || len(posts) == 0 {
 				f.Close()
 				continue
 			}
@@ -560,57 +596,102 @@ func GetBoardID(boardID string) string {
 // need to fix ai hallucination here
 func GetThreads(boardID string) []Post {
 	dir := "boards/" + boardID
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
+		log.Printf("Error reading directory %s: %v", dir, err)
 		return nil
 	}
 
-	var threads []Post
+	type ThreadInfo struct {
+		FirstPost     Post
+		LastTimestamp time.Time
+	}
+
+	var threadInfos []ThreadInfo
 
 	for _, file := range files {
-		if !file.IsDir() {
-			filepath := dir + "/" + file.Name()
-			f, err := os.Open(filepath)
+		if !file.IsDir() && filepath.Ext(file.Name()) == ".gob" {
+			filePath := filepath.Join(dir, file.Name())
+			f, err := os.Open(filePath)
 			if err != nil {
-				continue // Skip file if unable to open
+				log.Printf("Error opening file %s: %v", filePath, err)
+				continue
 			}
 
 			var posts []Post
-			if err := json.NewDecoder(f).Decode(&posts); err != nil || len(posts) == 0 {
+			if err := gob.NewDecoder(f).Decode(&posts); err != nil || len(posts) == 0 {
 				f.Close()
-				continue // Skip file if unable to decode JSON or if the array is empty
+				if err != nil {
+					log.Printf("Error decoding JSON in file %s: %v", filePath, err)
+				}
+				continue
 			}
 			f.Close()
 
-			// Append the first post of the thread to the threads slice
-			threads = append(threads, posts[0])
+			// Parse the last post's timestamp
+			lastPost := posts[len(posts)-1]
+			lastTimestamp, err := time.Parse("01-02-2006 15:04:05", lastPost.Timestamp)
+			if err != nil {
+				log.Printf("Error parsing timestamp for file %s: %v", filePath, err)
+				continue
+			}
+
+			// Append ThreadInfo with the first post and the last timestamp
+			threadInfos = append(threadInfos, ThreadInfo{
+				FirstPost:     posts[0],
+				LastTimestamp: lastTimestamp,
+			})
 		}
 	}
 
-	// Sort the threads slice based on the parsed Timestamp
-	sort.Slice(threads, func(i, j int) bool {
-		timeI, errI := time.Parse("01-02-2006 15:04:05", threads[i].Timestamp)
-		if errI != nil {
-			log.Fatalf("Error parsing timestamp for thread %d: %v", i, errI)
-		}
-		timeJ, errJ := time.Parse("01-02-2006 15:04:05", threads[j].Timestamp)
-		if errJ != nil {
-			log.Fatalf("Error parsing timestamp for thread %d: %v", j, errJ)
-		}
-		return timeI.After(timeJ)
+	// Sort threadInfos slice based on lastTimestamp in descending order
+	sort.Slice(threadInfos, func(i, j int) bool {
+		return threadInfos[i].LastTimestamp.After(threadInfos[j].LastTimestamp)
 	})
 
-	return threads
+	// Extract the sorted first posts
+	var sortedPosts []Post
+	for _, info := range threadInfos {
+		sortedPosts = append(sortedPosts, info.FirstPost)
+	}
+
+	return sortedPosts
 }
+
+func SetSessionSelfPostID(c echo.Context, postID string) {
+	sess, err := session.Get("session", c)
+	if err != nil {
+		log.Printf("Error getting session: %v", err)
+		return
+	}
+
+	// Debugging the session values
+	log.Printf("Session before update: %v", sess.Values)
+
+	// Check if the key exists and is an array
+	if ids, ok := sess.Values["self_post_id"].([]string); ok {
+		sess.Values["self_post_id"] = append(ids, postID)
+	} else {
+		sess.Values["self_post_id"] = []string{postID}
+	}
+
+	// Debugging the session values after update
+	log.Printf("Session after update: %v", sess.Values)
+
+	if err := sess.Save(c.Request(), c.Response()); err != nil {
+		log.Printf("Error saving session: %v", err)
+	}
+}
+
 func GetPosts(boardID string, threadID int) []Post {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".json"
+	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.Open(filepath)
 	if err != nil {
 		return nil
 	}
 	defer file.Close()
 	var posts []Post
-	json.NewDecoder(file).Decode(&posts)
+	gob.NewDecoder(file).Decode(&posts)
 
 	// Sanitize the Content field of each Post
 	for i := range posts {
@@ -628,14 +709,14 @@ func GetPosts(boardID string, threadID int) []Post {
 }
 
 func GetThread(boardID string, threadID int) Post {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".json"
+	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.Open(filepath)
 	if err != nil {
 		return Post{}
 	}
 	defer file.Close()
 	var posts []Post
-	err = json.NewDecoder(file).Decode(&posts)
+	err = gob.NewDecoder(file).Decode(&posts)
 	if err != nil || len(posts) == 0 {
 		return Post{} // Return an empty Post if there's an error or the array is empty
 	}
@@ -694,14 +775,14 @@ func CheckIfImageOnly(boardID string) bool {
 }
 
 func ThreadCheckLocked(c echo.Context, boardid string, threadid string) bool {
-	filepath := "boards/" + boardid + "/" + threadid + ".json"
+	filepath := "boards/" + boardid + "/" + threadid + ".gob"
 	file, err := os.Open(filepath)
 	if err != nil {
 		return false
 	}
 	defer file.Close()
 	var posts []Post
-	json.NewDecoder(file).Decode(&posts)
+	gob.NewDecoder(file).Decode(&posts)
 	return posts[0].Locked
 }
 
@@ -740,19 +821,19 @@ func GetBoardPostCount(boardID string) int64 {
 }
 
 func GetPartialPosts(boardID string, threadID int, postid int) []Post {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".json"
+	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.Open(filepath)
 	if err != nil {
 		return nil
 	}
 	defer file.Close()
 	var posts []Post
-	json.NewDecoder(file).Decode(&posts)
+	gob.NewDecoder(file).Decode(&posts)
 
 	// get partial post
 	var partialPosts []Post
 	for i := range posts {
-		if posts[i].PostID > int64(postid) {
+		if posts[i].PostID > string(postid) {
 			// Check if the post content is longer than 20 characters
 			if len(posts[i].Content) > 20 {
 				// Truncate the content to the first 20 characters

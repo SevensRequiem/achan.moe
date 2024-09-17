@@ -15,7 +15,7 @@
             <legend>{{.Thread.Author}} // {{.Thread.Subject}} - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
                 {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: {{.Thread.ImageURL}}</span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
                 href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{else if .IsJanny}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
-                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}}</legend>
+                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}} <a class="postid" href="#" onclick="replyTo('{{.Thread.PostID}}');">#{{.Thread.PostID}}</a></legend>
             {{if .Thread.ImageURL}}
             <img src="/file/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image" id="threadfile">
             {{end}}
@@ -293,81 +293,118 @@ margin-bottom: 2rem;
     }
 </style>
 <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.querySelector('.reply');
+        const postContents = document.querySelectorAll('.postcontent');
+
+        // Function to toggle the visibility of the reply form
+        const loadForm = () => {
+            form.style.display = form.style.display === 'flex' ? 'none' : 'flex';
+        };
+
+        // Function to display the reply form
+        const openForm = () => {
+            form.style.display = 'flex';
+        };
+
+        // Decode HTML entities
+        const decodeHtmlEntities = (html) => {
+            const textarea = document.createElement('textarea');
+            textarea.innerHTML = html;
+            return textarea.value;
+        };
+
+        // Apply greentext formatting
+        const greenText = () => {
+    const gtext = document.querySelectorAll('.postcontent p');
+    gtext.forEach(post => {
+        // Replace lines starting with '>' with green colored text
+        post.innerHTML = post.innerHTML.replace(/(^|[^>])(&gt;[^\n<]*)(?=\.[\s]*|\n|$)/g, '$1<span style="color: green;">$2</span>');
+    });
+};
+
+        // Apply markdown parsing
+        const applyMarkdown = () => {
+            postContents.forEach(post => {
+                post.innerHTML = marked.parse(decodeHtmlEntities(post.innerHTML));
+            });
+        };
+
+        // Decode and update posts
+        const updatePosts = () => {
+            postContents.forEach(post => {
+                post.innerHTML = decodeHtmlEntities(post.innerHTML);
+            });
+        };
+
+        // Add a reply reference to a specific post
+        const replyTo = (postid) => {
+            openForm();
+            const content = document.getElementById('formcontent');
+            content.value += `\n>>${postid}\n`;
+            content.focus();
+        };
+
+        // Draggable reply form
+        let isDragging = false;
+        let offset = [0, 0];
+
+        const startDragging = (e) => {
+            if (e.target.tagName.toLowerCase() !== 'input' && e.target.tagName.toLowerCase() !== 'textarea') {
+                isDragging = true;
+                offset = [form.offsetLeft - e.clientX, form.offsetTop - e.clientY];
+            }
+        };
+
+        const stopDragging = () => {
+            isDragging = false;
+        };
+
+        const drag = (e) => {
+            if (isDragging) {
+                form.style.left = `${e.clientX + offset[0]}px`;
+                form.style.top = `${e.clientY + offset[1]}px`;
+            }
+        };
+
+        // Event listeners for dragging
+        form.addEventListener('mousedown', startDragging, true);
+        document.addEventListener('mouseup', stopDragging, true);
+        document.addEventListener('mousemove', drag, true);
+
+        // Initialize functionalities
+        updatePosts();
+        greenText();
+        applyMarkdown();
+    });
+
     const loadForm = () => {
         const form = document.querySelector('.reply');
-        if (form.style.display === 'flex') {
-            form.style.display = 'none';
-        } else {
-            form.style.display = 'flex';
-        }
-    }
-
-    const openForm = () => {
-        const form = document.querySelector('.reply');
-        form.style.display = 'flex';
-    }
-
-    // find and replace html codes with actual characters
-    const postcontent = document.querySelectorAll('.postcontent');
-    postcontent.forEach(post => {
-        post.innerHTML = post.innerHTML.replace(/&gt;/g, '>');
-        post.innerHTML = post.innerHTML.replace(/&lt;/g, '<');
-        post.innerHTML = post.innerHTML.replace(/&quot;/g, '"');
-        post.innerHTML = post.innerHTML.replace(/&amp;/g, '&');
-    });
-
-    const replyTo = (postid) => {
-        openForm();
-        const content = document.getElementById('formcontent');
-        content.value = `>>${postid}\n`;
-        content.focus();
-    }
-
-    //draggable reply form
-    const reply = document.querySelector('.reply');
-    let isDown = false;
-    let offset = [0, 0];
-    let currentPos = {
-        x: 0,
-        y: 0
+        form.style.display = form.style.display === 'flex' ? 'none' : 'flex';
     };
 
-    reply.addEventListener('mousedown', (e) => {
-        if (e.target.tagName.toLowerCase() !== 'input' && e.target.tagName.toLowerCase() !== 'textarea') {
-            isDown = true;
-            offset = [
-                reply.offsetLeft - e.clientX,
-                reply.offsetTop - e.clientY
-            ];
+    const replyTo = (postid) => {
+        const content = document.getElementById('formcontent');
+        content.value += `\n>>${postid}\n`;
+        content.focus();
+    };
+    
+    const getSessionCookie = () => {
+        const name = "session=";
+        //get session cookie and log it to console
+        const decodedCookie = decodeURIComponent(document.cookie);
+        const cookieArray = decodedCookie.split(';');
+        for(let i = 0; i < cookieArray.length; i++) {
+            const cookie = cookieArray[i].trim();
+            if (cookie.indexOf(name + "=") === 0) {
+                console.log(cookie);
+            }
         }
-    }, true);
+    }
 
-    document.addEventListener('mouseup', () => {
-        isDown = false;
-    }, true);
 
-    document.addEventListener('mousemove', (event) => {
-        event.preventDefault();
-        if (isDown) {
-            currentPos.x = event.clientX;
-            currentPos.y = event.clientY;
-            reply.style.left = (currentPos.x + offset[0]) + 'px';
-            reply.style.top = (currentPos.y + offset[1]) + 'px';
-        }
-    }, true);
-
-    // markdown rendering
-    document.addEventListener("DOMContentLoaded", function() {
-        const postContents = document.getElementsByClassName('postcontent');
-        for (let i = 0; i < postContents.length; i++) {
-            postContents[i].innerHTML = marked.parse(postContents[i].innerHTML);
-        }
-    });
-
-    // if text begins with >, change color
-    postcontent.forEach(post => {
-        post.innerHTML = post.innerHTML.replace(/^&gt;(?!&gt;).*$/gm, match => `<span style="color: #4CAF50;">${match}</span>`);
-    });
-
+    getSessionCookie();
 </script>
+
+
 {{end}}

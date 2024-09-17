@@ -9,7 +9,6 @@ import (
 	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/home"
-	"achan.moe/stripe"
 	captcha "achan.moe/utils/captcha"
 	"achan.moe/utils/config"
 	"achan.moe/utils/hitcounter"
@@ -240,6 +239,11 @@ func Routes(e *echo.Echo) {
 		// Serve the file
 		return c.File(filePath)
 	})
+	e.GET("/thumb/:f", func(c echo.Context) error {
+		file := c.Param("f")
+		filepath := fmt.Sprintf("thumbs/%s", file)
+		return c.File(filepath)
+	})
 	e.GET("/banner/:b/:f", func(c echo.Context) error {
 		board := c.Param("b")
 		file := c.Param("f")
@@ -329,9 +333,6 @@ func Routes(e *echo.Echo) {
 	// store
 	e.GET("/store", func(c echo.Context) error {
 		return home.StoreHandler(c)
-	})
-	e.GET("/success", func(c echo.Context) error {
-		return stripe.SuccessHandler(c)
 	})
 
 	// profile

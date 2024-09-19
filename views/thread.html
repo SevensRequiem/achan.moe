@@ -10,28 +10,30 @@
     <hr>
     <a href="#" onclick="loadForm(); return false;" class="createpost">Post a Reply</a>
     <hr>
-    <div class="container">
-        <fieldset id="thread">
-            <legend>{{.Thread.Author}} // {{.Thread.Subject}} - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
-                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: {{.Thread.ImageURL}}</span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
+     <div class="container">
+        <span>{{.SelfPosts}} self</span>
+        <fieldset id="thread" id="{{.Thread.PostID}}">
+            <legend>{{.Thread.Author}} // <span class="subject">{{.Thread.Subject}}</span> - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
+                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: <span class="file">{{.Thread.ImageURL}}</span></span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
                 href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{else if .IsJanny}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
-                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}} <a class="postid" href="#" onclick="replyTo('{{.Thread.PostID}}');">#{{.Thread.PostID}}</a></legend>
+                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}} <a class="postid" href="#" data-id="{{.Thread.PostID}}">#{{.Thread.PostID}}</a></legend>
             {{if .Thread.ImageURL}}
             <img src="/file/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image" id="threadfile">
             {{end}}
             <p class="postcontent">{{.Thread.Content}}</p>
-                <script>
-                    const threadfile = document.getElementById("threadfile");
-                    const srcurl = threadfile.src;
-                    if (/\.(png|jpg|jpeg|gif)$/i.test(srcurl)) {
-                    } else if (/\.(webm|mp4)$/i.test(srcurl)) {
-                        threadfile.outerHTML = `<video controls><source src="${srcurl}" type="video/${srcurl.split('.').pop()}"></video>`;
-                    } else if (/\.(mp3|wav)$/i.test(srcurl)) {
-                        threadfile.outerHTML = `<audio controls><source src="${srcurl}" type="audio/${srcurl.split('.').pop()}"></audio>`;
-                    } else {
-                        threadfile.outerHTML = `<a href="${srcurl}">Download File</a>`;
-                    }
-                </script>
+            <span>{{.Thread.Upvotes}} / {{.Thread.Downvotes}} <a href="#" onclick="threadupvote('{{.Thread.ThreadID}}')">Upvote</a> | <a href="#" onclick="threaddownvote('{{.Thread.ThreadID}}')">Downvote</a></span>
+            <script>
+                const threadfile = document.getElementById("threadfile");
+                const srcurl = threadfile.src;
+                if (/\.(png|jpg|jpeg|gif)$/i.test(srcurl)) {
+                } else if (/\.(webm|mp4)$/i.test(srcurl)) {
+                    threadfile.outerHTML = `<video controls><source src="${srcurl}" type="video/${srcurl.split('.').pop()}"></video>`;
+                } else if (/\.(mp3|wav)$/i.test(srcurl)) {
+                    threadfile.outerHTML = `<audio controls><source src="${srcurl}" type="audio/${srcurl.split('.').pop()}"></audio>`;
+                } else {
+                    threadfile.outerHTML = `<a href="${srcurl}">Download File</a>`;
+                }
+            </script>
         </fieldset>
         {{if .IsAdmin}}
         <script>
@@ -71,13 +73,11 @@
         </script>
         {{end}}
         <div id="posts">
-            {{if .IsAdmin}}
             <script>
-                // Assuming BoardID and ThreadID are available in the template's root object
                 const boardID = "{{.BoardID}}";
                 const threadID = "{{.ThreadID}}";
                 const deletePost = async (postid) => {
-                    const url = `/admin/delete/${boardID}/${threadID}/` + postid;
+                    const url = `{{if .IsAdmin}}/admin/delete/{{else}}/janny/delete/{{end}}${boardID}/${threadID}/` + postid;
                     const response = await fetch(url, {
                         method: "DELETE",
                         headers: {
@@ -89,62 +89,91 @@
                     }
                 }
             </script>
-            {{else if .IsJanny}}
-            <script>
-                // Assuming BoardID and ThreadID are available in the template's root object
-                const boardID = "{{.BoardID}}";
-                const threadID = "{{.ThreadID}}";
-                const deletePost = async (postid) => {
-                    const url = `/janny/delete/${boardID}/${threadID}/` + postid;
-                    const response = await fetch(url, {
-                        method: "DELETE",
-                        headers: {
-                            "Content-Type": "application/json"
-                        }
-                    });
-                    if (response.ok) {
-                        window.location.reload();
-                    }
+            {{range .Posts}}
+            <fieldset class="post">
+                <legend><span class="postid" data-id="{{.PostID}}">{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
+                    {{if $.IsAdmin}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |{{end}}
+                    <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>
+                </legend>
+                {{if .ImageURL}}
+                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
+                {{end}}
+                <p class="postcontent">{{.Content}}</p>
+                <span>{{.Upvotes}} / {{.Downvotes}} <a href="#" onclick="upvote('{{.PostID}}')">Upvote</a> | <a href="#" onclick="downvote('{{.PostID}}')">Downvote</a></span>
+            </fieldset>
+            {{end}}
+        </div>
+    </div>
+    <script>
+        const upvote = async (postid) => {
+            const url = `/vote/up/${boardID}/${threadID}/${postid}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
                 }
-            </script>
-
-            {{range .Posts}}
-            <fieldset class="post">
-                <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
-                    <a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |
-                    <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>
-                </legend>
-                {{if .ImageURL}}
-                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
-                {{end}}
-                <p class="postcontent">{{.Content}}</p>
-
-            </fieldset>
-            {{end}}
-            {{else if .IsJanny}}
-            {{range .Posts}}
-            <fieldset class="post">
-                <legend><span>{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
-                    <a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |
-                    <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>
-                </legend>
-                {{if .ImageURL}}
-                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
-                {{end}}
-                <p class="postcontent">{{.Content}}</p>
-            </fieldset>
-            {{end}}
-            {{else}}
-            {{range .Posts}}
-            <fieldset class="post">
-                <legend><span><a href="#" onclick="replyTo('{{.PostID}}');">#{{.PostID}}</a></span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}</legend>
-                {{if .ImageURL}}
-                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
-                {{end}}
-                <p class="postcontent">{{.Content}}</p>
-            </fieldset>
-            {{end}}
-            {{end}}
+            });
+    
+            if (response.ok) {
+                window.location.reload(); // Reload on success
+            } else {
+                const error = await response.json();
+                alert(`Error: ${error.message || "Failed to upvote"}`);
+            }
+        }
+    
+        const downvote = async (postid) => {
+            const url = `/vote/down/${boardID}/${threadID}/${postid}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+    
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                const error = await response.json();
+                alert(`Error: ${error.message || "Failed to downvote"}`);
+            }
+        }
+    
+        const threadupvote = async (threadid) => {
+            const url = `/vote/up/${boardID}/${threadid}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+    
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                const error = await response.json();
+                alert(`Error: ${error.message || "Failed to upvote thread"}`);
+            }
+        }
+    
+        const threaddownvote = async (threadid) => {
+            const url = `/vote/down/${boardID}/${threadid}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+    
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                const error = await response.json();
+                alert(`Error: ${error.message || "Failed to downvote thread"}`);
+            }
+        }
+    </script>
+    
             <script>
                 document.querySelectorAll(".postfile").forEach(postfile => {
                     const postsrc = postfile.src;
@@ -165,17 +194,49 @@
         <hr>
         <fieldset class="reply">
             <legend>Reply</legend>
-            <form action="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}" method="post" enctype="multipart/form-data">
+            <form action="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}" method="post" enctype="multipart/form-data" id="postform">
                 <input type="text" id="boardID" name="b" value="{{.BoardID}}" hidden><br><br>
                 <label for="author">Username:</label>
                 <input type="text" id="author" name="author" value="Anonymous" required><br><br>
                 <label for="content">Post:</label>
-                <textarea id="formcontent" name="content"></textarea><br><br>
+                <textarea id="formcontent" name="content" maxlength="500"></textarea><br><br>
+                <div id="charCount">500 characters remaining</div>
                 <label for="image">Image:</label>
                 <input type="file" id="image" name="image" accept="image/*"><br><br>
-                <button type="submit">Submit Post</button>
+                <a href="#" id="submitpost" return false;>Submit</a>
             </form>
         </fieldset>
+        <script>
+            //show current chars/maxlength at the bottom right of the textarea
+            document.addEventListener('DOMContentLoaded', function() {
+                const formcontent = document.getElementById('formcontent');
+                if (formcontent) {
+                    const maxLength = formcontent.getAttribute('maxlength');
+                    formcontent.addEventListener('input', function() {
+                        const currentLength = formcontent.value.length;
+                        const remainingChars = maxLength - currentLength;
+                        document.getElementById('charCount').innerText = `${remainingChars} characters remaining`;
+                    });
+                } else {
+                    console.error('Element with ID "formcontent" not found.');
+                }
+            });
+
+        </script>
+        <script>
+            //axios for form submission
+            document.getElementById('submitpost').addEventListener('click', function() {
+                const postform = document.getElementById('postform'); // Select the form with the specific ID
+                const postformData = new FormData(postform);
+                axios.post(postform.action, postformData)
+                    .then(response => {
+                        location.reload(); // Reload the page to see the new thread
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    });
+            });
+        </script>
     </div>
     <script>
 
@@ -267,7 +328,6 @@ margin-bottom: 2rem;
         padding: 10px;
         background-color: #494949;
         border: 1px solid #1a1a1a;
-        color: #AAF;
         text-decoration: none;
     }
     .createpost:hover {
@@ -291,6 +351,27 @@ margin-bottom: 2rem;
         border: 1px solid #494949;
         width: 100%;
     }
+
+    .replyquote {
+        color: rgb(6, 255, 243);
+    }
+    .replyquote a {
+        color: rgb(6, 255, 243);
+        text-decoration: none;
+    }
+
+    .postcontent {
+        padding: 10px;
+    }
+
+    .file {
+        color: #055685;
+    }
+
+    .subject {
+        color: #73ff00;
+    }
+
 </style>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -313,16 +394,37 @@ margin-bottom: 2rem;
             textarea.innerHTML = html;
             return textarea.value;
         };
+// Function to scroll to the post with the given ID
+// Function to scroll to the post with the given ID
+const showPost = (postId) => {
+        const post = document.querySelector(`.postid[data-id='${postId}']`);
+        if (post) {
+            post.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
 
-        // Apply greentext formatting
-        const greenText = () => {
-    const gtext = document.querySelectorAll('.postcontent p');
-    gtext.forEach(post => {
-        // Replace lines starting with '>' with green colored text
-        post.innerHTML = post.innerHTML.replace(/(^|[^>])(&gt;[^\n<]*)(?=\.[\s]*|\n|$)/g, '$1<span style="color: green;">$2</span>');
-    });
-};
+    // Attach showPost to the window object to make it globally accessible
+    window.showPost = showPost;
 
+    // Apply greentext formatting
+    const greenText = () => {
+        const gtext = document.querySelectorAll('.postcontent p');
+        gtext.forEach(post => {
+            let lines = post.innerHTML.split('\n');
+            lines = lines.map(line => {
+                if (line.startsWith('&gt;&gt;')) {
+                    // capture the post ID and format it
+                    const postId = line.slice(4).trim();
+                    return `<span class="replyquote"><a href="#" onclick="showPost('${postId}');">${postId}</a></span>`;
+                } else if (line.startsWith('&gt;')) {
+                    return `<span style="color: green;">${line}</span>`;
+                } else {
+                    return line;
+                }
+            });
+            post.innerHTML = lines.join('\n');
+        });
+    };
         // Apply markdown parsing
         const applyMarkdown = () => {
             postContents.forEach(post => {

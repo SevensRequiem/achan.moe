@@ -62,6 +62,9 @@ type User struct {
 	Premium       bool
 	Email         string
 	TransactionID string
+	Reputation    int
+	Posts         int
+	Threads       int
 }
 
 type Group struct {
@@ -72,12 +75,6 @@ type Group struct {
 
 type JannyBoards struct {
 	Boards []string `json:"boards"`
-}
-
-type RateLimit struct {
-	IP       string    `json:"ip"`
-	Count    int       `json:"count"`
-	TimeLast time.Time `json:"time_last"`
 }
 
 // Implement the Scanner interface for Group
@@ -367,19 +364,13 @@ func ModCheck(c echo.Context) bool {
 	// Check if the user is a moderator
 	return user.Groups.Moderator
 }
-func AuthCheck(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		// Retrieve the session
-		sess, _ := session.Get("session", c)
+func AuthCheck(c echo.Context) bool {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
 
-		// Check if the user is logged in
-		if sess.Values["user"] == nil {
-			return c.Redirect(http.StatusTemporaryRedirect, "/login")
-		}
-
-		// Call the next handler
-		return next(c)
-	}
+	// Check if the user is in the session and not nil
+	_, ok := sess.Values["user"].(User)
+	return ok
 }
 
 func PremiumCheck(c echo.Context) bool {

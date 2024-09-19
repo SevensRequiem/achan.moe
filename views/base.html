@@ -17,6 +17,7 @@
 
     <link rel="icon" type="image/png" href="https://achan.moe/assets/img/favicon.png" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/assets/js/axios.js"></script>
     <link rel="canonical" href="https://achan.moe" />
 
     <title>achan.moe</title>
@@ -64,7 +65,6 @@
             <br>
             <span id="mainnav">
                 <a href="/">home</a>
-                <a href="/store">store</a>
                 {{if .User}}
                 <span class="user">[{{.User}}]</span>
                 <a href="/logout">logout</a>
@@ -141,53 +141,53 @@
         serverstatus();
         </script>-->
             <script>
-                const serverstatusElement = document.querySelector(".server-status-text");
-                const serverusers = document.querySelector(".server-status-users");
-                const wsurl = "wss://dev123.achan.moe/ws";
-                const ws = new WebSocket(wsurl);
-            
-                ws.onopen = function () {
-                    console.log("WebSocket connection established");
-                    serverstatusElement.innerText = "OK";
-                };
-            
-                ws.onmessage = function (event) {
-                    try {
-                        const message = event.data;
-                        console.log("Received message:", message);
-            
-                        // Check if the message is in JSON format
-                        if (message.startsWith("{") && message.endsWith("}")) {
-                            const parsedMessage = JSON.parse(message);
-                            if (parsedMessage.connections !== undefined) {
-                                serverusers.innerText = `${parsedMessage.connections}`;
-                            }
-                        } else {
-                            console.warn("Received non-JSON message:", message);
-                        }
-                    } catch (error) {
-                        console.error("Error parsing message:", error);
-                    }
-                };
-            
-                ws.onclose = function () {
-                    console.log("WebSocket connection closed");
-                    serverstatusElement.innerText = "NIL";
-                    serverstatusElement.style.color = "red";
-                };
-            
-                ws.onerror = function (error) {
-                    console.error("WebSocket error:", error);
-                    serverstatusElement.innerText = "ERR";
-                    serverstatusElement.style.color = "red";
-                };
-            
-                // Keep the connection alive
-                setInterval(function () {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        ws.send("keep-alive");
-                    }
-                }, 30000);
+const serverstatusElement = document.querySelector(".server-status-text");
+const serverusers = document.querySelector(".server-status-users");
+const wsurl = "wss://dev123.achan.moe/ws";
+const ws = new WebSocket(wsurl);
+
+ws.onopen = function () {
+    console.log("WebSocket connection established");
+    serverstatusElement.innerText = "OK";
+};
+
+ws.onmessage = function (event) {
+    try {
+        const message = event.data;
+        console.log("Received message:", message);
+
+        // Check if the message is in JSON format
+        if (message.startsWith("{") && message.endsWith("}")) {
+            const parsedMessage = JSON.parse(message);
+            if (parsedMessage.connections !== undefined) {
+                serverusers.innerText = `${parsedMessage.connections}`;
+            }
+        } else {
+            console.warn("Received non-JSON message:", message);
+        }
+    } catch (error) {
+        console.error("Error parsing message:", error);
+    }
+};
+
+ws.onclose = function () {
+    console.log("WebSocket connection closed");
+    serverstatusElement.innerText = "NIL";
+    serverstatusElement.style.color = "red";
+};
+
+ws.onerror = function (error) {
+    console.error("WebSocket error:", error);
+    serverstatusElement.innerText = "ERR";
+    serverstatusElement.style.color = "red";
+};
+
+// Keep the connection alive
+setInterval(function () {
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send("keep-alive");
+    }
+}, 30000);
             </script>
     </header>
     <div id="logindropdown" style="display: none;">
@@ -278,7 +278,6 @@
 
 </html>
 <style>
-
     #consent {
         position: fixed;
         top: 0;
@@ -435,14 +434,16 @@
         color: #AAF;
     }
     #page-url {
-        color: #AAF;
+        color: #02ff6b;
     }
     #page-url::before {
         content: "[";
+        color: #AAF;
         margin-right: 5px;
     }
     #page-url::after {
         content: "]";
+        color: #AAF;
         margin-left: 5px;
     }
     #footer-links {

@@ -42,7 +42,9 @@
 
 * a {
   text-decoration: none;
+  color: #02ff6b;
 }
+
 
 html,
 body {
@@ -319,18 +321,4 @@ form button {
 #bannerad img {
   width: 300px;
   height: 70px;
-}
-
-.createpost {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto;
-  width: 20%;
-  text-align: center;
-  padding: 10px;
-  background-color: #0245647a;
-  border: 1px solid #1a1a1a;
-  color: #AAF;
-  text-decoration: none;
 }

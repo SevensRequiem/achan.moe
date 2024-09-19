@@ -14,6 +14,7 @@ import (
 	"achan.moe/board"
 	config "achan.moe/utils/config"
 	"achan.moe/utils/hitcounter"
+	"achan.moe/utils/news"
 	"achan.moe/utils/stats"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
@@ -45,6 +46,20 @@ func HomeHandler(c echo.Context) error {
 
 	data["PostCount"] = board.GetGlobalPostCount()
 	data["UserCount"] = auth.GetTotalUsers()
+	newsItems := news.GetNews()
+
+	// Convert news articles to a slice of maps
+	News := make([]map[string]interface{}, len(newsItems))
+	for i, n := range newsItems {
+		News[i] = map[string]interface{}{
+			"Title":   n.Title,
+			"Content": n.Content,
+			"Date":    n.Date,
+		}
+	}
+
+	// Prepare the data to send
+	data["News"] = News
 	latestPosts, err := board.GetLatestPosts(10)
 	if err != nil {
 		// Handle the error, for example, log it or return it
@@ -105,6 +120,13 @@ func ThreadHandler(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid thread ID")
 	}
 
+	session, err := session.Get("session", c)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	selfposts := session.Values["self_post_id"]
+
 	// Assuming you want to display posts in the thread, and each post has a Title field
 	data["Thread"] = board.GetThread(b, tInt)
 	data["ThreadID"] = tInt
@@ -115,6 +137,7 @@ func ThreadHandler(c echo.Context) error {
 	data["IsJanny"] = auth.JannyCheck(c, b)
 	boardid := board.GetBoardID(c.Param("b"))
 	data["Banner"] = banners.GetRandomBanner(boardid)
+	data["SelfPosts"] = selfposts
 
 	// Execute the template once with all the data prepared
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)

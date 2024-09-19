@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -20,6 +21,7 @@ import (
 	"achan.moe/auth"
 	"achan.moe/database"
 	"achan.moe/images"
+	"achan.moe/utils/queue"
 	"achan.moe/utils/sitemap"
 	"github.com/google/uuid"
 	"github.com/labstack/echo-contrib/session"
@@ -56,6 +58,9 @@ type Post struct {
 	Sticky         bool   `gob:"Sticky"`
 	Locked         bool   `gob:"Locked"`
 	Page           int    `gob:"Page"`
+	Upvotes        int    `gob:"Upvotes"`
+	Downvotes      int    `gob:"Downvotes"`
+	ReportCount    int    `gob:"ReportCount"`
 }
 
 type RecentPosts struct {
@@ -78,6 +83,8 @@ type PostCounter struct {
 	PostCount int64 `gob:"PostCount" gorm:"default:0"`
 }
 
+var q = queue.New()
+
 func init() {
 	db := database.DB
 
@@ -85,284 +92,216 @@ func init() {
 	db.AutoMigrate(&RecentPosts{})
 	db.AutoMigrate(&PostCounter{})
 
+	// Initialize the queue
+	// Start processing the queue
+	q.Process()
+	fmt.Println("Thread Queue processing started")
 }
 
-func CreateThread(c echo.Context) error {
-	if auth.PremiumCheck(c) {
-		var limiter = rate.NewLimiter(rate.Every(5*time.Minute), 1)
-		if !limiter.Allow() {
-			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
-		}
+func extractThreadData(c echo.Context) (string, string, string, string, string, *multipart.FileHeader, error) {
+	boardID := c.Param("b")
+	content := c.FormValue("content")
+	subject := c.FormValue("subject")
+	author := c.FormValue("author")
+	image, err := c.FormFile("image")
+	if err != nil && err != http.ErrMissingFile {
+		return "", "", "", "", "", nil, err
 	}
 
-	if CheckIfLocked(c.Param("b")) {
-		return c.JSON(http.StatusForbidden, "Board is locked")
-	}
-	if CheckIfArchived(c.Param("b")) {
-		return c.JSON(http.StatusForbidden, "Board is archived")
-	}
-	err := c.Request().ParseMultipartForm(10 << 20)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Internal server error1")
-	}
-	// get board id
-	boardID := c.Param("b")
+	return boardID, content, subject, author, c.FormValue("isSticky"), image, nil
+}
+
+func processThread(c echo.Context, boardID, content, subject, author, stickyValue string, image *multipart.FileHeader) error {
 	if boardID == "" {
-		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
+		return errors.New("Board ID cannot be empty")
+	}
+	if CheckIfLocked(boardID) {
+		return errors.New("Board is locked")
+	}
+	if CheckIfArchived(boardID) {
+		return errors.New("Board is archived")
 	}
 	imgonly := CheckIfImageOnly(boardID)
-	if imgonly && c.FormValue("content") != "" {
-		return c.JSON(http.StatusBadRequest, "This board only allows image posts")
+	if imgonly && content != "" {
+		return errors.New("This board only allows image posts")
 	}
-	// get thread id
-	boardDir := "boards/" + boardID
-	// scan all files in the board directory each gob file is a thread, titled with an integer
-	files, err := ioutil.ReadDir(boardDir)
+	files, err := ioutil.ReadDir("boards/" + boardID)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Internal server error2")
+		return err
 	}
-
-	// get the thread id by counting the number of gob files in the board directory
 	threadID := 1
 	for _, file := range files {
 		if !file.IsDir() && strings.HasSuffix(file.Name(), ".gob") {
 			threadID++
 		}
 	}
-	// if 30 threads already exist, return an error
 	if threadID > 30 {
 		DeleteLastThread(boardID)
 	}
-	// get post content
-	content := c.FormValue("content")
 	if content == "" && !imgonly {
-		return c.JSON(http.StatusBadRequest, "Content cannot be empty")
+		return errors.New("Content cannot be empty")
 	}
-	// get post subject
-	subject := c.FormValue("subject")
 	if subject == "" {
 		subject = "No Subject"
 	}
-	// get post author
-	author := c.FormValue("author")
 	if author == "" {
-		return c.JSON(http.StatusBadRequest, "Author cannot be empty")
+		return errors.New("Author cannot be empty")
 	}
-
-	// get image
-	image, err := c.FormFile("image")
-	if err != nil {
-		if err == http.ErrMissingFile {
-			image = nil // This is somewhat redundant as image would be nil if err != nil
-		} else {
-			return c.JSON(http.StatusBadRequest, "There was an error retrieving the file")
-		}
+	if image == nil {
+		return errors.New("Image is required for threads")
 	}
-	// max filesize
-	if image != nil && image.Size > 11<<20 {
-		return c.JSON(http.StatusBadRequest, "File is too large")
+	if image.Size > 11<<20 {
+		return errors.New("File is too large")
 	}
-	// make sure image is only the following formats, gif, jpg, jpeg, png, webm, mp4, webp, pdf
-	if image != nil {
-		imageExt := filepath.Ext(image.Filename)
-		if imageExt != ".gif" && imageExt != ".jpg" && imageExt != ".jpeg" && imageExt != ".png" && imageExt != ".webm" && imageExt != ".mp4" && imageExt != ".webp" && imageExt != ".pdf" {
-			return c.JSON(http.StatusBadRequest, "Invalid image extension")
-		}
+	ext := filepath.Ext(image.Filename)
+	if !isValidImageExtension(ext) {
+		return errors.New("Invalid image extension")
 	}
-
 	imageURL, err := saveImage(boardID, image)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return err
 	}
-
 	go images.GenerateThumbnail("boards/"+boardID+"/"+imageURL, "thumbs/"+imageURL, 200, 200)
-	// save the image to the board directory
-	// /img/:b/:f
-	sticky := false
-	if !auth.AdminCheck(c) {
-		stickyValue := c.FormValue("isSticky")
-		if stickyValue == "on" {
-			sticky = true
-		}
-	}
-	if !auth.JannyCheck(c, boardID) {
-		stickyValue := c.FormValue("isSticky")
-		if stickyValue == "on" {
-			sticky = true
-		}
-	}
+	AddGlobalPostCount()
+	AddBoardPostCount(boardID)
+	sticky := stickyValue == "on"
 	locked := false
 	if !auth.AdminCheck(c) {
 		lockedValue := c.FormValue("isLocked")
-		if lockedValue == "on" {
-			locked = true
-		}
+		locked = lockedValue == "on"
 	}
-	if !auth.JannyCheck(c, boardID) {
-		lockedValue := c.FormValue("isLocked")
-		if lockedValue == "on" {
-			locked = true
-		}
+	// limit the subject length to 30 characters
+	if len(subject) > 30 {
+		subject = subject[:30]
 	}
-	AddGlobalPostCount()
-	AddBoardPostCount(boardID)
-
-	// Use the safeEndIndex for slicing content
-
-	safeEndIndex := 20
-	if len(content) < safeEndIndex {
-		safeEndIndex = len(content)
-	}
-
 	post := Post{
 		BoardID:        boardID,
 		ThreadID:       strconv.Itoa(threadID),
 		PostID:         GenUUID(),
 		Content:        content,
-		PartialContent: content[:safeEndIndex],
+		PartialContent: content[:min(len(content), 20)],
 		ImageURL:       imageURL,
 		ThumbURL:       "thumbs/" + imageURL,
 		Subject:        subject,
 		Author:         author,
 		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
-		IP:             c.RealIP(),
+		IP:             "IP Placeholder", // Replace with actual IP retrieval
 		Sticky:         sticky,
 		Locked:         locked,
 	}
-	SetSessionSelfPostID(c, post.PostID)
-	// create a gob file for the thread
+	boardDir := "boards/" + boardID
 	jsonFilePath := boardDir + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.OpenFile(jsonFilePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Internal server error6")
+		return err
 	}
 	defer file.Close()
-
-	// Since it's a new thread, we start with an empty slice of Post and append the new post
 	var posts []Post
-	posts = append(posts, post)
-
-	// Truncate the file to remove old content before writing new content
 	if err := file.Truncate(0); err != nil {
-		return c.JSON(http.StatusInternalServerError, "Error truncating file7")
+		return err
 	}
 	if _, err := file.Seek(0, os.SEEK_SET); err != nil {
-		return c.JSON(http.StatusInternalServerError, "Error seeking file")
+		return err
 	}
-	if err := gob.NewEncoder(file).Encode(posts); err != nil {
-		return c.JSON(http.StatusInternalServerError, "Error encoding JSON")
+	if err := gob.NewEncoder(file).Encode(append(posts, post)); err != nil {
+		return err
 	}
-
-	boardName := url.PathEscape(c.Param("b"))
-	threadIDStr := strconv.Itoa(threadID)
-	redirectURL := "/board/" + boardName + "/" + threadIDStr
 	if LatestPostsCheck(c, boardID) {
 		AddRecentPost(post)
 	}
-	sitemap := sitemap.Sitemap{
-		XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9",
-	}
-	sitemap.AddURL("https://achan.moe/board/"+boardName+"/"+threadIDStr, "daily", "0.5")
-	return c.Redirect(http.StatusFound, redirectURL)
-}
-func checkReplyID(id string) bool {
-	db := database.DB
-	return db.Where("post_id = ?", id).First(&Post{}).RowsAffected > 0
+	sitemap := sitemap.Sitemap{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9"}
+	sitemap.AddURL("https://achan.moe/board/"+url.PathEscape(boardID)+"/"+strconv.Itoa(threadID), "daily", "0.5")
+	return nil
 }
 
-func CreateThreadPost(c echo.Context) error {
-	boardID := c.Param("b")
+func CreateThread(c echo.Context) error {
 	if auth.PremiumCheck(c) {
-		var limiter = rate.NewLimiter(rate.Every(5*time.Minute), 1)
+		limiter := rate.NewLimiter(rate.Every(5*time.Minute), 1)
 		if !limiter.Allow() {
 			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
 		}
 	}
 
-	replyto := c.FormValue("replyto")
-	if replyto == "" {
-		replyto = ""
+	boardID, content, subject, author, stickyValue, image, err := extractThreadData(c)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
-	if replyto != "" && !checkReplyID(replyto) {
-		return c.JSON(http.StatusBadRequest, "Invalid reply ID")
+	q.Enqueue(func() {
+		if err := processThread(c, boardID, content, subject, author, stickyValue, image); err != nil {
+			fmt.Println("Error processing thread:", err)
+		}
+	})
+
+	return nil
+}
+
+func extractPostData(c echo.Context) (string, string, string, string, *multipart.FileHeader, error) {
+	boardID := c.Param("b")
+	content := c.FormValue("content")
+	author := c.FormValue("author")
+	image, err := c.FormFile("image")
+	if err != nil && err != http.ErrMissingFile {
+		return "", "", "", "", nil, err
 	}
 
+	if image == nil {
+		image = nil
+	}
+
+	return boardID, content, c.FormValue("replyto"), author, image, nil
+}
+
+func processPost(c echo.Context, boardID, content, replyto, author string, image *multipart.FileHeader, postid string) error {
 	if boardID == "" {
-		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
+		return errors.New("Board ID cannot be empty")
 	}
 	if CheckIfThreadLocked(c, boardID, c.Param("t")) {
-		return c.JSON(http.StatusForbidden, "Thread is locked")
+		return errors.New("Thread is locked")
 	}
-
 	if CheckIfLocked(boardID) {
-		return c.JSON(http.StatusForbidden, "Board is locked")
+		return errors.New("Board is locked")
 	}
-
 	if CheckIfArchived(boardID) {
-		return c.JSON(http.StatusForbidden, "Board is archived")
+		return errors.New("Board is archived")
 	}
 	imgonly := CheckIfImageOnly(boardID)
-	if imgonly && c.FormValue("content") != "" {
-		return c.JSON(http.StatusBadRequest, "This board only allows image posts")
+	if imgonly && content != "" {
+		return errors.New("This board only allows image posts")
 	}
-
 	threadID, err := strconv.Atoi(c.Param("t"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid thread ID")
+		return errors.New("Invalid thread ID")
 	}
-
-	content := c.FormValue("content")
 	if content == "" && !imgonly {
-		return c.JSON(http.StatusBadRequest, "Content cannot be empty")
+		return errors.New("Content cannot be empty")
 	}
-
-	author := c.FormValue("author")
 	if author == "" {
-		return c.JSON(http.StatusBadRequest, "Author cannot be empty")
+		return errors.New("Author cannot be empty")
 	}
-
-	var image *multipart.FileHeader
-
-	image, err = c.FormFile("image")
-	if err != nil {
-		if err == http.ErrMissingFile {
-			image = nil // This is somewhat redundant as image would be nil if err != nil
-		} else {
-			return c.JSON(http.StatusBadRequest, "There was an error retrieving the file")
-		}
-	}
-	if image != nil && image.Size > 11<<20 {
-		return c.JSON(http.StatusBadRequest, "File is too large")
-	}
-	if threadIsFull(boardID, threadID) {
-		return c.JSON(http.StatusForbidden, "Thread is full")
-	}
+	var imageURL string
 	if image != nil {
-		imageExt := filepath.Ext(image.Filename)
-		if imageExt != ".gif" && imageExt != ".jpg" && imageExt != ".jpeg" && imageExt != ".png" && imageExt != ".webm" && imageExt != ".mp4" && imageExt != ".webp" && imageExt != ".pdf" {
-			return c.JSON(http.StatusBadRequest, "Invalid image extension")
+		if image.Size > 11<<20 {
+			return errors.New("File is too large")
 		}
+		ext := filepath.Ext(image.Filename)
+		if !isValidImageExtension(ext) {
+			return errors.New("Invalid image extension")
+		}
+		imageURL, err = saveImage(boardID, image)
+		if err != nil {
+			return err
+		}
+		go images.GenerateThumbnail("boards/"+boardID+"/"+imageURL, "thumbs/"+imageURL, 200, 200)
 	}
-	imageURL, err := saveImage(boardID, image)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
-	}
-	go images.GenerateThumbnail("boards/"+boardID+"/"+imageURL, "thumbs/"+imageURL, 200, 200)
 	AddGlobalPostCount()
 	AddBoardPostCount(boardID)
-
-	// Use the safeEndIndex for slicing content
-	safeEndIndex := 20
-	if len(content) < safeEndIndex {
-		safeEndIndex = len(content)
-	}
 	post := Post{
 		BoardID:        boardID,
 		ThreadID:       strconv.Itoa(threadID),
-		PostID:         GenUUID(),
+		PostID:         postid,
 		Content:        content,
-		PartialContent: content[:safeEndIndex],
+		PartialContent: content[:min(len(content), 20)],
 		ImageURL:       imageURL,
 		ThumbURL:       "thumbs/" + imageURL,
 		Author:         author,
@@ -371,18 +310,111 @@ func CreateThreadPost(c echo.Context) error {
 		ParentID:       replyto,
 	}
 	if err := addPostToFile(boardID, threadID, post); err != nil {
-		return c.JSON(http.StatusInternalServerError, "Failed to add post to thread")
+		return err
 	}
 	SetSessionSelfPostID(c, post.PostID)
-	boardName := url.PathEscape(boardID)
-	threadIDStr := strconv.Itoa(threadID)
-	redirectURL := "/board/" + boardName + "/" + threadIDStr
-	if LatestPostsCheck(c, boardID) {
-		AddRecentPost(post)
+	return nil
+}
+func CreatePost(c echo.Context) error {
+	boardID, content, replyto, author, image, err := extractPostData(c)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
-	return c.Redirect(http.StatusFound, redirectURL)
+	if auth.PremiumCheck(c) {
+		limiter := rate.NewLimiter(rate.Every(5*time.Minute), 1)
+		if !limiter.Allow() {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
+		}
+	}
+	postID := GenUUID()
+
+	// Save session synchronously before enqueuing the task
+	updatedIDs, err := SetSessionSelfPostID(c, postID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update session"})
+	}
+	sess, err := session.Get("session", c)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get session"})
+	}
+	sess.Values["self_post_id"] = updatedIDs
+	if err := sess.Save(c.Request(), c.Response()); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save session"})
+	}
+	if replyto != "" && !checkReplyID(replyto) {
+		return c.JSON(http.StatusBadRequest, "Invalid reply ID")
+	}
+
+	q.Enqueue(func() {
+		if err := processPost(c, boardID, content, replyto, author, image, postID); err != nil {
+			fmt.Println("Error processing post:", err)
+		}
+	})
+
+	return nil
 }
+
+func CreateThreadPost(c echo.Context) error {
+	boardID, content, replyto, author, image, err := extractPostData(c)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	if auth.PremiumCheck(c) {
+		limiter := rate.NewLimiter(rate.Every(5*time.Minute), 1)
+		if !limiter.Allow() {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
+		}
+	}
+
+	if replyto != "" && !checkReplyID(replyto) {
+		return c.JSON(http.StatusBadRequest, "Invalid reply ID")
+	}
+
+	// Generate postID separately
+	postID := GenUUID()
+
+	// Save session synchronously before enqueuing the task
+	updatedIDs, err := SetSessionSelfPostID(c, postID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update session"})
+	}
+
+	sess, err := session.Get("session", c)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get session"})
+	}
+	sess.Values["self_post_id"] = updatedIDs
+	if err := sess.Save(c.Request(), c.Response()); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save session"})
+	}
+
+	q.Enqueue(func() {
+		if err := processPost(c, boardID, content, replyto, author, image, postID); err != nil {
+			fmt.Println("Error processing post:", err)
+		}
+	})
+
+	return nil
+}
+func checkReplyID(replyID string) bool {
+	db := database.DB
+	if db.Where("post_id = ?", replyID).First(&Post{}).RowsAffected > 0 {
+		return true
+	}
+	return false
+}
+func isValidImageExtension(ext string) bool {
+	validExtensions := []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".webm"}
+	for _, v := range validExtensions {
+		if ext == v {
+			return true
+		}
+	}
+	return false
+}
+
 func GenUUID() string {
 	b := make([]byte, 4) // 16 bytes = 128 bits
 	_, err := rand.Read(b)
@@ -391,7 +423,7 @@ func GenUUID() string {
 	}
 	id := hex.EncodeToString(b)
 	db := database.DB
-	if db.Where("post_id = ?", id).First(&Post{}).RowsAffected > 0 {
+	if db.Where("post_id = ?", id).First(&RecentPosts{}).RowsAffected > 0 {
 		return GenUUID()
 	}
 	return id
@@ -658,29 +690,20 @@ func GetThreads(boardID string) []Post {
 	return sortedPosts
 }
 
-func SetSessionSelfPostID(c echo.Context, postID string) {
+func SetSessionSelfPostID(c echo.Context, postID string) ([]string, error) {
 	sess, err := session.Get("session", c)
 	if err != nil {
-		log.Printf("Error getting session: %v", err)
-		return
+		return nil, err
 	}
 
-	// Debugging the session values
-	log.Printf("Session before update: %v", sess.Values)
-
-	// Check if the key exists and is an array
+	var updatedIDs []string
 	if ids, ok := sess.Values["self_post_id"].([]string); ok {
-		sess.Values["self_post_id"] = append(ids, postID)
+		updatedIDs = append(ids, postID)
 	} else {
-		sess.Values["self_post_id"] = []string{postID}
+		updatedIDs = []string{postID}
 	}
 
-	// Debugging the session values after update
-	log.Printf("Session after update: %v", sess.Values)
-
-	if err := sess.Save(c.Request(), c.Response()); err != nil {
-		log.Printf("Error saving session: %v", err)
-	}
+	return updatedIDs, nil
 }
 
 func GetPosts(boardID string, threadID int) []Post {
@@ -733,6 +756,10 @@ func AddRecentPost(post Post) {
 		db.Order("timestamp ASC").First(&oldestPost)
 		// Assuming RecentPosts has an ID field that serves as the primary key
 		db.Where("id = ?", oldestPost.ID).Delete(&RecentPosts{})
+	}
+
+	if len(post.Subject) > 30 {
+		post.Subject = post.Subject[:30]
 	}
 	recentPost := RecentPosts{
 		BoardID:        post.BoardID,

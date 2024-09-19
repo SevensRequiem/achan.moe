@@ -9,10 +9,12 @@ import (
 	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/home"
+	vote "achan.moe/user/votes"
 	captcha "achan.moe/utils/captcha"
 	"achan.moe/utils/config"
 	"achan.moe/utils/hitcounter"
 	"achan.moe/utils/minecraft"
+	"achan.moe/utils/news"
 	"achan.moe/utils/stats"
 	"achan.moe/utils/websocket"
 	"github.com/labstack/echo/v4"
@@ -142,6 +144,13 @@ func Routes(e *echo.Echo) {
 		return nil
 	})
 
+	e.POST("/admin/addnews", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		news.NewNews(c)
+		return nil
+	})
 	e.DELETE("/admin/delete/:b", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
 			c.JSON(http.StatusUnauthorized, "Unauthorized")
@@ -330,11 +339,6 @@ func Routes(e *echo.Echo) {
 		return websocket.WebsocketHandler(c)
 	})
 
-	// store
-	e.GET("/store", func(c echo.Context) error {
-		return home.StoreHandler(c)
-	})
-
 	// profile
 	e.GET("/profile", func(c echo.Context) error {
 		return home.ProfileHandler(c)
@@ -344,4 +348,5 @@ func Routes(e *echo.Echo) {
 		return auth.UpdateUser(c)
 	})
 
+	vote.VoteRoutes(e)
 }

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"achan.moe/auth"
 	"achan.moe/database"
@@ -30,7 +29,7 @@ type Board struct {
 type Post struct {
 	BoardID   string `gob:"BoardID"`
 	ThreadID  string `gob:"ThreadID"`
-	PostID    int64  `gob:"PostID"`
+	PostID    string `gob:"PostID"`
 	Content   string `gob:"Content"`
 	ImageURL  string `gob:"ImageURL"`
 	Subject   string `gob:"Subject"`
@@ -131,27 +130,24 @@ func DeleteThread(c echo.Context) error {
 	threadID := c.Param("t")
 	board := c.Param("b")
 
-	// Convert threadID from string to int64
-	threadIDInt, err := strconv.ParseInt(threadID, 10, 64)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid thread ID")
-	}
 	// Delete RecentPosts entries
-	RemoveFromRecentPosts(0, threadIDInt)
+	RemoveFromRecentPosts("", threadID)
 
 	// Construct the path to the thread's JSON file
-	threadFilePath := filepath.Join("boards", board, threadID+".gob")
+	threadFilePath := filepath.Join("boards/" + board + "/" + threadID + ".gob")
 
 	// Open and decode the thread's JSON file
 	gobFile, err := os.Open(threadFilePath)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Internal server error")
+		log.Printf("Error opening Gob file: %v", err)
+		return c.JSON(http.StatusInternalServerError, "Internal server error: unable to open thread file")
 	}
 	defer gobFile.Close()
 
 	var posts []Post
 	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
-		return c.JSON(http.StatusInternalServerError, "Error decoding GOB")
+		log.Printf("Error decoding Gob file: %v", err)
+		return c.JSON(http.StatusInternalServerError, "Internal server error: unable to decode thread file: "+err.Error())
 	}
 
 	// Delete images associated with the thread
@@ -159,22 +155,24 @@ func DeleteThread(c echo.Context) error {
 		if post.ImageURL != "" {
 			imagePath := filepath.Join("boards", board, post.ImageURL)
 			if err := os.Remove(imagePath); err != nil {
-				return c.JSON(http.StatusInternalServerError, "Failed to delete image")
+				log.Printf("Failed to delete image: %v", err)
+				return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete image")
 			}
 			if err := os.Remove("thumbs/" + post.ImageURL); err != nil {
-				return c.JSON(http.StatusInternalServerError, "Failed to delete thumbnail")
+				log.Printf("Failed to delete thumbnail: %v", err)
+				return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete thumbnail")
 			}
 		}
 	}
 
 	// Delete the thread's JSON file
 	if err := os.Remove(threadFilePath); err != nil {
-		return c.JSON(http.StatusInternalServerError, "Failed to delete thread")
+		log.Printf("Failed to delete thread file: %v", err)
+		return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete thread file")
 	}
 
 	return c.JSON(http.StatusOK, "Thread deleted")
 }
-
 func DeletePost(c echo.Context) error {
 	if !auth.AdminCheck(c) {
 		return c.JSON(http.StatusUnauthorized, "Unauthorized")
@@ -201,16 +199,8 @@ func DeletePost(c echo.Context) error {
 	}
 
 	// Find and delete the post
-	// Convert postid from string to int64
-	postidInt, err := strconv.ParseInt(postid, 10, 64)
-	if err != nil {
-		log.Printf("Error converting postid to int64: %v", err)
-		return c.JSON(http.StatusBadRequest, "Invalid post ID")
-	}
-
-	// Find and delete the post
 	for i, post := range posts {
-		if post.PostID == postidInt {
+		if post.PostID == postid {
 			posts = append(posts[:i], posts[i+1:]...)
 			break
 		}
@@ -219,7 +209,7 @@ func DeletePost(c echo.Context) error {
 	// delete image if exists
 	var imageURL string
 	for _, post := range posts {
-		if strconv.FormatInt(post.PostID, 10) == postid {
+		if post.PostID == postid {
 			imageURL = post.ImageURL
 			break
 		}
@@ -236,7 +226,7 @@ func DeletePost(c echo.Context) error {
 	}
 
 	// Database operations (omitted for brevity)
-	RemoveFromRecentPosts(postidInt, 0)
+	RemoveFromRecentPosts(postid, "")
 	// Recreate the JSON file to update it
 	gobFile, err = os.Create(filePath)
 	if err != nil {
@@ -259,17 +249,12 @@ func JannyDeleteThread(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, "Unauthorized")
 	}
 	threadid := c.Param("t")
-	//convert to int64
-	threadidInt, err := strconv.ParseInt(threadid, 10, 64)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid thread ID")
-	}
 	board := c.Param("b")
 	allowedboard := db.Where("janny_boards = ?", board).First(&auth.User{})
 	if allowedboard.Error != nil {
 		return c.JSON(http.StatusUnauthorized, "Unauthorized")
 	}
-	RemoveFromRecentPosts(0, threadidInt)
+	RemoveFromRecentPosts("", threadid)
 	//read the gob file and fetch the image url
 	gobFile, err := os.Open("boards/" + board + "/" + threadid + ".gob")
 	if err != nil {
@@ -329,7 +314,7 @@ func JannyDeletePost(c echo.Context) error {
 	// get image url from post
 	var imageURL string
 	for _, post := range posts {
-		if strconv.FormatInt(post.PostID, 10) == postid {
+		if post.PostID == postid {
 			imageURL = post.ImageURL
 			break
 		}
@@ -343,21 +328,13 @@ func JannyDeletePost(c echo.Context) error {
 	}
 
 	// Find and delete the post
-	// Convert postid from string to int64
-	postidInt, err := strconv.ParseInt(postid, 10, 64)
-	if err != nil {
-		log.Printf("Error converting postid to int64: %v", err)
-		return c.JSON(http.StatusBadRequest, "Invalid post ID")
-	}
-
-	// Find and delete the post
 	for i, post := range posts {
-		if post.PostID == postidInt {
+		if post.PostID == postid {
 			posts = append(posts[:i], posts[i+1:]...)
 			break
 		}
 	}
-	RemoveFromRecentPosts(postidInt, 0)
+	RemoveFromRecentPosts(postid, "")
 	// Recreate the JSON file to update it
 	gobFile, err = os.Create("boards/" + board + "/" + threadid)
 	if err != nil {
@@ -374,9 +351,9 @@ func JannyDeletePost(c echo.Context) error {
 	return c.JSON(http.StatusOK, "Post deleted")
 }
 
-func RemoveFromRecentPosts(postID, threadID int64) {
+func RemoveFromRecentPosts(postID, threadID string) {
 	// Check if both postID and threadID are zero, return early if true
-	if postID == 0 && threadID == 0 {
+	if postID == "" && threadID == "" {
 		return
 	}
 
@@ -384,19 +361,19 @@ func RemoveFromRecentPosts(postID, threadID int64) {
 	db := database.DB
 
 	// Remove recent post by postID if it's not zero
-	if postID != 0 {
+	if postID != "" {
 		removeRecentPostByField(db, "post_id", postID)
 	}
 
 	// Remove recent post by threadID if it's not zero and different from postID
-	if threadID != 0 {
+	if threadID != "" {
 		removeRecentPostByField(db, "thread_id", threadID)
 	}
 
 }
 
 // Helper function to remove a recent post by a specific field (e.g., post_id or thread_id)
-func removeRecentPostByField(db *gorm.DB, field string, value int64) {
+func removeRecentPostByField(db *gorm.DB, field string, value string) {
 	// Construct the query dynamically based on the field
 	db.Where(field+" = ?", value).Delete(&RecentPosts{})
 }

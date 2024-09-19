@@ -1,6 +1,20 @@
 {{define "content"}}
     <fieldset id="home">
         <legend>Welcome, {{.IP}}</legend>
+        <div id="homecontainer">
+            <div id="homeleft">
+                <ul id="news">
+                    <h3>News</h3>
+                    {{range .News}}
+                    <li><span class="newstitle">{{.Title}}</span>
+                    <p class="newscontent">{{.Content}}</p>
+                    <span class="newsdate">{{.Date}}</span>
+                    </li>
+                    {{end}}
+                </ul>
+            </div>
+
+            <div id="homeright">
         <div id="rules">
         <h3>Rules</h3>
         <ol>
@@ -29,6 +43,77 @@
                     document.getElementById("mcmaxplayers").innerText = data.MaxPlayers;
                 });
         </script>
+        </div>
+        </div>
+        <style>
+            #homeleft {
+                width: 30%;
+                margin: 0 auto;
+            }
+            #homeleft h3 {
+                text-align: center;
+                color: #02ff6b;
+            }
+            #homeleft ul {
+                list-style-type: none;
+                padding: 15px;
+                margin: 0;
+            }
+            #homeleft li {
+                margin: 10px 0;
+                padding: 10px;
+                border: 1px solid #494949;
+                border-radius: 5px;
+                background-color: #2b2b2b;
+            }
+            #homeleft li:hover {
+                background-color: #3b3b3b;
+            }
+            #homeleft .newstitle {
+                font-weight: bold;
+                color: #02ff6b;
+            }
+            #homeleft .newscontent {
+                color: #ccc;
+            }
+            #homeleft .newsdate {
+                font-size: 0.8em;
+                color: #999;
+            }
+
+            #news {
+                max-height: 300px;
+                overflow: scroll;
+            }
+            #homeright {
+                width: 60%;
+                margin: 0 auto;
+            }
+
+            #rules {
+                padding: 15px;
+            }
+
+            #rules h3 {
+                text-align: center;
+                color: #02ff6b;
+            }
+
+            #rules ol {
+                padding-left: 20px;
+            }
+        </style>
+        <br>
+        <hr>
+        <br>
+            <div id="badges">
+                <a href="https://liberapay.com/sevensrequiem/donate" target="_blank"><img src="https://img.shields.io/liberapay/receives/sevensrequiem.svg?logo=liberapay"></a>
+                <img src="https://img.shields.io/github/commit-activity/w/sevensrequiem/achan.moe">
+                <img src="https://img.shields.io/github/last-commit/sevensrequiem/achan.moe">
+                <img src="https://img.shields.io/github/languages/top/sevensrequiem/achan.moe">
+                <img src="https://img.shields.io/github/repo-size/sevensrequiem/achan.moe">
+                <img src="https://img.shields.io/github/downloads/sevensrequiem/achan.moe/total">
+            </div>
     </fieldset>
         <br>
     <fieldset id="boards">
@@ -52,7 +137,7 @@
     </fieldset>
     <br><br>
 <fieldset id="latest">
-    <legend>Latest Posts</legend>
+    <legend>Latest Threads</legend>
     <ul>
         {{range .LatestPosts}}
             {{if .Subject}}
@@ -95,6 +180,19 @@
     </script>
 </fieldset>
     <style>
+        #homecontainer {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            width: 100%;
+        }
+        hr {
+            border: 0;
+            height: 1px;
+            background: #494949;
+            background-image: linear-gradient(to right, #494949, #cccccc, #494949);
+            width: 70%;
+        }
             .subject {
         font-weight: bold;
         color: #cccccc;

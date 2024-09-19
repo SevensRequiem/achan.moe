@@ -10,7 +10,7 @@
     </div>
     <a href="#" onclick="loadForm(); return false;" class="createpost">Create Thread</a>
     <fieldset class="reply">
-        <form action="/board/{{.BoardID}}" method="post" enctype="multipart/form-data">
+        <form action="/board/{{.BoardID}}" method="post" enctype="multipart/form-data" id="threadform">
             <div>
             <select name="country" id="country">
                 <option value="{{.Country}}">{{.Country}}</option>
@@ -18,12 +18,12 @@
                 <option value="User">User</option>
             </select><br><br>
             <label for="subject">Subject:</label>
-            <input type="text" id="subject" name="subject"><br><br>
+            <input type="text" id="subject" name="subject" maxlength="30" required><br><br>
             <label for="author">Username:</label>
             <input type="text" id="author" name="author" value="Anonymous"><br><br>
             </div>
             <label for="content">Post:</label>
-            <textarea id="content" name="content"></textarea><br><br>
+            <textarea id="content" name="content" rows="4" maxlength="200" required></textarea><br><br>
             <div id="options">
             {{if .IsAdmin}}
             <label for="isSticky">Sticky:</label>
@@ -42,8 +42,22 @@
             <input type="file" id="image" name="image" accept="image/*" required><br><br>
             </div>
             
-            <button type="submit">Submit Post</button>
+            <a href="#" id="submitthread" return false;>Submit</a>
         </form>
+        <script>
+            //axios for form submission
+            document.getElementById('submitthread').addEventListener('click', function() {
+                const threadform = document.getElementById('threadform'); // Select the form with the specific ID
+                const threadformData = new FormData(threadform);
+                axios.post(threadform.action, threadformData)
+                    .then(response => {
+                        location.reload(); // Reload the page to see the new thread
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    });
+            });
+        </script>
     </fieldset>
     <script>
         const loadForm = () => {

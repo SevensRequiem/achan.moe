@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/gob"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -21,8 +20,8 @@ import (
 	"achan.moe/database"
 	"achan.moe/home"
 	"achan.moe/routes"
-	"achan.moe/utils/cache"
 	"achan.moe/utils/minecraft"
+	"achan.moe/utils/queue"
 	"achan.moe/utils/schedule"
 )
 
@@ -47,10 +46,10 @@ func main() {
 	store := sessions.NewCookieStore([]byte(secret))
 	store.Options = &sessions.Options{
 		Path:     "/",
-		MaxAge:   3600, // 1 hour
+		MaxAge:   86400,
 		HttpOnly: true,
-		Secure:   false,                // Set to true if using HTTPS
-		SameSite: http.SameSiteLaxMode, // Adjust according to your needs
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
 	}
 
 	e.Use(session.Middleware(store))
@@ -60,7 +59,7 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.BodyLimit("11M"))
 	e.Use(middleware.RequestID())
-	//e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(7)))
+	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{
@@ -125,19 +124,10 @@ func main() {
 		log.Fatal("PORT is not set")
 	}
 	//mail.TestMail()
-	c := cache.New()
-
-	c.Set("foo", "bar")
-	c.Set("baz", "qux")
-
-	fmt.Println("Cache items:")
-	items := c.ListAll()
-	for k, v := range items {
-		fmt.Printf("%s: %s\n", k, v)
-	}
 	//go tests.Test()
 	//go env.RegenEncryptedKey()
 	//go env.RegenSecretKey()
 	//go plugins.LoadPlugins(e)
+	queue.New().Process()
 	e.StartTLS(":"+strconv.Itoa(port), "certificates/cert.pem", "certificates/key.pem")
 }

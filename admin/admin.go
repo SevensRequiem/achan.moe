@@ -377,37 +377,3 @@ func removeRecentPostByField(db *gorm.DB, field string, value string) {
 	// Construct the query dynamically based on the field
 	db.Where(field+" = ?", value).Delete(&RecentPosts{})
 }
-
-// UpdateUserRole updates a user's role
-func UpdateUserRole(c echo.Context) error {
-	if !auth.AdminCheck(c) {
-		return c.JSON(http.StatusUnauthorized, "Unauthorized")
-	}
-
-	// Get the user's ID
-	userID := c.FormValue("userid")
-	if userID == "" {
-		return c.JSON(http.StatusBadRequest, "ID cannot be empty")
-	}
-
-	// Get the new role
-	newRole := c.FormValue("group")
-	if newRole == "" {
-		return c.JSON(http.StatusBadRequest, "group cannot be empty")
-	}
-
-	if c.FormValue("boardid") == "" {
-		// Update the user's role for all boards
-		if err := db.Exec("UPDATE users SET groups = ? WHERE id = ?", newRole, userID).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to update user role")
-		}
-	} else {
-		// Update the user's role for a specific board
-		boardID := c.FormValue("boardid")
-		if err := db.Exec("UPDATE users SET groups = ?, janny_boards = ? WHERE id = ?", newRole, boardID, userID).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to update user role")
-		}
-	}
-
-	return c.JSON(http.StatusOK, "User role updated")
-}

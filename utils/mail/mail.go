@@ -6,13 +6,21 @@ import (
 	"os"
 	"strconv"
 
+	"achan.moe/utils/queue"
 	gomail "gopkg.in/mail.v2"
 )
+
+var manager = queue.NewQueueManager()
+var q = manager.GetQueue("mail", 1000)
 
 type Mail struct {
 	To      string
 	Subject string
 	Body    string
+}
+
+func init() {
+	manager.ProcessQueuesWithPrefix("mail")
 }
 
 func (m *Mail) Send() error {
@@ -61,4 +69,14 @@ func TestMail() {
 	if err != nil {
 		log.Fatalf("Error sending test email: %v", err)
 	}
+}
+
+func AddMailToQueue(to, subject, body string) {
+	q.Enqueue(func() {
+		SendEmail(to, subject, body)
+	})
+}
+
+func TestQueue() {
+	AddMailToQueue("admin@requiem.moe", "Test Subject", "This is a test email.")
 }

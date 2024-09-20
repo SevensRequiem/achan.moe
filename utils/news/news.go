@@ -1,14 +1,11 @@
 package news
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"net/http"
-	"os"
 	"time"
 
 	"achan.moe/auth"
+	"achan.moe/database"
 	"github.com/labstack/echo/v4"
 )
 
@@ -21,15 +18,10 @@ type News struct {
 
 // init function creates the file if it doesn't exist and adds dummy news if needed.
 func init() {
-	if _, err := os.Stat("news.json"); os.IsNotExist(err) {
-		file, err := os.Create("news.json")
-		if err != nil {
-			fmt.Printf("Failed to create file: %v\n", err)
-			return
-		}
-		defer file.Close()
-
-		DummyNews()
+	db := database.DB
+	db.AutoMigrate(&News{})
+	if len(GetAllNews()) == 0 {
+		DummyData()
 	}
 }
 func NewNews(c echo.Context) error {
@@ -54,20 +46,8 @@ func NewNews(c echo.Context) error {
 
 // AddNews adds a news article to the file.
 func AddNews(news News) {
-	news.Date = time.Now().Format("2006-01-02")
-	allNews := GetAllNews()
-	allNews = append(allNews, news)
-
-	data, err := json.Marshal(allNews)
-	if err != nil {
-		fmt.Printf("Failed to encode news: %v\n", err)
-		return
-	}
-
-	err = ioutil.WriteFile("news.json", data, 0666)
-	if err != nil {
-		fmt.Printf("Failed to write to file: %v\n", err)
-	}
+	db := database.DB
+	db.Create(&news)
 }
 
 // GetNews retrieves the last 10 news articles from the file.
@@ -88,60 +68,43 @@ func GetNews() []News {
 
 // ClearNews clears all news articles from the file.
 func ClearNews() {
-	err := os.Remove("news.json")
-	if err != nil {
-		fmt.Printf("Failed to clear file: %v\n", err)
-	}
-	// Create a new empty file
-	_, err = os.Create("news.json")
-	if err != nil {
-		fmt.Printf("Failed to create file: %v\n", err)
-	}
+	db := database.DB
+	db.Exec("DELETE FROM news")
 }
 
 // GetAllNews retrieves all news articles from the file.
 func GetAllNews() []News {
-	file, err := os.ReadFile("news.json")
-	if err != nil {
-		fmt.Printf("Failed to open file: %v\n", err)
-		return nil
-	}
-
+	db := database.DB
 	var news []News
-	err = json.Unmarshal(file, &news)
-	if err != nil {
-		fmt.Printf("Failed to decode news: %v\n", err)
-		return nil
-	}
-
+	db.Find(&news)
 	return news
 }
 
-// DummyNews adds some initial dummy news articles.
-func DummyNews() {
-	if len(GetAllNews()) == 0 { // Only add if no news exists
-		AddNews(News{Title: "Dummy News 1", Content: "This is a dummy news article."})
-		AddNews(News{Title: "Dummy News 2", Content: "This is another dummy news article."})
-		AddNews(News{Title: "Dummy News 3", Content: "This is yet another dummy news article."})
-		AddNews(News{Title: "Dummy News 4", Content: "This is a fourth dummy news article."})
-		AddNews(News{Title: "Dummy News 5", Content: "This is a fifth dummy news article."})
-		AddNews(News{Title: "Dummy News 6", Content: "This is a sixth dummy news article."})
-		AddNews(News{Title: "Dummy News 7", Content: "This is a seventh dummy news article."})
-		AddNews(News{Title: "Dummy News 8", Content: "This is an eighth dummy news article."})
-		AddNews(News{Title: "Dummy News 9", Content: "This is a ninth dummy news article."})
-		AddNews(News{Title: "Dummy News 10", Content: "This is a tenth dummy news article."})
-		AddNews(News{Title: "Dummy News 11", Content: "This is an eleventh dummy news article."})
-	}
-}
-
-// TestNews tests the news functions.
-func TestNews() {
-	ClearNews() // Start fresh
-	DummyNews() // Add dummy articles
-
-	allNews := GetAllNews()
-	fmt.Printf("All News Articles: %+v\n", allNews)
-
-	lastNews := GetNews()
-	fmt.Printf("Last 10 News Articles: %+v\n", lastNews)
+func DummyData() {
+	ClearNews()
+	AddNews(News{
+		Title:   "Welcome to the News Page",
+		Content: "This is the first news article. It will be displayed on the news page.",
+		Date:    "2021-01-01",
+	})
+	AddNews(News{
+		Title:   "New Feature Added",
+		Content: "We have added a new feature to the website. Check it out now!",
+		Date:    "2021-01-02",
+	})
+	AddNews(News{
+		Title:   "Important Announcement",
+		Content: "There will be a scheduled maintenance on the website. Please bear with us.",
+		Date:    "2021-01-03",
+	})
+	AddNews(News{
+		Title:   "Holiday Closure",
+		Content: "The website will be closed for the holidays. We will be back soon!",
+		Date:    "2021-01-04",
+	})
+	AddNews(News{
+		Title:   "Thank You for Your Support",
+		Content: "We appreciate all the support from our users. Thank you!",
+		Date:    "2021-01-05",
+	})
 }

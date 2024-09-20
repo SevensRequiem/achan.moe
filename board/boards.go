@@ -35,11 +35,11 @@ type Board struct {
 	Name        string `gob:"name"`
 	Description string `gob:"description"`
 	PostCount   int64  `gob:"post_count"`
-	ImageOnly   bool   `gob:"image_only"`   //todo
-	Locked      bool   `gob:"locked"`       //todo
-	Archived    bool   `gob:"archived"`     //todo
-	LatestPosts bool   `gob:"latest_posts"` //todo
-	Pages       int    `gob:"pages"`        //todo
+	ImageOnly   bool   `gob:"image_only"`
+	Locked      bool   `gob:"locked"`
+	Archived    bool   `gob:"archived"` //todo
+	LatestPosts bool   `gob:"latest_posts"`
+	Pages       int    `gob:"pages"` //todo
 }
 
 type Post struct {
@@ -78,24 +78,27 @@ type RecentPosts struct {
 	Timestamp      string `gob:"Timestamp"`
 }
 
+type Recents struct {
+	ID     int64  `gob:"ID" gorm:"primaryKey"`
+	PostID string `gob:"PostID"`
+}
+
 type PostCounter struct {
 	ID        int   `gob:"ID" gorm:"primaryKey"`
 	PostCount int64 `gob:"PostCount" gorm:"default:0"`
 }
 
-var q = queue.New()
+var manager = queue.NewQueueManager()
+var q = manager.GetQueue("thread", 1000)
 
 func init() {
 	db := database.DB
 
 	db.AutoMigrate(&Board{})
 	db.AutoMigrate(&RecentPosts{})
+	db.AutoMigrate(&Recents{})
 	db.AutoMigrate(&PostCounter{})
-
-	// Initialize the queue
-	// Start processing the queue
-	q.Process()
-	fmt.Println("Thread Queue processing started")
+	manager.ProcessQueuesWithPrefix("thread")
 }
 
 func extractThreadData(c echo.Context) (string, string, string, string, string, *multipart.FileHeader, error) {
@@ -139,7 +142,11 @@ func processThread(c echo.Context, boardID, content, subject, author, stickyValu
 		DeleteLastThread(boardID)
 	}
 	if content == "" && !imgonly {
-		return errors.New("Content cannot be empty")
+		if image == nil {
+			return errors.New("Content cannot be empty")
+		} else {
+			content = ""
+		}
 	}
 	if subject == "" {
 		subject = "No Subject"
@@ -189,6 +196,9 @@ func processThread(c echo.Context, boardID, content, subject, author, stickyValu
 		Sticky:         sticky,
 		Locked:         locked,
 	}
+
+	addToRecents(post.PostID)
+
 	boardDir := "boards/" + boardID
 	jsonFilePath := boardDir + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.OpenFile(jsonFilePath, os.O_RDWR|os.O_CREATE, 0644)
@@ -235,7 +245,10 @@ func CreateThread(c echo.Context) error {
 
 	return nil
 }
-
+func addToRecents(postID string) {
+	db := database.DB
+	db.Create(&Recents{PostID: postID})
+}
 func extractPostData(c echo.Context) (string, string, string, string, *multipart.FileHeader, error) {
 	boardID := c.Param("b")
 	content := c.FormValue("content")
@@ -274,7 +287,11 @@ func processPost(c echo.Context, boardID, content, replyto, author string, image
 		return errors.New("Invalid thread ID")
 	}
 	if content == "" && !imgonly {
-		return errors.New("Content cannot be empty")
+		if image == nil {
+			return errors.New("Content cannot be empty")
+		} else {
+			content = ""
+		}
 	}
 	if author == "" {
 		return errors.New("Author cannot be empty")
@@ -309,6 +326,7 @@ func processPost(c echo.Context, boardID, content, replyto, author string, image
 		IP:             c.RealIP(),
 		ParentID:       replyto,
 	}
+	addToRecents(post.PostID)
 	if err := addPostToFile(boardID, threadID, post); err != nil {
 		return err
 	}
@@ -416,18 +434,24 @@ func isValidImageExtension(ext string) bool {
 }
 
 func GenUUID() string {
-	b := make([]byte, 4) // 16 bytes = 128 bits
-	_, err := rand.Read(b)
-	if err != nil {
-		log.Fatalf("Failed to generate random bytes: %v", err)
-	}
-	id := hex.EncodeToString(b)
 	db := database.DB
-	if db.Where("post_id = ?", id).First(&RecentPosts{}).RowsAffected > 0 {
-		return GenUUID()
+	for {
+		b := make([]byte, 4)
+		_, err := rand.Read(b)
+		if err != nil {
+			log.Fatalf("Failed to generate random bytes: %v", err)
+		}
+		id := hex.EncodeToString(b)
+
+		if db.Where("post_id = ?", id).First(&Recents{}).RowsAffected == 0 {
+			return id
+		}
+
+		log.Printf("UUID collision: %s", id)
+		GenUUID()
 	}
-	return id
 }
+
 func LatestPostsCheck(c echo.Context, boardID string) bool {
 	if CheckIfArchived(boardID) {
 		return false

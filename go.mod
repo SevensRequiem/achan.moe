@@ -13,8 +13,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo-contrib v0.17.1
 	github.com/labstack/echo/v4 v4.12.0
+	github.com/opensearch-project/opensearch-go v1.1.0
 	github.com/oschwald/maxminddb-golang v1.13.0
-	github.com/plutov/paypal/v4 v4.11.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/yuin/gopher-lua v1.1.1
 	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
@@ -37,7 +37,6 @@ require (
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/opensearch-project/opensearch-go v1.1.0 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.8.0 // indirect

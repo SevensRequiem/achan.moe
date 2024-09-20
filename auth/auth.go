@@ -52,19 +52,20 @@ func dummydata() {
 }
 
 type User struct {
-	UUID          string
-	Username      string
-	Password      string
-	Groups        Group
-	DateCreated   string
-	LastLogin     string
-	DoesExist     bool
-	Premium       bool
-	Email         string
-	TransactionID string
-	Reputation    int
-	Posts         int
-	Threads       int
+	UUID            string
+	Username        string
+	Password        string
+	Groups          Group
+	DateCreated     string
+	LastLogin       string
+	DoesExist       bool
+	Premium         bool
+	Email           string
+	TransactionID   string
+	PlusReputation  int
+	MinusReputation int
+	Posts           int
+	Threads         int
 }
 
 type Group struct {
@@ -575,6 +576,34 @@ func NewPremiumUser(c echo.Context, email string, transactionid string) {
 	sess, _ := session.Get("session", c)
 	sess.Values["user"] = user
 	sess.Save(c.Request(), c.Response())
-	go mail.SendEmail(email, "Welcome to achan.moe!", "Your account has been created successfully! Your username is: "+user.Username+" and your password is: "+user.Password+" You can change both your username and password after logging in.")
+	go mail.AddMailToQueue(email, "Welcome to achan.moe!", "Your account has been created successfully! Your username is: "+user.Username+" and your password is: "+user.Password+" You can change both your username and password after logging in.")
 	c.Redirect(http.StatusTemporaryRedirect, "/profile")
+}
+
+func DeleteUser(c echo.Context) error {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
+
+	// Retrieve the user from the session
+	user, ok := sess.Values["user"].(User)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "User not found in session"})
+	}
+
+	// Retrieve the user from the database
+	db := database.DB
+	var u User
+	db.Where("uuid = ?", user.UUID).First(&u)
+
+	// Delete the user from the database
+	if err := db.Delete(&u).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete user"})
+	}
+
+	// Clear the session
+	sess.Options.MaxAge = -1
+	sess.Save(c.Request(), c.Response())
+
+	// Redirect the user to the home page
+	return c.JSON(http.StatusOK, map[string]string{"success": "User deleted"})
 }

@@ -1,5 +1,6 @@
 {{define "page"}}
-<div id="admin-content"></div>
+<div id="admin-content">
+{{if .IsAdmin}}
     <div id="admin-user-edit">
         <h2>Edit Admin Account</h2>
         <form>
@@ -9,6 +10,71 @@
             <a href="#" onclick="return false;">Save Changes</a>
         </form>
     </div>
+    <br>
+    <hr>
+    <br>
+    <form action="/admin/groups/edit" method="POST">
+        <div>
+            <label for="id">User ID:</label>
+            <input type="text" id="id" name="id" required>
+        </div>
+        <div>
+            <label for="admin">Admin:</label>
+            <input type="checkbox" id="admin" name="admin">
+        </div>
+        <div>
+            <label for="moderator">Moderator:</label>
+            <input type="checkbox" id="moderator" name="moderator">
+        </div>
+        <div>
+            <label for="janny">Janny:</label>
+            <input type="checkbox" id="janny" name="janny">
+        </div>
+        <div>
+            <label for="jannyboards">Janny Boards (comma-separated):</label>
+            <input type="text" id="jannyboards" name="jannyboards">
+        </div>
+        <div>
+            <button type="submit">Update Groups</button>
+        </div>
+    </form>
+    <script>
+        document.querySelector("#admin-user-edit form a").addEventListener("click", async () => {
+            const username = document.querySelector("#admin-user-edit form input[name='username']").value;
+            const password = document.querySelector("#admin-user-edit form input[name='password']").value;
+            const confirmPassword = document.querySelector("#admin-user-edit form input[name='confirm_password']").value;
+
+            if (password !== confirmPassword) {
+                alert("Passwords do not match!");
+                return;
+            }
+
+            const formData = new URLSearchParams();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            const response = await fetch("/admin/user/edit", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: formData
+            });
+
+            if (response.ok) {
+                alert("Changes saved successfully");
+            } else {
+                const errorText = await response.text();
+                alert(`Failed to save changes: ${errorText}`);
+            }
+        });
+
+
+    </script>
+{{end}}
+
+
+
 </div>
 <script>
     document.querySelector("#admin-user-edit form a").addEventListener("click", async () => {
@@ -43,23 +109,41 @@
 </script>
 <style>
     #admin-user-edit {
-        width: 50%;
         margin: 0 auto;
-        margin-top: 1.7rem;
+        width: 50%;
+    }
+
+    #admin-user-edit form {
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        align-items: center;
     }
-    #admin-user-edit button {
-        margin-top: 1rem;
-        background-color: #02ff6b;
-        border: none;
-        padding: 0.5rem 1rem;
+
+    #admin-user-edit form input {
+        margin-bottom: 10px;
+    }
+
+    #admin-user-edit form a {
+        margin-top: 10px;
         cursor: pointer;
     }
-    #admin-user-edit button:hover {
-        background-color: #00cc55;
+
+    #admin-user-edit form a:hover {
+        text-decoration: underline;
     }
+
+    #admin-user-edit form a:active {
+        color: #000;
+    }
+
+    #admin-user-edit form a:focus {
+        outline: none;
+    }
+
+    #admin-user-edit form a:visited {
+        color: #000;
+    }
+
+
+
 </style>
 {{end}}

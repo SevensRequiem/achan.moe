@@ -9,6 +9,7 @@ import (
 	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/home"
+	"achan.moe/user"
 	vote "achan.moe/user/votes"
 	captcha "achan.moe/utils/captcha"
 	"achan.moe/utils/config"
@@ -133,14 +134,6 @@ func Routes(e *echo.Echo) {
 			c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		admin.CreateBoard(c)
-		return nil
-	})
-
-	e.POST("/admin/user", func(c echo.Context) error {
-		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		admin.UpdateUserRole(c)
 		return nil
 	})
 
@@ -339,14 +332,6 @@ func Routes(e *echo.Echo) {
 		return websocket.WebsocketHandler(c)
 	})
 
-	// profile
-	e.GET("/profile", func(c echo.Context) error {
-		return home.ProfileHandler(c)
-	})
-
-	e.POST("/profile/edit", func(c echo.Context) error {
-		return auth.UpdateUser(c)
-	})
-
+	user.Routes(e)
 	vote.VoteRoutes(e)
 }

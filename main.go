@@ -107,7 +107,7 @@ func main() {
 		},
 		Duration: 5 * time.Minute,
 	})
-	s5.Run()
+	go s5.Run()
 
 	s24h := schedule.NewScheduler()
 	s24h.ScheduleTask(schedule.Task{
@@ -116,7 +116,7 @@ func main() {
 		},
 		Duration: 24 * time.Hour,
 	})
-	s24h.Run()
+	go s24h.Run()
 
 	portStr := os.Getenv("PORT")
 	port, err := strconv.Atoi(portStr)
@@ -128,6 +128,6 @@ func main() {
 	//go env.RegenEncryptedKey()
 	//go env.RegenSecretKey()
 	//go plugins.LoadPlugins(e)
-	queue.New().Process()
+	queue.NewQueueManager().ProcessAll()
 	e.StartTLS(":"+strconv.Itoa(port), "certificates/cert.pem", "certificates/key.pem")
 }

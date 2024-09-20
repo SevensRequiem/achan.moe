@@ -9,3 +9,16 @@ sitemap.xml
 *.key
 *.csr
 *.crt
+*.gob
+*.zip
+*.tar.gz
+*.tar
+*.gz
+*.log
+*.log.*
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.ico

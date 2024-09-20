@@ -11,17 +11,56 @@
     <a href="#" onclick="loadForm(); return false;" class="createpost">Post a Reply</a>
     <hr>
      <div class="container">
-        <span>{{.SelfPosts}} self</span>
+        <meta charset="UTF-8" id="selfposts" content="{{.SelfPosts}}">
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const selfpostsContent = document.getElementById("selfposts").content;
+                const selfpostsArray = selfpostsContent.slice(1, -1).split(" ");
+                const selfpostsSet = new Set(selfpostsArray);
+        
+                const postids = document.querySelectorAll(".postid");
+                postids.forEach(postid => {
+                    const postIdWithoutHash = postid.dataset.id.replace("#", "");
+                    if (selfpostsSet.has(postIdWithoutHash)) {
+                        const postElement = postid.closest(".post");
+                        if (postElement) {
+                            postElement.style.setProperty("border-top", "5px solid #AAF", "important");
+                            postElement.style.setProperty("border-left", "1px solid #AAF", "important");
+                            postElement.style.setProperty("border-right", "1px solid #AAF", "important");
+                            postElement.style.setProperty("border-bottom", "1px solid #AAF", "important");
+                        }
+                    }
+                });
+            });
+        </script>
+        
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const selfpostsContent = document.getElementById("selfposts").content;
+                const selfpostsArray = selfpostsContent.slice(1, -1).split(" ");
+                const selfpostsSet = new Set(selfpostsArray);
+        
+                const postids = document.querySelectorAll(".postid");
+                postids.forEach(postid => {
+                    const postIdWithoutHash = postid.dataset.id.replace("#", "");
+                    if (selfpostsSet.has(postIdWithoutHash)) {
+                        postid.closest(".post").style.setProperty("border", "5px solid #AAF", "important");
+                    }
+                });
+            });
+        </script>
+        
+        </script>
         <fieldset id="thread" id="{{.Thread.PostID}}">
             <legend>{{.Thread.Author}} // <span class="subject">{{.Thread.Subject}}</span> - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
-                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: <span class="file">{{.Thread.ImageURL}}</span></span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
-                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{else if .IsJanny}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod"
-                href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}} <a class="postid" href="#" data-id="{{.Thread.PostID}}">#{{.Thread.PostID}}</a></legend>
+                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: <span class="file">{{.Thread.ImageURL}}</span></span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod" href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{else if .IsJanny}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|
+                <a class="mod"href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}} <a class="postid" href="#" data-id="{{.Thread.PostID}}">#{{.Thread.PostID}}</a>
+                <span class="votes">{{.Thread.Upvotes}} / {{.Thread.Downvotes}} <a href="#" onclick="threadupvote('{{.Thread.ThreadID}}')">Upvote</a> | <a href="#" onclick="threaddownvote('{{.Thread.ThreadID}}')">Downvote</a></span>
+            </legend>
             {{if .Thread.ImageURL}}
             <img src="/file/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image" id="threadfile">
             {{end}}
             <p class="postcontent">{{.Thread.Content}}</p>
-            <span>{{.Thread.Upvotes}} / {{.Thread.Downvotes}} <a href="#" onclick="threadupvote('{{.Thread.ThreadID}}')">Upvote</a> | <a href="#" onclick="threaddownvote('{{.Thread.ThreadID}}')">Downvote</a></span>
             <script>
                 const threadfile = document.getElementById("threadfile");
                 const srcurl = threadfile.src;
@@ -91,15 +130,16 @@
             </script>
             {{range .Posts}}
             <fieldset class="post">
-                <legend><span class="postid" data-id="{{.PostID}}">{{.PostID}}</span> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
-                    {{if $.IsAdmin}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> |{{end}}
-                    <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>
+                <legend><a href="#" class="postid" data-id="{{.PostID}}">#{{.PostID}}</a> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
+                    {{if $.IsAdmin}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
+                    {{if $.IsJanny}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
+                    <span class="votes">{{.Upvotes}} / {{.Downvotes}} <a href="#" onclick="upvote('{{.PostID}}')">Upvote</a> | <a href="#" onclick="downvote('{{.PostID}}')">Downvote</a></span>
                 </legend>
                 {{if .ImageURL}}
                 <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
                 {{end}}
                 <p class="postcontent">{{.Content}}</p>
-                <span>{{.Upvotes}} / {{.Downvotes}} <a href="#" onclick="upvote('{{.PostID}}')">Upvote</a> | <a href="#" onclick="downvote('{{.PostID}}')">Downvote</a></span>
+            
             </fieldset>
             {{end}}
         </div>
@@ -115,7 +155,7 @@
             });
     
             if (response.ok) {
-                window.location.reload(); // Reload on success
+                window.location.reload();
             } else {
                 const error = await response.json();
                 alert(`Error: ${error.message || "Failed to upvote"}`);
@@ -370,6 +410,15 @@ margin-bottom: 2rem;
 
     .subject {
         color: #73ff00;
+    }
+
+    .votes {
+        color: #6b6b6b;
+    }
+
+    .votes a {
+        color: #00e1ff;
+        text-decoration: none;
     }
 
 </style>

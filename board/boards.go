@@ -3,7 +3,6 @@ package board
 import (
 	"encoding/gob"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"html/template"
 	"io/ioutil"
@@ -28,7 +27,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"golang.org/x/exp/rand"
 	"golang.org/x/time/rate"
-	"gorm.io/gorm"
 )
 
 type Board struct {
@@ -59,7 +57,7 @@ type Post struct {
 	IP             string `gob:"IP"`
 	Sticky         bool   `gob:"Sticky"`
 	Locked         bool   `gob:"Locked"`
-	Page           int    `gob:"Page"`
+	PostCount      int    `gob:"PostCount"`
 	ReportCount    int    `gob:"ReportCount"`
 }
 
@@ -123,17 +121,17 @@ func extractThreadData(c echo.Context) (string, string, string, string, string, 
 
 func processThread(c echo.Context, boardID, content, subject, author, trueuser, stickyValue string, image *multipart.FileHeader) error {
 	if boardID == "" {
-		return errors.New("Board ID cannot be empty")
+		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
 	}
 	if CheckIfLocked(boardID) {
-		return errors.New("Board is locked")
+		return c.JSON(http.StatusBadRequest, "Board is locked")
 	}
 	if CheckIfArchived(boardID) {
-		return errors.New("Board is archived")
+		return c.JSON(http.StatusBadRequest, "Board is archived")
 	}
 	imgonly := CheckIfImageOnly(boardID)
 	if imgonly && content != "" {
-		return errors.New("This board only allows image posts")
+		return c.JSON(http.StatusBadRequest, "This board only allows image posts")
 	}
 	files, err := ioutil.ReadDir("boards/" + boardID)
 	if err != nil {
@@ -150,7 +148,7 @@ func processThread(c echo.Context, boardID, content, subject, author, trueuser, 
 	}
 	if content == "" && !imgonly {
 		if image == nil {
-			return errors.New("Content cannot be empty")
+			return c.JSON(http.StatusBadRequest, "Content cannot be empty")
 		} else {
 			content = ""
 		}
@@ -159,17 +157,17 @@ func processThread(c echo.Context, boardID, content, subject, author, trueuser, 
 		subject = "No Subject"
 	}
 	if author == "" {
-		return errors.New("Author cannot be empty")
+		return c.JSON(http.StatusBadRequest, "Author cannot be empty")
 	}
 	if image == nil {
-		return errors.New("Image is required for threads")
+		return c.JSON(http.StatusBadRequest, "Image is required for threads")
 	}
 	if image.Size > 11<<20 {
-		return errors.New("File is too large")
+		return c.JSON(http.StatusBadRequest, "File is too large")
 	}
 	ext := filepath.Ext(image.Filename)
 	if !isValidImageExtension(ext) {
-		return errors.New("Invalid image extension")
+		return c.JSON(http.StatusBadRequest, "Invalid image extension")
 	}
 	imageURL, err := saveImage(boardID, image)
 	if err != nil {
@@ -276,43 +274,46 @@ func extractPostData(c echo.Context) (string, string, string, string, string, *m
 
 func processPost(c echo.Context, boardID, content, replyto, author, trueuser string, image *multipart.FileHeader, postid string) error {
 	if boardID == "" {
-		return errors.New("Board ID cannot be empty")
+		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
 	}
 	if CheckIfThreadLocked(c, boardID, c.Param("t")) {
-		return errors.New("Thread is locked")
+		return c.JSON(http.StatusBadRequest, "Thread is locked")
 	}
 	if CheckIfLocked(boardID) {
-		return errors.New("Board is locked")
+		return c.JSON(http.StatusBadRequest, "Board is locked")
 	}
 	if CheckIfArchived(boardID) {
-		return errors.New("Board is archived")
+		return c.JSON(http.StatusBadRequest, "Board is archived")
 	}
 	imgonly := CheckIfImageOnly(boardID)
 	if imgonly && content != "" {
-		return errors.New("This board only allows image posts")
+		return c.JSON(http.StatusBadRequest, "This board only allows image posts")
 	}
 	threadID, err := strconv.Atoi(c.Param("t"))
 	if err != nil {
-		return errors.New("Invalid thread ID")
+		return c.JSON(http.StatusBadRequest, "Invalid thread ID")
+	}
+	if threadIsFull(boardID, threadID) {
+		return c.JSON(http.StatusBadRequest, "Thread is full")
 	}
 	if content == "" && !imgonly {
 		if image == nil {
-			return errors.New("Content cannot be empty")
+			return c.JSON(http.StatusBadRequest, "Content cannot be empty")
 		} else {
 			content = ""
 		}
 	}
 	if author == "" {
-		return errors.New("Author cannot be empty")
+		return c.JSON(http.StatusBadRequest, "Author cannot be empty")
 	}
 	var imageURL string
 	if image != nil {
 		if image.Size > 11<<20 {
-			return errors.New("File is too large")
+			return c.JSON(http.StatusBadRequest, "File is too large")
 		}
 		ext := filepath.Ext(image.Filename)
 		if !isValidImageExtension(ext) {
-			return errors.New("Invalid image extension")
+			return c.JSON(http.StatusBadRequest, "Invalid image extension")
 		}
 		imageURL, err = saveImage(boardID, image)
 		if err != nil {
@@ -322,6 +323,7 @@ func processPost(c echo.Context, boardID, content, replyto, author, trueuser str
 	}
 	AddGlobalPostCount()
 	AddBoardPostCount(boardID)
+	AddThreadPostCount(boardID, threadID)
 	post := Post{
 		BoardID:        boardID,
 		ThreadID:       strconv.Itoa(threadID),
@@ -503,25 +505,25 @@ func addPostToFile(boardID string, threadID int, post Post) error {
 	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
 	file, err := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return errors.New("Error opening file")
+		return err
 	}
 	defer file.Close()
 
 	var posts []Post
 	if err := gob.NewDecoder(file).Decode(&posts); err != nil {
-		return errors.New("Error decoding JSON")
+		return err
 	}
 
 	posts = append(posts, post)
 
 	if err := file.Truncate(0); err != nil {
-		return errors.New("Error truncating file")
+		return err
 	}
 	if _, err := file.Seek(0, os.SEEK_SET); err != nil {
-		return errors.New("Error seeking file")
+		return err
 	}
 	if err := gob.NewEncoder(file).Encode(posts); err != nil {
-		return errors.New("Error encoding JSON")
+		return err
 	}
 
 	return nil
@@ -534,24 +536,24 @@ func saveImage(boardID string, image *multipart.FileHeader) (string, error) {
 	imagename := uuid.New().String()
 	imageExt := filepath.Ext(image.Filename)
 	if imageExt == "" {
-		return "", errors.New("Invalid image extension")
+		return "", fmt.Errorf("invalid image extension")
 	}
 
 	imageFile, err := image.Open()
 	if err != nil {
-		return "", errors.New("Error opening image file")
+		return "", fmt.Errorf("error opening image file: %v", err)
 	}
 	defer imageFile.Close()
 
 	imageData, err := ioutil.ReadAll(imageFile)
 	if err != nil {
-		return "", errors.New("Error reading image file")
+		return "", fmt.Errorf("error reading image file: %v", err)
 	}
 
 	imageURL := imagename + imageExt
 	baseImgDir := "boards/" + boardID + "/" + imagename + imageExt
 	if err := ioutil.WriteFile(baseImgDir, imageData, 0644); err != nil {
-		return "", errors.New("Error writing image file")
+		return "", fmt.Errorf("error writing image file: %v", err)
 	}
 
 	return imageURL, nil
@@ -958,7 +960,7 @@ func DeleteThread(c echo.Context) error {
 	board := c.Param("b")
 
 	// Delete RecentPosts entries
-	RemoveFromRecentPosts("", threadID)
+	RemoveFromRecentPosts("", threadID, board)
 
 	// Construct the path to the thread's JSON file
 	threadFilePath := filepath.Join("boards/" + board + "/" + threadID + ".gob")
@@ -980,14 +982,11 @@ func DeleteThread(c echo.Context) error {
 	// Delete images associated with the thread
 	for _, post := range posts {
 		if post.ImageURL != "" {
-			imagePath := filepath.Join("boards", board, post.ImageURL)
-			if err := os.Remove(imagePath); err != nil {
+			if err := os.Remove("boards/" + board + "/" + post.ImageURL); err != nil {
 				log.Printf("Failed to delete image: %v", err)
-				return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete image")
 			}
 			if err := os.Remove("thumbs/" + post.ImageURL); err != nil {
 				log.Printf("Failed to delete thumbnail: %v", err)
-				return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete thumbnail")
 			}
 		}
 	}
@@ -1050,7 +1049,7 @@ func DeletePost(c echo.Context) error {
 	}
 
 	// Database operations (omitted for brevity)
-	RemoveFromRecentPosts(postid, "")
+	RemoveFromRecentPosts(postid, "", "")
 	// Recreate the JSON file to update it
 	gobFile, err = os.Create(filePath)
 	if err != nil {
@@ -1069,33 +1068,49 @@ func DeletePost(c echo.Context) error {
 	return c.JSON(http.StatusOK, "Post deleted")
 }
 
-func RemoveFromRecentPosts(postID, threadID string) {
+func RemoveFromRecentPosts(postID string, threadID string, board string) {
 	// Check if both postID and threadID are zero, return early if true
-	if postID == "" && threadID == "" {
+	if postID == "" && threadID == "" && board == "" {
 		return
 	}
 
 	// Open database connection
 	db := database.DB
 
-	// Remove recent post by postID if it's not zero
+	// Construct the query
 	if postID != "" {
-		removeRecentPostByField(db, "post_id", postID)
-	}
-
-	// Remove recent post by threadID if it's not zero and different from postID
-	if threadID != "" {
-		removeRecentPostByField(db, "thread_id", threadID)
+		db.Where("post_id = ?", postID).Delete(&RecentPosts{})
+	} else {
+		db.Where("thread_id = ? AND board_id = ?", threadID, board).Delete(&RecentPosts{})
 	}
 
 }
 
 // Helper function to remove a recent post by a specific field (e.g., post_id or thread_id)
-func removeRecentPostByField(db *gorm.DB, field string, value string) {
-	// Construct the query dynamically based on the field
-	db.Where(field+" = ?", value).Delete(&RecentPosts{})
-}
 
-func BoardRoutes(e *echo.Echo) {
+func AddThreadPostCount(boardID string, threadID int) {
+	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
+	file, err := os.OpenFile(filepath, os.O_RDWR, 0644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
 
+	var thread []Post
+	if err := gob.NewDecoder(file).Decode(&thread); err != nil {
+		return
+	}
+
+	if len(thread) > 0 {
+		thread[0].PostCount++
+	}
+
+	// Move the file pointer to the beginning of the file
+	if _, err := file.Seek(0, 0); err != nil {
+		return
+	}
+
+	if err := gob.NewEncoder(file).Encode(&thread); err != nil {
+		return
+	}
 }

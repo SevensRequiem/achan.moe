@@ -82,12 +82,14 @@ func (q *Queue) Process() {
 					return
 				}
 				fmt.Printf("Function executing from queue %s\n", q.Name)
-				defer func() {
-					if r := recover(); r != nil {
-						fmt.Printf("Function panicked from queue %s: %v\n", q.Name, r)
-					}
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							fmt.Printf("Function panicked from queue %s: %v\n", q.Name, r)
+						}
+					}()
+					f() // Execute the function
 				}()
-				f() // Execute the function
 				fmt.Printf("Function executed from queue %s\n", q.Name)
 			case <-q.stop:
 				fmt.Printf("Queue %s processing stopped\n", q.Name)

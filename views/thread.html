@@ -2,11 +2,11 @@
 
 <div class="content-wrapper">
 
+
     <div class="banners">
-    <div id="banner">
-        <img src="/banner/{{.BoardID}}/{{.Banner}}" alt="Banner">
+        <img src="https://placehold.co/728x90">
     </div>
-    </div>
+
     <hr>
     <a href="#" onclick="loadForm(); return false;" class="createpost">Post a Reply</a>
     <hr>
@@ -38,8 +38,8 @@
         </script>
         <fieldset id="thread" data-id="{{.Thread.PostID}}">
             <legend><span class="author" title="{{.Thread.TrueUser}}">{{.Thread.Author}}</span> // <span class="subject">{{.Thread.Subject}}</span> - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
-                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: <span class="file">{{.Thread.ImageURL}}</span></span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod" href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{else if .IsJanny}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|
-                <a class="mod"href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}} <a class="postid" href="#" data-id="{{.Thread.PostID}}">#{{.Thread.PostID}}</a>
+                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: <span class="file">{{.Thread.ImageURL}}</span></span>{{end}}{{if or .IsAdmin (or .IsModerator .IsJanny)}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod" href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}}
+ <a class="postid" href="#" data-id="{{.Thread.PostID}}">#{{.Thread.PostID}}</a>
             </legend>
             {{if .Thread.ImageURL}}
             <img src="/file/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image" id="threadfile">
@@ -98,8 +98,7 @@
             {{range .Posts}}
             <fieldset class="post">
                 <legend><a href="#" class="postid" data-id="{{.PostID}}">#{{.PostID}}</a> <span class="author" title="{{.TrueUser}}">{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
-                    {{if $.IsAdmin}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
-                    {{if $.IsJanny}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
+                    {{if or $.IsAdmin (or $.IsModerator $.IsJanny)}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
                 </legend>
                 {{if .ImageURL}}
                 <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
@@ -175,6 +174,9 @@
                     });
             });
         </script>
+             <div class="banners">
+                <img src="https://placehold.co/728x90">
+            </div>
     </div>
     <script>
 
@@ -185,6 +187,8 @@
             }
           });
  </script>
+
+
 </div>
 <div id="cirno">
     <img src="/assets/cirno.png" alt="Cirno">
@@ -200,14 +204,23 @@
     }
 
     .banners {
-margin: 0 auto;
-width: 100%;
-margin-top: 2rem;
-margin-bottom: 2rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .banners img {
+        max-width: 100%;
+        max-height: 150px;
+        margin: 20px;
     }
 
 
     #thread {
+        position: relative;
         display: flex;
         flex-direction: row;
         justify-content: left;
@@ -220,6 +233,10 @@ margin-bottom: 2rem;
 
         background-color: #1b1b1b7a;
 
+    }
+    #thread .postcontent {
+        
+        padding: 10px;
     }
     #thread img {
         max-width: 400px;

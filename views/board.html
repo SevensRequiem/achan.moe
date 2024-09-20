@@ -4,10 +4,10 @@
     <h2>{{.BoardDesc}}</h2>
 </div>
 <div class="banners">
-    <div id="banner">
-        <img src="/banner/{{.BoardID}}/{{.Banner}}" alt="Banner">
-    </div>
-    </div>
+        <img src="https://placehold.co/728x90">
+        <img src="https://placehold.co/580x72" alt="Banner"> 
+</div>
+<br>
     <a href="#" onclick="loadForm(); return false;" class="createpost">Create Thread</a>
     <fieldset class="reply">
         <form action="/board/{{.BoardID}}" method="post" enctype="multipart/form-data" id="threadform">
@@ -61,6 +61,7 @@
             });
         </script>
     </fieldset>
+
     <script>
         const loadForm = () => {
             const form = document.querySelector('.reply');
@@ -74,6 +75,7 @@
 <div id="options">
     <a href="/board/{{.BoardID}}">Refresh</a>
 </div>
+<hr>
 <fieldset id="threads">
     <ul>
         {{if .IsAdmin}}
@@ -85,6 +87,7 @@
                     <img src="/thumb/{{.ImageURL}}" alt="Image">
                     <span class="subject">{{.Subject}}</span>
                     <p>{{.PartialContent}}</p>
+                    <span class="postcount">{{.PostCount}} / 300</span>
                     </a>
                 </li>
                 {{end}}
@@ -97,6 +100,7 @@
                         <img src="/thumb/{{.ImageURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
+                        <span class="postcount">{{.PostCount}} / 300</span>
                         </a>
                 </li>
                 {{end}}
@@ -135,6 +139,10 @@
     <img src="/assets/cirno.png" alt="Cirno">
 </div>
 <style>
+    .postcount {
+        color: #AAF;
+        font-size: 0.8rem;
+    }
     .createpost {
         display: flex;
         align-items: center;
@@ -153,6 +161,7 @@
     }
     
     #top-content {
+        font-size: 0.9rem;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -180,14 +189,7 @@
         font-weight: bold;
         color: #AAF;
     }
-    #board {
-        display: flex;
-        align-items: center; 
-        justify-content: center; 
-        flex-direction: column;
-        margin: 0 auto;
-        width: 50%;
-    }
+
     #threads {
         display: flex;
         flex-direction: column;
@@ -275,16 +277,16 @@
         margin-top: 1.7rem;
         margin-bottom: 1.7rem;
     }
-    #banner {
+    .banners {
         display: flex;
         align-items: center;
+        flex-direction: column;
         justify-content: center;
         margin: 0 auto;
         width: 50%;
     }
-    #banner img {
-        width: 500px;
-        height: 100px;
+    .banners img {
+        max-height: 150px;;
     }
 
     #cirno {
@@ -306,6 +308,9 @@
         text-decoration: underline;
     }
 
+    .banners img {
+        margin: 10px;
+    }
 </style>
 
 {{end}}

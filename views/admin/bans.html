@@ -5,7 +5,7 @@
 <form>
     <input type="text" name="ip" placeholder="IP Address" required>
     <input type="text" name="reason" placeholder="Reason" required>
-    <input hidden type="text" name="username" value="{{.User}}" required>
+    <input hidden type="text" name="username" value="{{.User.Username}}" required>
     <input type="date" name="expires" placeholder="Expires" required>
     <a href="#" onclick="return false;">Ban IP</a>
 </form>

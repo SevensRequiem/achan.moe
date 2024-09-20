@@ -53,7 +53,7 @@ func PlusReputation(c echo.Context) error {
 	}
 
 	// Find the user by ID
-	if err := db.First(&user, userID).Error; err != nil {
+	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -105,7 +105,7 @@ func MinusReputation(c echo.Context) error {
 	}
 
 	// Find the user by ID
-	if err := db.First(&user, userID).Error; err != nil {
+	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -188,7 +188,7 @@ func GetUserReputation(c echo.Context) error {
 	db := database.DB
 	userID := c.Param("id")
 
-	if err := db.First(&user, userID).Error; err != nil {
+	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -306,7 +306,9 @@ func UpdateUserGroups(c echo.Context) error {
 	moderator := c.FormValue("moderator")
 	janny := c.FormValue("janny")
 	jannyboards := c.FormValue("jannyboards")
-
+	if userID == "1337" {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "You cannot change the groups of the root user"})
+	}
 	var user auth.User
 
 	// Find the user by ID

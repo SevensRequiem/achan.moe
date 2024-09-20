@@ -195,6 +195,7 @@ func globaldata(c echo.Context) map[string]interface{} {
 		data["User"] = ""
 	}
 	data["IsAdmin"] = auth.AdminCheck(c)
+	data["IsModerator"] = auth.ModeratorCheck(c)
 	data["User"] = user
 	data["Boards"] = board.GetBoards()
 	data["IP"] = c.RealIP()

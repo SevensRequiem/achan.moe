@@ -1,5 +1,5 @@
 <h1 align="center" id="title">achan.moe</h1>
-<img src="https://img.shields.io/liberapay/receives/sevensrequiem.svg?logo=liberapay"><img src="https://img.shields.io/github/commit-activity/w/sevensrequiem/achan.moe"><img src="https://img.shields.io/github/last-commit/sevensrequiem/achan.moe"><img src="https://img.shields.io/github/languages/top/sevensrequiem/achan.moe"><img src="https://img.shields.io/github/repo-size/sevensrequiem/achan.moe"><img src="https://img.shields.io/github/downloads/sevensrequiem/achan.moe/total">
+<a href="https://liberapay.com/sevensrequiem/donate"><img src="https://img.shields.io/liberapay/receives/sevensrequiem.svg?logo=liberapay"></a><img src="https://img.shields.io/github/commit-activity/w/sevensrequiem/achan.moe"><img src="https://img.shields.io/github/last-commit/sevensrequiem/achan.moe"><img src="https://img.shields.io/github/languages/top/sevensrequiem/achan.moe"><img src="https://img.shields.io/github/repo-size/sevensrequiem/achan.moe"><img src="https://img.shields.io/github/downloads/sevensrequiem/achan.moe/total">
 
 
 

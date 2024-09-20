@@ -28,6 +28,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"golang.org/x/exp/rand"
 	"golang.org/x/time/rate"
+	"gorm.io/gorm"
 )
 
 type Board struct {
@@ -58,8 +59,6 @@ type Post struct {
 	Sticky         bool   `gob:"Sticky"`
 	Locked         bool   `gob:"Locked"`
 	Page           int    `gob:"Page"`
-	Upvotes        int    `gob:"Upvotes"`
-	Downvotes      int    `gob:"Downvotes"`
 	ReportCount    int    `gob:"ReportCount"`
 }
 
@@ -192,7 +191,7 @@ func processThread(c echo.Context, boardID, content, subject, author, stickyValu
 		Subject:        subject,
 		Author:         author,
 		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
-		IP:             "IP Placeholder", // Replace with actual IP retrieval
+		IP:             c.RealIP(),
 		Sticky:         sticky,
 		Locked:         locked,
 	}
@@ -910,4 +909,182 @@ func GetTotalPostCount() int64 {
 	var PostCount PostCounter
 	db.First(&PostCount)
 	return PostCount.PostCount
+}
+
+func ReportThread(c echo.Context) error {
+	db := database.DB
+
+	threadID := c.Param("t")
+	boardID := c.Param("b")
+	filepath := "boards/" + boardID + "/" + threadID + ".gob"
+	file, err := os.Open(filepath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	var posts []Post
+	gob.NewDecoder(file).Decode(&posts)
+	posts[0].ReportCount++
+	db.Save(&posts[0])
+
+	return nil
+}
+
+func ReportPost(c echo.Context) error {
+	db := database.DB
+
+	postID := c.Param("p")
+	var post Post
+	db.Where("post_id = ?", postID).First(&post)
+	post.ReportCount++
+	db.Save(&post)
+
+	return nil
+}
+
+func DeleteThread(c echo.Context) error {
+	threadID := c.Param("t")
+	board := c.Param("b")
+
+	// Delete RecentPosts entries
+	RemoveFromRecentPosts("", threadID)
+
+	// Construct the path to the thread's JSON file
+	threadFilePath := filepath.Join("boards/" + board + "/" + threadID + ".gob")
+
+	// Open and decode the thread's JSON file
+	gobFile, err := os.Open(threadFilePath)
+	if err != nil {
+		log.Printf("Error opening Gob file: %v", err)
+		return c.JSON(http.StatusInternalServerError, "Internal server error: unable to open thread file")
+	}
+	defer gobFile.Close()
+
+	var posts []Post
+	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
+		log.Printf("Error decoding Gob file: %v", err)
+		return c.JSON(http.StatusInternalServerError, "Internal server error: unable to decode thread file: "+err.Error())
+	}
+
+	// Delete images associated with the thread
+	for _, post := range posts {
+		if post.ImageURL != "" {
+			imagePath := filepath.Join("boards", board, post.ImageURL)
+			if err := os.Remove(imagePath); err != nil {
+				log.Printf("Failed to delete image: %v", err)
+				return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete image")
+			}
+			if err := os.Remove("thumbs/" + post.ImageURL); err != nil {
+				log.Printf("Failed to delete thumbnail: %v", err)
+				return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete thumbnail")
+			}
+		}
+	}
+
+	// Delete the thread's JSON file
+	if err := os.Remove(threadFilePath); err != nil {
+		log.Printf("Failed to delete thread file: %v", err)
+		return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete thread file")
+	}
+
+	return c.JSON(http.StatusOK, "Thread deleted")
+}
+func DeletePost(c echo.Context) error {
+	postid := c.Param("p")
+	threadid := c.Param("t")
+	board := c.Param("b")
+
+	// Construct the file path
+	filePath := "boards/" + board + "/" + threadid + ".gob"
+	// Open the JSON file
+	gobFile, err := os.Open(filePath)
+	if err != nil {
+		log.Printf("Failed to open file: %s, error: %v", filePath, err)
+		return c.JSON(http.StatusInternalServerError, "Internal server error")
+	}
+	defer gobFile.Close()
+
+	// Decode the JSON file into posts
+	var posts []Post
+	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
+		log.Printf("Error decoding JSON from file: %s, error: %v", filePath, err)
+		return c.JSON(http.StatusInternalServerError, "Error decoding JSON")
+	}
+
+	// Find and delete the post
+	for i, post := range posts {
+		if post.PostID == postid {
+			posts = append(posts[:i], posts[i+1:]...)
+			break
+		}
+	}
+
+	// delete image if exists
+	var imageURL string
+	for _, post := range posts {
+		if post.PostID == postid {
+			imageURL = post.ImageURL
+			break
+		}
+	}
+	if imageURL != "" {
+		// skip if null
+		if err := os.Remove("boards/" + board + "/" + imageURL); err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to delete image")
+		}
+
+		if err := os.Remove("thumbs/" + imageURL); err != nil {
+			return c.JSON(http.StatusInternalServerError, "Failed to delete thumbnail")
+		}
+	}
+
+	// Database operations (omitted for brevity)
+	RemoveFromRecentPosts(postid, "")
+	// Recreate the JSON file to update it
+	gobFile, err = os.Create(filePath)
+	if err != nil {
+		log.Printf("Failed to create file: %s, error: %v", filePath, err)
+		return c.JSON(http.StatusInternalServerError, "Internal server error")
+	}
+	defer gobFile.Close()
+
+	// Encode the updated posts back into the JSON file
+	if err := gob.NewEncoder(gobFile).Encode(posts); err != nil {
+		log.Printf("Error encoding JSON to file: %s, error: %v", filePath, err)
+		return c.JSON(http.StatusInternalServerError, "Error encoding JSON")
+	}
+
+	// Return success message
+	return c.JSON(http.StatusOK, "Post deleted")
+}
+
+func RemoveFromRecentPosts(postID, threadID string) {
+	// Check if both postID and threadID are zero, return early if true
+	if postID == "" && threadID == "" {
+		return
+	}
+
+	// Open database connection
+	db := database.DB
+
+	// Remove recent post by postID if it's not zero
+	if postID != "" {
+		removeRecentPostByField(db, "post_id", postID)
+	}
+
+	// Remove recent post by threadID if it's not zero and different from postID
+	if threadID != "" {
+		removeRecentPostByField(db, "thread_id", threadID)
+	}
+
+}
+
+// Helper function to remove a recent post by a specific field (e.g., post_id or thread_id)
+func removeRecentPostByField(db *gorm.DB, field string, value string) {
+	// Construct the query dynamically based on the field
+	db.Where(field+" = ?", value).Delete(&RecentPosts{})
+}
+
+func BoardRoutes(e *echo.Echo) {
+
 }

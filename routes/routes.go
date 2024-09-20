@@ -10,7 +10,6 @@ import (
 	"achan.moe/board"
 	"achan.moe/home"
 	"achan.moe/user"
-	vote "achan.moe/user/votes"
 	captcha "achan.moe/utils/captcha"
 	"achan.moe/utils/config"
 	"achan.moe/utils/hitcounter"
@@ -40,28 +39,6 @@ func Routes(e *echo.Echo) {
 	})
 	e.GET("/donate", func(c echo.Context) error {
 		return home.DonateHandler(c)
-	})
-
-	e.GET("/board/:b", func(c echo.Context) error {
-		return home.BoardHandler(c)
-	})
-
-	e.GET("/board/:b/:t", func(c echo.Context) error {
-		return home.ThreadHandler(c)
-	})
-
-	e.GET("/board/:b/:t/:p", func(c echo.Context) error {
-		return home.PostHandler(c)
-	})
-
-	e.POST("/board/:b", func(c echo.Context) error {
-		board.CreateThread(c)
-		return nil
-	})
-
-	e.POST("/board/:b/:t", func(c echo.Context) error {
-		board.CreateThreadPost(c)
-		return nil
 	})
 
 	// admin
@@ -152,22 +129,6 @@ func Routes(e *echo.Echo) {
 		return nil
 	})
 
-	e.DELETE("/admin/delete/:b/:t", func(c echo.Context) error {
-		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		admin.DeleteThread(c)
-		return nil
-	})
-
-	e.DELETE("/admin/delete/:b/:t/:p", func(c echo.Context) error {
-		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		admin.DeletePost(c)
-		return nil
-	})
-
 	e.POST("/admin/ban", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
 			c.JSON(http.StatusUnauthorized, "Unauthorized")
@@ -182,49 +143,6 @@ func Routes(e *echo.Echo) {
 		bans.UnbanIP(c)
 		return nil
 	})
-	// moderator
-	e.POST("/mod/ban", func(c echo.Context) error {
-		if !auth.ModCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		bans.BanIP(c)
-		return nil
-	})
-
-	e.POST("/mod/delete/:b/:t", func(c echo.Context) error {
-		if !auth.ModCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		admin.DeleteThread(c)
-		return nil
-	})
-
-	e.POST("/mod/delete/:b/:t/:p", func(c echo.Context) error {
-		if !auth.ModCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		admin.DeletePost(c)
-		return nil
-	})
-	// janny
-	e.DELETE("/janny/delete/:b/:t", func(c echo.Context) error {
-		board := c.Param("b")
-		if !auth.JannyCheck(c, board) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		admin.JannyDeleteThread(c)
-		return nil
-	})
-
-	e.DELETE("/janny/delete/:b/:t/:p", func(c echo.Context) error {
-		board := c.Param("b")
-		if !auth.JannyCheck(c, board) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		admin.JannyDeletePost(c)
-		return nil
-	})
-
 	// static files
 	e.Static("/assets", "assets")
 	e.GET("/robots.txt", func(c echo.Context) error {
@@ -332,6 +250,68 @@ func Routes(e *echo.Echo) {
 		return websocket.WebsocketHandler(c)
 	})
 
+	e.GET("/board/:b", func(c echo.Context) error {
+		return home.BoardHandler(c)
+	})
+
+	e.GET("/board/:b/:t", func(c echo.Context) error {
+		return home.ThreadHandler(c)
+	})
+
+	e.GET("/board/:b/:t/:p", func(c echo.Context) error {
+		return home.PostHandler(c)
+	})
+
+	e.POST("/board/:b", func(c echo.Context) error {
+		board.CreateThread(c)
+		return nil
+	})
+
+	e.POST("/board/:b/:t", func(c echo.Context) error {
+		board.CreateThreadPost(c)
+		return nil
+	})
+
+	e.POST("/board/:b/:t/:p", func(c echo.Context) error {
+		board.CreatePost(c)
+		return nil
+	})
+
+	e.DELETE("/board/:b/:t", func(c echo.Context) error {
+		boardID := c.Param("b")
+		if !(auth.AdminCheck(c) || auth.ModeratorCheck(c) || auth.JannyCheck(c, boardID)) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		board.DeleteThread(c)
+		return nil
+	})
+
+	e.DELETE("/board/:b/:t/:p", func(c echo.Context) error {
+		boardID := c.Param("b")
+		if !(auth.AdminCheck(c) || auth.ModeratorCheck(c) || auth.JannyCheck(c, boardID)) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		board.DeletePost(c)
+		return nil
+	})
+
+	e.POST("/board/:b/:t/:p/report", func(c echo.Context) error {
+		board.ReportPost(c)
+		return nil
+	})
+
+	e.POST("/board/:b/:t/report", func(c echo.Context) error {
+		board.ReportThread(c)
+		return nil
+	})
+
+	e.POST("/board/:b/:t/:p/delete", func(c echo.Context) error {
+		boardID := c.Param("b")
+		if !(auth.AdminCheck(c) || auth.ModeratorCheck(c) || auth.JannyCheck(c, boardID)) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		board.DeletePost(c)
+		return nil
+	})
 	user.Routes(e)
-	vote.VoteRoutes(e)
 }

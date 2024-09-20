@@ -19,6 +19,7 @@
                 const selfpostsSet = new Set(selfpostsArray);
         
                 const postids = document.querySelectorAll(".postid");
+                const thread = document.getElementById("thread");
                 postids.forEach(postid => {
                     const postIdWithoutHash = postid.dataset.id.replace("#", "");
                     if (selfpostsSet.has(postIdWithoutHash)) {
@@ -34,28 +35,11 @@
             });
         </script>
         
-        <script>
-            document.addEventListener("DOMContentLoaded", () => {
-                const selfpostsContent = document.getElementById("selfposts").content;
-                const selfpostsArray = selfpostsContent.slice(1, -1).split(" ");
-                const selfpostsSet = new Set(selfpostsArray);
-        
-                const postids = document.querySelectorAll(".postid");
-                postids.forEach(postid => {
-                    const postIdWithoutHash = postid.dataset.id.replace("#", "");
-                    if (selfpostsSet.has(postIdWithoutHash)) {
-                        postid.closest(".post").style.setProperty("border", "5px solid #AAF", "important");
-                    }
-                });
-            });
         </script>
-        
-        </script>
-        <fieldset id="thread" id="{{.Thread.PostID}}">
+        <fieldset id="thread" data-id="{{.Thread.PostID}}">
             <legend>{{.Thread.Author}} // <span class="subject">{{.Thread.Subject}}</span> - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
                 {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: <span class="file">{{.Thread.ImageURL}}</span></span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod" href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{else if .IsJanny}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|
                 <a class="mod"href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}} <a class="postid" href="#" data-id="{{.Thread.PostID}}">#{{.Thread.PostID}}</a>
-                <span class="votes">{{.Thread.Upvotes}} / {{.Thread.Downvotes}} <a href="#" onclick="threadupvote('{{.Thread.ThreadID}}')">Upvote</a> | <a href="#" onclick="threaddownvote('{{.Thread.ThreadID}}')">Downvote</a></span>
             </legend>
             {{if .Thread.ImageURL}}
             <img src="/file/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image" id="threadfile">
@@ -74,27 +58,9 @@
                 }
             </script>
         </fieldset>
-        {{if .IsAdmin}}
+        {{if or .IsAdmin (or .IsModerator .IsJanny)}}
         <script>
-            const url = "/admin/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
-            const threadid = {{.Thread.ThreadID }};
-            const boardid = {{.Thread.BoardID }};
-            const deleteThread = async () => {
-                const response = await fetch(url, {
-                    method: "DELETE",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ threadid, boardid })
-                });
-                if (response.ok) {
-                    window.location.href = "/board/{{.Thread.BoardID}}";
-                }
-            }
-        </script>
-        {{else if .IsJanny }}
-        <script>
-            const url = "/janny/delete/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
+            const url = "/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
             const threadid = {{.Thread.ThreadID }};
             const boardid = {{.Thread.BoardID }};
             const deleteThread = async () => {
@@ -112,28 +78,28 @@
         </script>
         {{end}}
         <div id="posts">
+            {{if or .IsAdmin (or .IsModerator .IsJanny)}}
             <script>
-                const boardID = "{{.BoardID}}";
-                const threadID = "{{.ThreadID}}";
-                const deletePost = async (postid) => {
-                    const url = `{{if .IsAdmin}}/admin/delete/{{else}}/janny/delete/{{end}}${boardID}/${threadID}/` + postid;
+                async function deletePost(postid) {
+                    const url = `/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}/${postid}`;
                     const response = await fetch(url, {
                         method: "DELETE",
                         headers: {
                             "Content-Type": "application/json"
-                        }
+                        },
+                        body: JSON.stringify({ postid })
                     });
                     if (response.ok) {
                         window.location.reload();
                     }
                 }
             </script>
+            {{end}}
             {{range .Posts}}
             <fieldset class="post">
                 <legend><a href="#" class="postid" data-id="{{.PostID}}">#{{.PostID}}</a> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
                     {{if $.IsAdmin}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
                     {{if $.IsJanny}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
-                    <span class="votes">{{.Upvotes}} / {{.Downvotes}} <a href="#" onclick="upvote('{{.PostID}}')">Upvote</a> | <a href="#" onclick="downvote('{{.PostID}}')">Downvote</a></span>
                 </legend>
                 {{if .ImageURL}}
                 <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
@@ -144,76 +110,6 @@
             {{end}}
         </div>
     </div>
-    <script>
-        const upvote = async (postid) => {
-            const url = `/vote/up/${boardID}/${threadID}/${postid}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            });
-    
-            if (response.ok) {
-                window.location.reload();
-            } else {
-                const error = await response.json();
-                alert(`Error: ${error.message || "Failed to upvote"}`);
-            }
-        }
-    
-        const downvote = async (postid) => {
-            const url = `/vote/down/${boardID}/${threadID}/${postid}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            });
-    
-            if (response.ok) {
-                window.location.reload();
-            } else {
-                const error = await response.json();
-                alert(`Error: ${error.message || "Failed to downvote"}`);
-            }
-        }
-    
-        const threadupvote = async (threadid) => {
-            const url = `/vote/up/${boardID}/${threadid}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            });
-    
-            if (response.ok) {
-                window.location.reload();
-            } else {
-                const error = await response.json();
-                alert(`Error: ${error.message || "Failed to upvote thread"}`);
-            }
-        }
-    
-        const threaddownvote = async (threadid) => {
-            const url = `/vote/down/${boardID}/${threadid}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            });
-    
-            if (response.ok) {
-                window.location.reload();
-            } else {
-                const error = await response.json();
-                alert(`Error: ${error.message || "Failed to downvote thread"}`);
-            }
-        }
-    </script>
-    
             <script>
                 document.querySelectorAll(".postfile").forEach(postfile => {
                     const postsrc = postfile.src;

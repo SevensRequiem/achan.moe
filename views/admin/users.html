@@ -32,7 +32,12 @@
         </div>
         <div>
             <label for="jannyboards">Janny Boards (comma-separated):</label>
-            <input type="text" id="jannyboards" name="jannyboards">
+            <div id="jannyboard-selection">
+                {{range .Boards}}
+                    <span><input type="checkbox" name="jannyboards" value="{{.BoardID}}">
+                    <label for="{{.BoardID}}">{{.Description}}</label></span>
+                {{end}}
+            </div>
         </div>
         <div>
             <button type="submit">Update Groups</button>
@@ -117,30 +122,34 @@
         display: flex;
         flex-direction: column;
     }
-
-    #admin-user-edit form input {
+    form {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+    form input {
+        height: 20px !important;
+        max-height: 20px !important;
         margin-bottom: 10px;
     }
 
-    #admin-user-edit form a {
-        margin-top: 10px;
-        cursor: pointer;
+    #jannyboard-selection {
+        display: flex;
+        flex-direction: column;
     }
 
-    #admin-user-edit form a:hover {
-        text-decoration: underline;
+    #jannyboard-selection span {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
     }
 
-    #admin-user-edit form a:active {
-        color: #000;
+    #jannyboard-selection span input {
+        margin-right: 5px;
     }
 
-    #admin-user-edit form a:focus {
-        outline: none;
-    }
-
-    #admin-user-edit form a:visited {
-        color: #000;
+    #jannyboard-selection span label {
+        margin-right: 10px;
     }
 
 

@@ -14,15 +14,13 @@ type News struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
 	Date    string `json:"date"`
+	Author  string `json:"author"`
 }
 
 // init function creates the file if it doesn't exist and adds dummy news if needed.
 func init() {
 	db := database.DB
 	db.AutoMigrate(&News{})
-	if len(GetAllNews()) == 0 {
-		DummyData()
-	}
 }
 func NewNews(c echo.Context) error {
 	if !auth.AdminCheck(c) {
@@ -36,6 +34,7 @@ func NewNews(c echo.Context) error {
 		Title:   title,
 		Content: content,
 		Date:    date,
+		Author:  auth.LoggedInUser(c).Username,
 	}
 	if err := c.Bind(&news); err != nil {
 		return c.String(http.StatusBadRequest, "Invalid input")

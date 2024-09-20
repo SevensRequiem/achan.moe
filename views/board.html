@@ -25,6 +25,8 @@
             <label for="content">Post:</label>
             <textarea id="content" name="content" rows="4" maxlength="200" required></textarea><br><br>
             <div id="options">
+            <label for="isAnonymous">Anon:</label>
+            <input type="checkbox" id="isAnonymous" name="isAnonymous"><br><br>
             {{if .IsAdmin}}
             <label for="isSticky">Sticky:</label>
             <input type="checkbox" id="isSticky" name="isSticky"><br><br>

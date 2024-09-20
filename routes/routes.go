@@ -113,7 +113,12 @@ func Routes(e *echo.Echo) {
 		admin.CreateBoard(c)
 		return nil
 	})
-
+	e.GET("/admin/news", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return home.AdminNewsHandler(c)
+	})
 	e.POST("/admin/addnews", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
 			c.JSON(http.StatusUnauthorized, "Unauthorized")

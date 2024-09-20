@@ -195,7 +195,7 @@ func globaldata(c echo.Context) map[string]interface{} {
 		data["User"] = ""
 	}
 	data["IsAdmin"] = auth.AdminCheck(c)
-	data["User"] = user.Username
+	data["User"] = user
 	data["Boards"] = board.GetBoards()
 	data["IP"] = c.RealIP()
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
@@ -380,6 +380,28 @@ func AdminUpdateHandler(c echo.Context) error {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
+	return nil
+}
+
+func AdminNewsHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/news.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin News"
+	data["News"] = news.GetNews()
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
 	return nil
 }
 

@@ -129,18 +129,59 @@ func MinusReputation(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"message": "Reputation decreased"})
 }
 
+type UserResponse struct {
+	Username        string `json:"username"`
+	UUID            string `json:"uuid"`
+	Groups          Groups `json:"groups"`
+	PlusReputation  int    `json:"plus_reputation"`
+	MinusReputation int    `json:"minus_reputation"`
+	Posts           int    `json:"posts"`
+	Threads         int    `json:"threads"`
+}
+
+type Groups struct {
+	Admin     bool        `json:"admin"`
+	Moderator bool        `json:"moderator"`
+	Janny     JannyBoards `json:"janny"`
+}
+
+type JannyBoards struct {
+	Boards []string `json:"boards"`
+}
+
+func convertAuthGroupToGroups(authGroup auth.Group) Groups {
+	return Groups{
+		Admin:     authGroup.Admin,
+		Moderator: authGroup.Moderator,
+		Janny: JannyBoards{
+			Boards: authGroup.Janny.Boards,
+		},
+	}
+}
+
 func GetUser(c echo.Context) error {
 	db := database.DB
 	userID := c.Param("id")
 
-	if err := db.First(&user, userID).Error; err != nil {
+	var user auth.User
+	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to query user"})
 	}
 
-	return c.JSON(http.StatusOK, user)
+	response := UserResponse{
+		Username:        user.Username,
+		UUID:            user.UUID,
+		Groups:          convertAuthGroupToGroups(user.Groups),
+		PlusReputation:  user.PlusReputation,
+		MinusReputation: user.MinusReputation,
+		Posts:           user.Posts,
+		Threads:         user.Threads,
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
 
 func GetUserReputation(c echo.Context) error {
@@ -269,7 +310,7 @@ func UpdateUserGroups(c echo.Context) error {
 	var user auth.User
 
 	// Find the user by ID
-	if err := db.First(&user, "id = ?", userID).Error; err != nil {
+	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -289,6 +330,8 @@ func UpdateUserGroups(c echo.Context) error {
 	} else {
 		user.Groups.Moderator = false
 	}
+
+	user.Permanent = true
 
 	// Update janny status and jannyboards
 	if janny == "on" {

@@ -37,7 +37,7 @@
         
         </script>
         <fieldset id="thread" data-id="{{.Thread.PostID}}">
-            <legend>{{.Thread.Author}} // <span class="subject">{{.Thread.Subject}}</span> - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
+            <legend><span class="author" title="{{.Thread.TrueUser}}">{{.Thread.Author}}</span> // <span class="subject">{{.Thread.Subject}}</span> - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
                 {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: <span class="file">{{.Thread.ImageURL}}</span></span>{{end}}{{if .IsAdmin}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod" href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{else if .IsJanny}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|
                 <a class="mod"href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}} <a class="postid" href="#" data-id="{{.Thread.PostID}}">#{{.Thread.PostID}}</a>
             </legend>
@@ -97,7 +97,7 @@
             {{end}}
             {{range .Posts}}
             <fieldset class="post">
-                <legend><a href="#" class="postid" data-id="{{.PostID}}">#{{.PostID}}</a> <span>{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
+                <legend><a href="#" class="postid" data-id="{{.PostID}}">#{{.PostID}}</a> <span class="author" title="{{.TrueUser}}">{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
                     {{if $.IsAdmin}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
                     {{if $.IsJanny}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
                 </legend>
@@ -137,6 +137,8 @@
                 <label for="content">Post:</label>
                 <textarea id="formcontent" name="content" maxlength="500"></textarea><br><br>
                 <div id="charCount">500 characters remaining</div>
+                <label for="isAnonymous">Anon:</label>
+                <input type="checkbox" id="isAnonymous" name="isAnonymous"><br><br>
                 <label for="image">Image:</label>
                 <input type="file" id="image" name="image" accept="image/*"><br><br>
                 <a href="#" id="submitpost" return false;>Submit</a>
@@ -453,5 +455,24 @@ const showPost = (postId) => {
     getSessionCookie();
 </script>
 
-
+<script>
+document.querySelectorAll('.author').forEach(author => {
+    if (author.title !== '') {
+        const userid = author.title;
+        const compare = `/user/${userid}`;
+        fetch(compare)
+            .then(response => response.json())
+            .then(data => {
+                if (data.groups) {
+                    if (data.groups.admin) {
+                        author.style.color = '#FF0000';
+                    } else if (data.groups.moderator) {
+                        author.style.color = '#FFA500';
+                    }
+                }
+            })
+            .catch(error => console.error('Error fetching user data:', error));
+    }
+});
+</script>
 {{end}}

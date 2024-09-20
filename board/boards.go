@@ -53,6 +53,7 @@ type Post struct {
 	ThumbURL       string `gob:"ThumbURL"`
 	Subject        string `gob:"Subject"`
 	Author         string `gob:"Author"`
+	TrueUser       string `gob:"TrueUser"`
 	ParentID       string `gob:"ParentID"`
 	Timestamp      string `gob:"Timestamp"`
 	IP             string `gob:"IP"`
@@ -73,6 +74,7 @@ type RecentPosts struct {
 	ThumbURL       string `gob:"ThumbURL"`
 	Subject        string `gob:"Subject"`
 	Author         string `gob:"Author"`
+	TrueUser       string `gob:"TrueUser"`
 	ParentID       string `gob:"ParentID"`
 	Timestamp      string `gob:"Timestamp"`
 }
@@ -87,6 +89,7 @@ type PostCounter struct {
 	PostCount int64 `gob:"PostCount" gorm:"default:0"`
 }
 
+var User = auth.User{}
 var manager = queue.NewQueueManager()
 var q = manager.GetQueue("thread", 1000)
 
@@ -100,20 +103,25 @@ func init() {
 	manager.ProcessQueuesWithPrefix("thread")
 }
 
-func extractThreadData(c echo.Context) (string, string, string, string, string, *multipart.FileHeader, error) {
+func extractThreadData(c echo.Context) (string, string, string, string, string, string, *multipart.FileHeader, error) {
 	boardID := c.Param("b")
 	content := c.FormValue("content")
 	subject := c.FormValue("subject")
 	author := c.FormValue("author")
 	image, err := c.FormFile("image")
 	if err != nil && err != http.ErrMissingFile {
-		return "", "", "", "", "", nil, err
+		return "", "", "", "", "", "", nil, err
 	}
 
-	return boardID, content, subject, author, c.FormValue("isSticky"), image, nil
+	trueuser := "Anonymous"
+	if auth.AuthCheck(c) {
+		trueuser = auth.LoggedInUser(c).UUID
+	}
+
+	return boardID, content, subject, author, trueuser, c.FormValue("isSticky"), image, nil
 }
 
-func processThread(c echo.Context, boardID, content, subject, author, stickyValue string, image *multipart.FileHeader) error {
+func processThread(c echo.Context, boardID, content, subject, author, trueuser, stickyValue string, image *multipart.FileHeader) error {
 	if boardID == "" {
 		return errors.New("Board ID cannot be empty")
 	}
@@ -190,6 +198,7 @@ func processThread(c echo.Context, boardID, content, subject, author, stickyValu
 		ThumbURL:       "thumbs/" + imageURL,
 		Subject:        subject,
 		Author:         author,
+		TrueUser:       trueuser,
 		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
 		IP:             c.RealIP(),
 		Sticky:         sticky,
@@ -231,13 +240,13 @@ func CreateThread(c echo.Context) error {
 		}
 	}
 
-	boardID, content, subject, author, stickyValue, image, err := extractThreadData(c)
+	boardID, content, subject, author, trueuser, stickyValue, image, err := extractThreadData(c)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
 	q.Enqueue(func() {
-		if err := processThread(c, boardID, content, subject, author, stickyValue, image); err != nil {
+		if err := processThread(c, boardID, content, subject, author, trueuser, stickyValue, image); err != nil {
 			fmt.Println("Error processing thread:", err)
 		}
 	})
@@ -248,23 +257,24 @@ func addToRecents(postID string) {
 	db := database.DB
 	db.Create(&Recents{PostID: postID})
 }
-func extractPostData(c echo.Context) (string, string, string, string, *multipart.FileHeader, error) {
+func extractPostData(c echo.Context) (string, string, string, string, string, *multipart.FileHeader, error) {
 	boardID := c.Param("b")
 	content := c.FormValue("content")
 	author := c.FormValue("author")
 	image, err := c.FormFile("image")
 	if err != nil && err != http.ErrMissingFile {
-		return "", "", "", "", nil, err
+		return "", "", "", "", "", nil, err
 	}
 
-	if image == nil {
-		image = nil
+	trueuser := "Anonymous"
+	if auth.AuthCheck(c) {
+		trueuser = auth.LoggedInUser(c).UUID
 	}
 
-	return boardID, content, c.FormValue("replyto"), author, image, nil
+	return boardID, content, c.FormValue("replyto"), author, trueuser, image, nil
 }
 
-func processPost(c echo.Context, boardID, content, replyto, author string, image *multipart.FileHeader, postid string) error {
+func processPost(c echo.Context, boardID, content, replyto, author, trueuser string, image *multipart.FileHeader, postid string) error {
 	if boardID == "" {
 		return errors.New("Board ID cannot be empty")
 	}
@@ -321,6 +331,7 @@ func processPost(c echo.Context, boardID, content, replyto, author string, image
 		ImageURL:       imageURL,
 		ThumbURL:       "thumbs/" + imageURL,
 		Author:         author,
+		TrueUser:       trueuser,
 		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
 		IP:             c.RealIP(),
 		ParentID:       replyto,
@@ -333,7 +344,7 @@ func processPost(c echo.Context, boardID, content, replyto, author string, image
 	return nil
 }
 func CreatePost(c echo.Context) error {
-	boardID, content, replyto, author, image, err := extractPostData(c)
+	boardID, content, replyto, author, trueuser, image, err := extractPostData(c)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
@@ -364,7 +375,7 @@ func CreatePost(c echo.Context) error {
 	}
 
 	q.Enqueue(func() {
-		if err := processPost(c, boardID, content, replyto, author, image, postID); err != nil {
+		if err := processPost(c, boardID, content, replyto, author, trueuser, image, postID); err != nil {
 			fmt.Println("Error processing post:", err)
 		}
 	})
@@ -373,7 +384,7 @@ func CreatePost(c echo.Context) error {
 }
 
 func CreateThreadPost(c echo.Context) error {
-	boardID, content, replyto, author, image, err := extractPostData(c)
+	boardID, content, replyto, author, trueuser, image, err := extractPostData(c)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
@@ -408,7 +419,7 @@ func CreateThreadPost(c echo.Context) error {
 	}
 
 	q.Enqueue(func() {
-		if err := processPost(c, boardID, content, replyto, author, image, postID); err != nil {
+		if err := processPost(c, boardID, content, replyto, author, trueuser, image, postID); err != nil {
 			fmt.Println("Error processing post:", err)
 		}
 	})

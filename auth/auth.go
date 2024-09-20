@@ -37,21 +37,13 @@ func DefaultAdmin() {
 	var user User
 	db.Where("UUID = ?", 1337).First(&user)
 	if user.Username == "" {
-		user := User{UUID: "1337", Username: "admin", Password: ManualGenPassword("admin"), Groups: Group{Admin: true, Moderator: true, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
+		user := User{UUID: "1337", Username: "admin", Password: ManualGenPassword("admin"), Groups: Group{Admin: true, Moderator: true, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true, Premium: true, Permanent: true, Banned: false, Email: "", TransactionID: "", PlusReputation: 0, MinusReputation: 0, Posts: 0, Threads: 0}
 		db.Create(&user)
 	}
 }
-func dummydata() {
-	db := database.DB
-	user := User{UUID: Getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: true, Moderator: true, Janny: JannyBoards{Boards: []string{"a", "b"}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
-	db.Create(&user)
-	user = User{UUID: Getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: false, Moderator: true, Janny: JannyBoards{Boards: []string{"c", "d"}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
-	db.Create(&user)
-	user = User{UUID: Getrandid(), Username: getrandusername(), Password: getrandpassword(), Groups: Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true}
-	db.Create(&user)
-}
 
 type User struct {
+	ID              uint `gorm:"primaryKey"`
 	UUID            string
 	Username        string
 	Password        string
@@ -60,6 +52,8 @@ type User struct {
 	LastLogin       string
 	DoesExist       bool
 	Premium         bool
+	Permanent       bool
+	Banned          bool
 	Email           string
 	TransactionID   string
 	PlusReputation  int
@@ -292,11 +286,16 @@ func checkPassword(password string, user User) bool {
 }
 func LogoutHandler(c echo.Context) error {
 	// Retrieve the session
-	sess, _ := session.Get("session", c)
+	sess, err := session.Get("session", c)
+	if err != nil {
+		return err
+	}
 
 	// Clear the session
 	sess.Options.MaxAge = -1
-	sess.Save(c.Request(), c.Response())
+	if err := sess.Save(c.Request(), c.Response()); err != nil {
+		return err
+	}
 
 	// Redirect the user to the home page
 	return c.Redirect(http.StatusTemporaryRedirect, "/")
@@ -372,6 +371,28 @@ func AuthCheck(c echo.Context) bool {
 	// Check if the user is in the session and not nil
 	_, ok := sess.Values["user"].(User)
 	return ok
+}
+
+func LoggedInUser(c echo.Context) User {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
+
+	// Retrieve the user from the session
+	user, _ := sess.Values["user"].(User)
+	return user
+}
+func BannedCheck(c echo.Context) bool {
+	// Retrieve the session
+	sess, _ := session.Get("session", c)
+
+	// Check if the user is in the session and not nil
+	user, ok := sess.Values["user"].(User)
+	if !ok {
+		return false
+	}
+
+	// Check if the user is banned
+	return user.Banned
 }
 
 func PremiumCheck(c echo.Context) bool {
@@ -455,7 +476,7 @@ func UpdateUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save session"})
 	}
 
-	return c.JSON(http.StatusOK, user)
+	return nil
 }
 func GetTotalUsers() int64 {
 	// Obtain the database connection from the `database` package
@@ -538,7 +559,7 @@ func ExpireUsers() {
 
 	// Iterate over the users
 	for _, user := range users {
-		if !user.Premium {
+		if !user.Premium || !user.Permanent {
 			lastLogin, err := time.Parse("2006-01-02 15:04:05", user.LastLogin)
 			if err != nil {
 				log.Println(err)

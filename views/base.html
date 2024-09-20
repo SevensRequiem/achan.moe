@@ -65,8 +65,9 @@
             <br>
             <span id="mainnav">
                 <a href="/">home</a>
-                {{if .User}}
-                <span class="user">[{{.User}}]</span>
+                {{if .User.Username}}
+                <span class="user">[{{.User.Username}}]</span>
+                <a href="/profile">profile</a>
                 <a href="/logout">logout</a>
                 {{else}}
                     <a href="#" onclick="ToggleLoginDropdown()">login</a>

@@ -1,7 +1,7 @@
 {{define "content"}}
 <fieldset id="profile">
     <legend>Profile</legend>
-    <span>Welcome to your profile page!</span>
+    <span>Hello, {{.User.Username}}!</span> <span class="userid">{{.User.UUID}}</span>
     <span>Here you can view and edit your personal information.</span>
     <span>To update your information, please fill out the form below.</span>
     <form action="/profile/edit" method="POST">

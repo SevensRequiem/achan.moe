@@ -1,108 +1,86 @@
 package images
 
 import (
+	"fmt"
 	"image"
 	"image/jpeg"
-	"image/png"
-	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"golang.org/x/image/draw"
 )
 
-func GenerateThumbnail(inputPath string, outputPath string, maxWidth, maxHeight int) error {
-	log.Printf("Generating thumbnail for %s", inputPath)
-
-	// Open the input image file
-	file, err := os.Open(inputPath)
-	if err != nil {
-		log.Printf("Error opening input file: %v", err)
-		return err
-	}
-	defer file.Close()
-
-	// Decode the image
-	img, _, err := image.Decode(file)
-	if err != nil {
-		log.Printf("Error decoding image: %v", err)
-		return err
-	}
-
-	// Calculate the new dimensions while preserving the aspect ratio
-	originalWidth := img.Bounds().Dx()
-	originalHeight := img.Bounds().Dy()
-
-	var newWidth, newHeight int
-	if originalWidth > originalHeight {
-		newWidth = maxWidth
-		newHeight = (originalHeight * maxWidth) / originalWidth
-	} else {
-		newHeight = maxHeight
-		newWidth = (originalWidth * maxHeight) / originalHeight
-	}
-
-	// Create a new image with the desired size
-	thumbnail := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-
-	// Resize the image
-	draw.CatmullRom.Scale(thumbnail, thumbnail.Bounds(), img, img.Bounds(), draw.Over, nil)
-
-	// Create the output file
-	out, err := os.Create(outputPath)
-	if err != nil {
-		log.Printf("Error creating output file: %v", err)
-		return err
-	}
-	defer out.Close()
-
-	// Encode the thumbnail as a PNG
-	switch filepath.Ext(outputPath) {
-	case ".jpg", ".jpeg":
-		err = jpeg.Encode(out, thumbnail, nil)
-	case ".png":
-		err = png.Encode(out, thumbnail)
+// GenerateThumbnail creates a thumbnail for the given input image or video.
+func GenerateThumbnail(inputPath, outputPath string, maxWidth, maxHeight int) error {
+	// Get file extension
+	ext := filepath.Ext(inputPath)
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".tiff", ".bmp", ".webp", ".avif":
+		return imageThumbnail(inputPath, outputPath, maxWidth, maxHeight)
+	case ".webm", ".mp4", ".mov":
+		return videoThumbnail(inputPath, outputPath, maxWidth, maxHeight)
 	default:
-		log.Printf("Unsupported output file format: %s", filepath.Ext(outputPath))
-		return err
+		return fmt.Errorf("unsupported file format: %s", ext)
 	}
+}
 
+func imageThumbnail(inputPath, outputPath string, maxWidth, maxHeight int) error {
+	inputFile, err := os.Open(inputPath)
 	if err != nil {
-		log.Printf("Error encoding thumbnail: %v", err)
-		return err
+		return fmt.Errorf("failed to open the input file: %w", err)
+	}
+	defer inputFile.Close()
+
+	inputImage, _, err := image.Decode(inputFile)
+	if err != nil {
+		return fmt.Errorf("failed to decode the input image: %w", err)
 	}
 
-	log.Printf("Thumbnail generated successfully for %s", inputPath)
+	bounds := inputImage.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width > maxWidth || height > maxHeight {
+		width, height = resize(width, height, maxWidth, maxHeight)
+	}
+
+	thumbnail := image.NewRGBA(image.Rect(0, 0, width, height))
+	draw.CatmullRom.Scale(thumbnail, thumbnail.Bounds(), inputImage, bounds, draw.Over, nil)
+
+	outputFile, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create the output file: %w", err)
+	}
+	defer outputFile.Close()
+
+	if err := jpeg.Encode(outputFile, thumbnail, nil); err != nil {
+		return fmt.Errorf("failed to encode the thumbnail: %w", err)
+	}
+
 	return nil
 }
 
-func CompressImage(inputPath string, outputPath string, quality int) error {
-	// Open the input image file
-	file, err := os.Open(inputPath)
-	if err != nil {
-		return err
+func resize(width, height, maxWidth, maxHeight int) (int, int) {
+	if maxWidth <= 0 || maxHeight <= 0 {
+		return width, height // No resizing if max dimensions are invalid
 	}
-	defer file.Close()
-
-	// Decode the image
-	img, _, err := image.Decode(file)
-	if err != nil {
-		return err
+	if width > height {
+		height = height * maxWidth / width
+		width = maxWidth
+	} else {
+		width = width * maxHeight / height
+		height = maxHeight
 	}
+	return width, height
+}
 
-	// Create the output file
-	out, err := os.Create(outputPath)
-	if err != nil {
-		return err
+func videoThumbnail(inputPath, outputPath string, maxWidth, maxHeight int) error {
+	ext := filepath.Ext(inputPath)
+	if ext != ".webm" && ext != ".mp4" && ext != ".mov" {
+		return fmt.Errorf("unsupported video format: %s", ext)
 	}
-	defer out.Close()
-
-	// Encode the image as JPEG with the specified quality
-	options := jpeg.Options{Quality: quality}
-	err = jpeg.Encode(out, img, &options)
-	if err != nil {
-		return err
+	cmd := exec.Command("ffmpeg", "-i", inputPath, "-vf", fmt.Sprintf("thumbnail,scale=%d:%d", maxWidth, maxHeight), "-frames:v", "1", outputPath)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to generate the video thumbnail: %w", err)
 	}
-
 	return nil
 }

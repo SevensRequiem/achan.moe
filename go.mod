@@ -13,7 +13,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo-contrib v0.17.1
 	github.com/labstack/echo/v4 v4.12.0
-	github.com/opensearch-project/opensearch-go v1.1.0
 	github.com/oschwald/maxminddb-golang v1.13.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/yuin/gopher-lua v1.1.1
@@ -21,6 +20,7 @@ require (
 	golang.org/x/image v0.20.0
 	golang.org/x/time v0.6.0
 	gopkg.in/mail.v2 v2.3.1
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.10
 )

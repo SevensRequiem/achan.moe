@@ -91,7 +91,19 @@ func BoardHandler(c echo.Context) error {
 	boardid := board.GetBoardID(c.Param("b"))
 	data["Threads"] = board.GetThreads(boardid)
 	data["IsJanny"] = auth.JannyCheck(c, boardid)
-	data["Banner"] = banners.GetRandomBanner(boardid)
+	banner, err := banners.GetRandomBanner(boardid)
+	if err != nil {
+		log.Printf("Failed to get random banner: %v", err)
+		globalBanner, globalErr := banners.GetRandomGlobalBanner()
+		if globalErr != nil {
+			log.Printf("Failed to get global banner: %v", globalErr)
+			data["Banner"] = globalBanner
+		} else {
+			data["Banner"] = globalBanner
+		}
+	} else {
+		data["Banner"] = banner
+	}
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -136,7 +148,19 @@ func ThreadHandler(c echo.Context) error {
 	data["Posts"] = posts
 	data["IsJanny"] = auth.JannyCheck(c, b)
 	boardid := board.GetBoardID(c.Param("b"))
-	data["Banner"] = banners.GetRandomBanner(boardid)
+	banner, err := banners.GetRandomBanner(boardid)
+	if err != nil {
+		log.Printf("Failed to get random banner: %v", err)
+		globalBanner, globalErr := banners.GetRandomGlobalBanner()
+		if globalErr != nil {
+			log.Printf("Failed to get global banner: %v", globalErr)
+			data["Banner"] = globalBanner
+		} else {
+			data["Banner"] = globalBanner
+		}
+	} else {
+		data["Banner"] = banner
+	}
 	data["SelfPosts"] = selfposts
 
 	// Execute the template once with all the data prepared

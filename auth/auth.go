@@ -22,6 +22,7 @@ import (
 	"encoding/gob"
 
 	"achan.moe/database"
+	"achan.moe/logs"
 	"achan.moe/utils/mail"
 )
 
@@ -98,6 +99,7 @@ func (jb *JannyBoards) Scan(value interface{}) error {
 	}
 	bytes, ok := value.([]byte)
 	if !ok {
+		logs.Info("unsupported data type: %T", value, "in JannyBoards Scan")
 		return fmt.Errorf("unsupported data type: %T", value)
 	}
 	return json.Unmarshal(bytes, jb)
@@ -121,6 +123,7 @@ func Getrandid() string {
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			// ID does not exist, return the generated ID
+			logs.Info("Generated ID: ", id, " for new user")
 			return id
 		}
 		// Log any other error
@@ -145,6 +148,7 @@ func getrandusername() string {
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			// Username does not exist, return the generated username
+			logs.Info("Generated username: ", string(username), " for new user")
 			return string(username)
 		}
 		// Log any other error
@@ -164,6 +168,7 @@ func getrandpassword() string {
 		num := rand.Intn(len(chars))
 		password[i] = chars[num]
 	}
+	logs.Info("Generated password: ", string(password), " for new user")
 	return string(password)
 }
 func encryptPassword(password string) string {
@@ -172,6 +177,7 @@ func encryptPassword(password string) string {
 	h.Write([]byte(password))
 	encpass := h.Sum(nil)
 	encodedPass := base64.StdEncoding.EncodeToString(encpass)
+	logs.Debug("Encoded Pass for new user")
 	return encodedPass
 }
 
@@ -181,6 +187,7 @@ func ManualGenPassword(password string) string {
 	h.Write([]byte(password))
 	encpass := h.Sum(nil)
 	encodedPass := base64.StdEncoding.EncodeToString(encpass)
+	logs.Debug("Manually Generated Password for user")
 	return encodedPass
 }
 
@@ -188,6 +195,7 @@ var limiter = rate.NewLimiter(1/60.0, 1)
 
 func NewUser(c echo.Context) error {
 	if !limiter.Allow() {
+		logs.Debug("One Minute cooldown for new user")
 		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "One Minute cooldown"})
 	}
 
@@ -211,6 +219,7 @@ func NewUser(c echo.Context) error {
 
 	db.Create(&user)
 	info := map[string]string{"username": user.Username, "password": newpassword}
+	logs.Debug("New User Created", user.Username)
 	return c.JSON(http.StatusOK, info)
 }
 func NewManualUser(userID string, username string, password string) {
@@ -228,6 +237,7 @@ func NewManualUser(userID string, username string, password string) {
 		TransactionID: "",
 	}
 	db.Create(&user)
+	logs.Debug("New Manual User Created", user.Username)
 }
 func DecodePassword(encrypted_password string) string {
 	enc := os.Getenv("ENCRYPT_KEY")
@@ -240,6 +250,7 @@ func DecodePassword(encrypted_password string) string {
 	h := hmac.New(sha256.New, []byte(enc))
 	h.Write(decoded)
 	encpass := h.Sum(nil)
+	logs.Debug("Decoded Password for user")
 	return base64.StdEncoding.EncodeToString(encpass)
 }
 
@@ -255,6 +266,7 @@ func LoginHandler(c echo.Context) error {
 	password := c.FormValue("password")
 
 	if username == "" || password == "" {
+		logs.Error("Empty username or password")
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid username or password"})
 	}
 
@@ -263,6 +275,7 @@ func LoginHandler(c echo.Context) error {
 
 	// Check if the password is correct
 	if !checkPassword(password, user) {
+		logs.Error("Invalid username or password")
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid username or password"})
 	}
 
@@ -282,22 +295,26 @@ func checkPassword(password string, user User) bool {
 	h.Write([]byte(password))
 	encpass := h.Sum(nil)
 	encodedPass := base64.StdEncoding.EncodeToString(encpass)
+	logs.Debug("Checking Password for user")
 	return encodedPass == user.Password
 }
 func LogoutHandler(c echo.Context) error {
 	// Retrieve the session
 	sess, err := session.Get("session", c)
 	if err != nil {
+		logs.Error("Failed to get session")
 		return err
 	}
 
 	// Clear the session
 	sess.Options.MaxAge = -1
 	if err := sess.Save(c.Request(), c.Response()); err != nil {
+		logs.Error("Failed to save session")
 		return err
 	}
 
 	// Redirect the user to the home page
+	logs.Debug("User Logged Out")
 	return c.Redirect(http.StatusTemporaryRedirect, "/")
 }
 
@@ -314,6 +331,7 @@ func AdminCheck(c echo.Context) bool {
 	}
 
 	// Check if the user is an admin
+	logs.Debug("Admin Check")
 	return user.Groups.Admin
 }
 
@@ -328,6 +346,7 @@ func ModeratorCheck(c echo.Context) bool {
 	}
 
 	// Check if the user is a moderator
+	logs.Debug("Moderator Check")
 	return user.Groups.Moderator
 }
 func contains(slice []string, item string) bool {
@@ -349,6 +368,7 @@ func JannyCheck(c echo.Context, board string) bool {
 	}
 
 	// Check if the user is a janny
+	logs.Debug("Janny Check for board: ", board)
 	return contains(user.Groups.Janny.Boards, board)
 }
 func ModCheck(c echo.Context) bool {
@@ -362,6 +382,7 @@ func ModCheck(c echo.Context) bool {
 	}
 
 	// Check if the user is a moderator
+	logs.Debug("Moderator Check")
 	return user.Groups.Moderator
 }
 func AuthCheck(c echo.Context) bool {
@@ -370,6 +391,7 @@ func AuthCheck(c echo.Context) bool {
 
 	// Check if the user is in the session and not nil
 	_, ok := sess.Values["user"].(User)
+	logs.Debug("Auth Check", ok)
 	return ok
 }
 
@@ -379,6 +401,7 @@ func LoggedInUser(c echo.Context) User {
 
 	// Retrieve the user from the session
 	user, _ := sess.Values["user"].(User)
+	logs.Debug("Logged In User", user.Username)
 	return user
 }
 func BannedCheck(c echo.Context) bool {
@@ -392,6 +415,7 @@ func BannedCheck(c echo.Context) bool {
 	}
 
 	// Check if the user is banned
+	logs.Debug("Banned Check")
 	return user.Banned
 }
 
@@ -406,6 +430,7 @@ func PremiumCheck(c echo.Context) bool {
 	}
 
 	// Check if the user is premium
+	logs.Debug("Premium Check")
 	return user.Premium
 }
 
@@ -420,6 +445,7 @@ func EditUser(c echo.Context) error {
 
 	// Validate input parameters
 	if username == "" {
+		logs.Error("Username is required")
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Username is required"})
 	}
 
@@ -428,6 +454,7 @@ func EditUser(c echo.Context) error {
 
 	// Check if user exists
 	if user.UUID == "" {
+		logs.Error("User not found")
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 	}
 
@@ -438,6 +465,7 @@ func EditUser(c echo.Context) error {
 
 	// Save updated user to the database
 	if err := db.Where("uuid = ?", user.UUID).Updates(user).Error; err != nil {
+		logs.Error("Failed to update user")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
@@ -448,11 +476,13 @@ func UpdateUser(c echo.Context) error {
 	// get user from session
 	sess, err := session.Get("session", c)
 	if err != nil {
+		logs.Error("Failed to get session")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get session"})
 	}
 
 	user, ok := sess.Values["user"].(User)
 	if !ok {
+		logs.Error("User not found in session")
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "User not found in session"})
 	}
 
@@ -467,12 +497,14 @@ func UpdateUser(c echo.Context) error {
 	// save user to database
 	db := database.DB
 	if err := db.Save(&user).Error; err != nil {
+		logs.Error("Failed to update user")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	// delete session
 	sess.Options.MaxAge = -1
 	if err := sess.Save(c.Request(), c.Response()); err != nil {
+		logs.Error("Failed to save session")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save session"})
 	}
 
@@ -487,6 +519,7 @@ func GetTotalUsers() int64 {
 	db.Model(&User{}).Count(&count)
 
 	// Return the total number of users
+	logs.Debug("Total Users: ", count)
 	return count
 }
 
@@ -499,6 +532,7 @@ func GetUserByID(uuid uint) User {
 	db.Where("uuid = ?", uuid).First(&user)
 
 	// Return the user
+	logs.Debug("User Found: ", user.Username)
 	return user
 }
 
@@ -511,6 +545,7 @@ func GetUserByUsername(username string) User {
 	db.Where("username = ?", username).First(&user)
 
 	// Return the user
+	logs.Debug("User Found: ", user.Username)
 	return user
 }
 
@@ -523,6 +558,7 @@ func ListAdmins() []User {
 	db.Where("groups.admin = ?", true).Find(&admins)
 
 	// Return the admins
+	logs.Debug("Admins Found: ", admins)
 	return admins
 }
 
@@ -535,6 +571,7 @@ func ListModerators() []User {
 	db.Where("groups.moderator = ?", true).Find(&moderators)
 
 	// Return the moderators
+	logs.Debug("Moderators Found: ", moderators)
 	return moderators
 }
 
@@ -547,6 +584,7 @@ func ListJannies() []User {
 	db.Where("groups.janny = ?", true).Find(&jannies)
 
 	// Return the jannies
+	logs.Debug("Jannies Found: ", jannies)
 	return jannies
 }
 
@@ -562,7 +600,7 @@ func ExpireUsers() {
 		if !user.Premium || !user.Permanent {
 			lastLogin, err := time.Parse("2006-01-02 15:04:05", user.LastLogin)
 			if err != nil {
-				log.Println(err)
+				logs.Error("Failed to parse last login time")
 				continue
 			}
 
@@ -597,6 +635,7 @@ func NewPremiumUser(c echo.Context, email string, transactionid string) {
 	sess, _ := session.Get("session", c)
 	sess.Values["user"] = user
 	sess.Save(c.Request(), c.Response())
+	logs.Info("New Premium User Created", user.Username)
 	go mail.AddMailToQueue(email, "Welcome to achan.moe!", "Your account has been created successfully! Your username is: "+user.Username+" and your password is: "+user.Password+" You can change both your username and password after logging in.")
 	c.Redirect(http.StatusTemporaryRedirect, "/profile")
 }
@@ -608,6 +647,7 @@ func DeleteUser(c echo.Context) error {
 	// Retrieve the user from the session
 	user, ok := sess.Values["user"].(User)
 	if !ok {
+		logs.Error("User not found in session")
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "User not found in session"})
 	}
 
@@ -618,6 +658,7 @@ func DeleteUser(c echo.Context) error {
 
 	// Delete the user from the database
 	if err := db.Delete(&u).Error; err != nil {
+		logs.Error("Failed to delete user")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete user"})
 	}
 
@@ -626,5 +667,6 @@ func DeleteUser(c echo.Context) error {
 	sess.Save(c.Request(), c.Response())
 
 	// Redirect the user to the home page
+	logs.Debug("User Deleted", user.Username)
 	return c.JSON(http.StatusOK, map[string]string{"success": "User deleted"})
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -19,7 +20,8 @@ type GeoIP struct {
 
 func GetCountry(c echo.Context) string {
 	ip := net.ParseIP(c.RealIP())
-	db, err := maxminddb.Open("/usr/share/GeoIP/GeoLite2-Country.mmdb")
+	database := os.Getenv("GEOIP_DB_PATH")
+	db, err := maxminddb.Open(database)
 	if err != nil {
 		log.Fatal(err)
 	}

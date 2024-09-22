@@ -8,6 +8,7 @@ import (
 
 	"achan.moe/auth"
 	"achan.moe/database"
+	"achan.moe/logs"
 	"github.com/labstack/echo/v4"
 )
 
@@ -56,6 +57,8 @@ func BanIP(c echo.Context) Bans {
 
 	db.Create(&bannedIP)
 
+	logs.Info("Banned IP %s for %s by %s", ip, reason, username)
+
 	return bannedIP
 }
 
@@ -78,6 +81,7 @@ func UnbanIP(c echo.Context) Bans {
 	db.Create(&oldBan)
 	// Delete from Bans table
 	db.Delete(&ban)
+	logs.Info("Unbanned IP %s", ban.IP)
 	return ban
 }
 
@@ -85,6 +89,7 @@ func GetTotalBans(c echo.Context) error {
 	db := database.DB
 	var count int64
 	if err := db.Model(&Bans{}).Count(&count).Error; err != nil {
+		logs.Error("Error getting total ban count: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, count)
@@ -94,6 +99,7 @@ func GetBans(c echo.Context) error {
 	db := database.DB
 	var bans []Bans
 	if err := db.Find(&bans).Error; err != nil {
+		logs.Error("Error getting bans: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, bans)
@@ -103,6 +109,7 @@ func GetBansOld(c echo.Context) error {
 	db := database.DB
 	var oldBans []OldBans
 	if err := db.Find(&oldBans).Error; err != nil {
+		logs.Error("Error getting old bans: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, oldBans)
@@ -112,6 +119,7 @@ func GetBansActive(c echo.Context) error {
 	db := database.DB
 	var bans []Bans
 	if err := db.Where("Status = ?", "active").Find(&bans).Error; err != nil {
+		logs.Error("Error getting active bans: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, bans)
@@ -121,6 +129,7 @@ func GetBansExpired(c echo.Context) error {
 	db := database.DB
 	var bans []Bans
 	if err := db.Where("Status = ?", "expired").Find(&bans).Error; err != nil {
+		logs.Error("Error getting expired bans: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, bans)
@@ -130,6 +139,7 @@ func GetBansDeleted(c echo.Context) error {
 	db := database.DB
 	var bans []Bans
 	if err := db.Where("Status = ?", "deleted").Find(&bans).Error; err != nil {
+		logs.Error("Error getting deleted bans: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, bans)
@@ -140,6 +150,7 @@ func GetBanByIP(c echo.Context) error {
 	ip := c.Param("ip")
 	var bans []Bans
 	if err := db.Where("IP = ?", ip).Find(&bans).Error; err != nil {
+		logs.Error("Error getting bans by IP: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, bans)
@@ -169,12 +180,13 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			if ban.IP == c.RealIP() {
 				expiresTime, err := time.Parse("2006-01-02", ban.Expires)
 				if err != nil {
-					fmt.Println("Error parsing time:", err)
+					logs.Error("Error parsing time:", err)
 					continue
 				}
 				if expiresTime.After(currentTime) {
 					tmpl, err := template.ParseFiles("views/util/banned.html")
 					if err != nil {
+						logs.Error("Error parsing template:", err)
 						return c.String(http.StatusInternalServerError, err.Error())
 					}
 					data := map[string]interface{}{
@@ -184,7 +196,7 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 					}
 					err = tmpl.Execute(c.Response().Writer, data)
 					if err != nil {
-						fmt.Println("Error executing template:", err)
+						logs.Error("Error executing template:", err)
 						return c.String(http.StatusInternalServerError, err.Error())
 					}
 					return nil
@@ -204,7 +216,7 @@ func ExpireCheck() {
 	for _, ban := range bans {
 		expiresTime, err := time.Parse("2006-01-02", ban.Expires)
 		if err != nil {
-			fmt.Println("Error parsing time:", err)
+			logs.Error("Error parsing time:", err)
 			continue
 		}
 		if expiresTime.Before(currentTime) && ban.Status == "active" {
@@ -223,10 +235,11 @@ func ExpireCheck() {
 			db.Create(&oldBan)
 			// Delete from Bans table
 			db.Delete(&ban)
+			logs.Info("Ban expired: %v", ban)
 			// Check for errors
 
 			if result.Error != nil {
-				fmt.Println("Error updating ban status:", result.Error)
+				logs.Error("Error expiring ban: %v", result.Error)
 			}
 		}
 	}
@@ -241,5 +254,6 @@ func DeleteBan(c echo.Context) Bans {
 	var ban Bans
 	db.First(&ban, id)
 	db.Where("ID = ?", id).Update("Status", "deleted")
+	logs.Info("Deleted ban: %v", ban)
 	return ban
 }

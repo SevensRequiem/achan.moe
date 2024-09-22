@@ -3,9 +3,11 @@ package routes
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"achan.moe/admin"
 	"achan.moe/auth"
+	"achan.moe/banners"
 	"achan.moe/bans"
 	"achan.moe/board"
 	"achan.moe/home"
@@ -18,6 +20,7 @@ import (
 	"achan.moe/utils/stats"
 	"achan.moe/utils/websocket"
 	"github.com/labstack/echo/v4"
+	"golang.org/x/exp/rand"
 )
 
 func Routes(e *echo.Echo) {
@@ -159,9 +162,7 @@ func Routes(e *echo.Echo) {
 	e.GET("/file/:b/:f", func(c echo.Context) error {
 		board := c.Param("b")
 		file := c.Param("f")
-		// Construct the path to the file based on the parameters
 		filePath := fmt.Sprintf("boards/%s/%s", board, file)
-		// Serve the file
 		return c.File(filePath)
 	})
 	e.GET("/thumb/:f", func(c echo.Context) error {
@@ -169,11 +170,25 @@ func Routes(e *echo.Echo) {
 		filepath := fmt.Sprintf("thumbs/%s", file)
 		return c.File(filepath)
 	})
-	e.GET("/banner/:b/:f", func(c echo.Context) error {
-		board := c.Param("b")
-		file := c.Param("f")
-		filepath := fmt.Sprintf("boards/%s/banners/%s", board, file)
-		return c.File(filepath)
+	e.GET("/banner/:b", func(c echo.Context) error {
+		boardid := c.Param("b")
+		rand.Seed(uint64(time.Now().UnixNano()))
+		var banner string
+		var err error
+
+		if rand.Intn(2) == 1 {
+			banner, err = banners.GetRandomGlobalBanner()
+		} else {
+			banner, err = banners.GetRandomLocalBanner(boardid)
+		}
+
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+
+		c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+
+		return c.File(banner)
 	})
 
 	//auth
@@ -273,7 +288,7 @@ func Routes(e *echo.Echo) {
 	})
 
 	e.POST("/board/:b/:t", func(c echo.Context) error {
-		board.CreateThreadPost(c)
+		board.CreateThread(c)
 		return nil
 	})
 

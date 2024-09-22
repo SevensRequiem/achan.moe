@@ -7,6 +7,7 @@ import (
 
 	"achan.moe/auth"
 	"achan.moe/database"
+	"achan.moe/logs"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
@@ -89,6 +90,7 @@ func CreateBoard(c echo.Context) error {
 	result := db.Where("board_id = ?", boardID).First(&board)
 	if result.Error == nil {
 		// Record is found, throw an error
+		logs.Error("Record found, operation not allowed in CreateBoard")
 		return c.JSON(http.StatusBadRequest, "Record found, operation not allowed")
 	} else if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		// Record not found, proceed with your operation
@@ -100,6 +102,7 @@ func CreateBoard(c echo.Context) error {
 		return c.JSON(http.StatusOK, board)          // Respond with the created board
 	} else {
 		// Some other error occurred during the query execution
+		logs.Error("Error occurred during query execution in CreateBoard")
 		return c.JSON(http.StatusInternalServerError, "Internal server error")
 	}
 }
@@ -108,6 +111,7 @@ func CreateBoard(c echo.Context) error {
 func DeleteBoard(c echo.Context) {
 	if !auth.AdminCheck(c) {
 		c.JSON(http.StatusUnauthorized, "Unauthorized")
+		logs.Error("Unauthorized DeleteBoard request")
 	}
 	boardID := c.Param("b")
 	if boardID == "" {

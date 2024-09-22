@@ -4,8 +4,8 @@
     <h2>{{.BoardDesc}}</h2>
 </div>
 <div class="banners">
-        <img src="https://placehold.co/728x90">
-        <img src="https://placehold.co/580x72" alt="Banner"> 
+<img src="/banner/{{.BoardID}}" alt="Banner">
+        <img src="https://placehold.co/400x60" alt="Banner">
 </div>
 <br>
     <a href="#" onclick="loadForm(); return false;" class="createpost">Create Thread</a>
@@ -84,7 +84,7 @@
                 {{if .Sticky}}
                 <li class="sticky">
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                    <img src="/thumb/{{.ImageURL}}" alt="Image">
+                    <img src="/thumb/{{.ThumbURL}}" alt="Image">
                     <span class="subject">{{.Subject}}</span>
                     <p>{{.PartialContent}}</p>
                     <span class="postcount">{{.PostCount}} / 300</span>
@@ -97,7 +97,7 @@
                 {{if not .Sticky}}
                 <li>
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img src="/thumb/{{.ImageURL}}" alt="Image">
+                        <img src="/thumb/{{.ThumbURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
                         <span class="postcount">{{.PostCount}} / 300</span>
@@ -111,9 +111,10 @@
                 {{if .Sticky}}
                 <li class="sticky">
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img src="/thumb/{{.ImageURL}}" alt="Image">
+                        <img src="/thumb/{{.ThumbURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
+                        <span class="postcount">{{.PostCount}} / 300</span>
                         </a>
                 </li>
                 {{end}}
@@ -123,9 +124,10 @@
                 {{if not .Sticky}}
                 <li>
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img src="/thumb/{{.ImageURL}}" alt="Image">
+                        <img src="/thumb/{{.ThumbURL}}" alt="Image">
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
+                        <span class="postcount">{{.PostCount}} / 300</span>
                         </a>
                 </li>
                 {{end}}

@@ -144,8 +144,8 @@
             <li>
                 <span class="recent-board">/{{.BoardID}}/</span>
                 <a href="/board/{{.BoardID}}/{{.ThreadID}}" >
-                {{if .ImageURL}}
-                <img src="/thumb/{{.ImageURL}}" alt="Image" class="postfile">
+                {{if .ThumbURL}}
+                <img src="/thumb/{{.ThumbURL}}" alt="Image" class="postfile">
                 {{end}}
                 <span class="subject">{{.Subject}}</span>
                 <p>{{.PartialContent}}</p>
@@ -155,8 +155,8 @@
             <li>
                 <span class="recent-board">/{{.BoardID}}/</span>
                 <a href="/board/{{.BoardID}}/{{.ThreadID}}" >
-                {{if .ImageURL}}
-                <img src="/thumb/{{.ImageURL}}" alt="Image" class="postfile">
+                {{if .ThumbURL}}
+                <img src="/thumb/{{.ThumbURL}}" alt="Image" class="postfile">
                 {{end}}
                 <p>{{.PartialContent}}</p>
                 <span class="timestamp">{{.Timestamp}}</span></a>

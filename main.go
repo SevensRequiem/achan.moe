@@ -69,9 +69,7 @@ func main() {
 		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
 	}))
-	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{
-		Level: 5,
-	}))
+
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
 		XSSProtection:      "1; mode=block",
 		ContentTypeNosniff: "nosniff",

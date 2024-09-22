@@ -3,47 +3,48 @@ package banners
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
+	"path/filepath"
 	"time"
+
+	"achan.moe/logs"
 )
 
-func GetRandomBanner(boardid string) string {
+// GetRandomBanner returns a random banner based on the board ID.
+func GetRandomBanner(boardid string) (string, error) {
+	rand.Seed(time.Now().UnixNano())
+	if rand.Intn(2) == 0 {
+		logs.Debug("Getting global banner")
+		return GetRandomGlobalBanner()
+	}
+	logs.Debug("Getting local banner for board %s", boardid)
 	return GetRandomLocalBanner(boardid)
 }
 
-func GetRandomGlobalBanner() string {
+// GetRandomGlobalBanner returns a random global banner.
+func GetRandomGlobalBanner() (string, error) {
 	dir := "banners/global/"
-	// Get random banner from global banners folder
-	banner, err := GetRandomFile(dir)
-	if err != nil {
-		log.Printf("Error getting random file: %v", err)
-		return ""
-	}
-	return banner
+	return GetRandomFile(dir)
 }
 
-func GetRandomLocalBanner(boardid string) string {
-	boardDir := "boards/" + boardid + "/"
-	bannerDir := boardDir + "banners/"
-	// Get random banner from banners folder
-	banner, err := GetRandomFile(bannerDir)
-	if err != nil {
-		log.Printf("Error getting random file: %v", err)
-		return ""
-	}
-	return banner
+// GetRandomLocalBanner returns a random local banner for a given board ID.
+func GetRandomLocalBanner(boardid string) (string, error) {
+	boardDir := filepath.Join("boards", boardid, "banners")
+	return GetRandomFile(boardDir)
 }
 
+// GetRandomFile returns a random file from the specified directory.
 func GetRandomFile(dir string) (string, error) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
+		logs.Error("failed to read directory %s: %v", dir, err)
 		return "", err
 	}
 	if len(files) == 0 {
-		return "", fmt.Errorf("no files in directory: %s", dir)
+		logs.Error("no files found in %s", dir)
+		return "", fmt.Errorf("no files found in %s", dir)
 	}
 	rand.Seed(time.Now().UnixNano())
-	randNum := rand.Intn(len(files))
-	return files[randNum].Name(), nil
+	file := files[rand.Intn(len(files))]
+	return filepath.Join(dir, file.Name()), nil
 }

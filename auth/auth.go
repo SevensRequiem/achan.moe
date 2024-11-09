@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql/driver"
@@ -15,9 +16,10 @@ import (
 
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/exp/rand"
 	"golang.org/x/time/rate"
-	"gorm.io/gorm"
 
 	"encoding/gob"
 
@@ -28,18 +30,16 @@ import (
 
 func init() {
 	gob.Register(User{})
-	db := database.DB
-	db.AutoMigrate(&User{})
-	//dummydata()
 	DefaultAdmin()
 }
+
 func DefaultAdmin() {
-	db := database.DB
+	db := database.DB_Main
 	var user User
-	db.Where("UUID = ?", 1337).First(&user)
+	db.Collection("users").FindOne(context.TODO(), bson.M{"uuid": "1337"}).Decode(&user)
 	if user.Username == "" {
-		user := User{UUID: "1337", Username: "admin", Password: ManualGenPassword("admin"), Groups: Group{Admin: true, Moderator: true, Janny: JannyBoards{Boards: []string{}}}, DateCreated: time.Now().Format("2006-01-02 15:04:05"), LastLogin: time.Now().Format("2006-01-02 15:04:05"), DoesExist: true, Premium: true, Permanent: true, Banned: false, Email: "", TransactionID: "", PlusReputation: 0, MinusReputation: 0, Posts: 0, Threads: 0}
-		db.Create(&user)
+		NewManualUser("1337", "admin", "admin")
+		logs.Info("Default Admin Created")
 	}
 }
 
@@ -119,17 +119,15 @@ func Getrandid() string {
 	var user User
 
 	// Check if the ID already exists in the database
-	err := database.DB.Where("uuid = ?", id).First(&user).Error
+	err := database.DB_Main.Collection("users").FindOne(context.TODO(), bson.M{"UUID": id}).Decode(&user)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			// ID does not exist, return the generated ID
+		if err == mongo.ErrNoDocuments {
 			logs.Info("Generated ID: ", id, " for new user")
 			return id
 		}
 		// Log any other error
 		log.Println(err)
 	}
-
 	// If the ID exists, generate a new one
 	return Getrandid()
 }
@@ -144,10 +142,9 @@ func getrandusername() string {
 	var user User
 
 	// Check if the username already exists in the database
-	err := database.DB.Where("username = ?", string(username)).First(&user).Error
+	err := database.DB_Main.Collection("users").FindOne(context.TODO(), bson.M{"username": string(username)}).Decode(&user)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			// Username does not exist, return the generated username
+		if err == mongo.ErrNoDocuments {
 			logs.Info("Generated username: ", string(username), " for new user")
 			return string(username)
 		}
@@ -203,7 +200,7 @@ func NewUser(c echo.Context) error {
 	var newusername = getrandusername()
 	var newpassword = getrandpassword()
 	var encpass = encryptPassword(newpassword)
-	db := database.DB
+	db := database.DB_Main
 	user := User{
 		UUID:          newid,
 		Username:      newusername,
@@ -217,13 +214,13 @@ func NewUser(c echo.Context) error {
 		TransactionID: "",
 	}
 
-	db.Create(&user)
+	db.Collection("users").InsertOne(context.Background(), user)
 	info := map[string]string{"username": user.Username, "password": newpassword}
 	logs.Debug("New User Created", user.Username)
 	return c.JSON(http.StatusOK, info)
 }
 func NewManualUser(userID string, username string, password string) {
-	db := database.DB
+	db := database.DB_Main
 	user := User{
 		UUID:          userID,
 		Username:      username,
@@ -236,7 +233,7 @@ func NewManualUser(userID string, username string, password string) {
 		Email:         "",
 		TransactionID: "",
 	}
-	db.Create(&user)
+	db.Collection("users").InsertOne(context.Background(), user)
 	logs.Debug("New Manual User Created", user.Username)
 }
 func DecodePassword(encrypted_password string) string {
@@ -438,7 +435,7 @@ func PremiumCheck(c echo.Context) bool {
 // ////////////
 
 func EditUser(c echo.Context) error {
-	db := database.DB
+	db := database.DB_Main
 	var user User
 	username := c.FormValue("username")
 	password := c.FormValue("password")
@@ -464,9 +461,9 @@ func EditUser(c echo.Context) error {
 	}
 
 	// Save updated user to the database
-	if err := db.Where("uuid = ?", user.UUID).Updates(user).Error; err != nil {
+	if err := db.Collection("users").FindOneAndUpdate(context.TODO(), bson.M{"UUID": user.UUID}, bson.M{"$set": user}).Err(); err != nil {
 		logs.Error("Failed to update user")
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user"})
 	}
 
 	return c.JSON(http.StatusOK, user)
@@ -495,8 +492,8 @@ func UpdateUser(c echo.Context) error {
 	}
 
 	// save user to database
-	db := database.DB
-	if err := db.Save(&user).Error; err != nil {
+	db := database.DB_Main
+	if err := db.Collection("users").FindOneAndUpdate(context.TODO(), bson.M{"UUID": user.UUID}, bson.M{"$set": user}).Err(); err != nil {
 		logs.Error("Failed to update user")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -512,11 +509,11 @@ func UpdateUser(c echo.Context) error {
 }
 func GetTotalUsers() int64 {
 	// Obtain the database connection from the `database` package
-	db := database.DB
+	db := database.DB_Main
 
 	// Retrieve the total number of users from the database
 	var count int64
-	db.Model(&User{}).Count(&count)
+	db.Collection("users").CountDocuments(context.Background(), bson.M{})
 
 	// Return the total number of users
 	logs.Debug("Total Users: ", count)
@@ -525,11 +522,11 @@ func GetTotalUsers() int64 {
 
 func GetUserByID(uuid uint) User {
 	// Obtain the database connection from the `database` package
-	db := database.DB
+	db := database.DB_Main
 
 	// Retrieve the user from the database based on the ID
 	var user User
-	db.Where("uuid = ?", uuid).First(&user)
+	db.Collection("users").FindOne(context.TODO(), bson.M{"UUID": uuid}).Decode(&user)
 
 	// Return the user
 	logs.Debug("User Found: ", user.Username)
@@ -538,11 +535,11 @@ func GetUserByID(uuid uint) User {
 
 func GetUserByUsername(username string) User {
 	// Obtain the database connection from the `database` package
-	db := database.DB
+	db := database.DB_Main
 
 	// Retrieve the user from the database based on the username
 	var user User
-	db.Where("username = ?", username).First(&user)
+	db.Collection("users").FindOne(context.TODO(), bson.M{"username": username}).Decode(&user)
 
 	// Return the user
 	logs.Debug("User Found: ", user.Username)
@@ -551,11 +548,20 @@ func GetUserByUsername(username string) User {
 
 func ListAdmins() []User {
 	// Obtain the database connection from the `database` package
-	db := database.DB
+	db := database.DB_Main
 
 	// Retrieve the admins from the database
 	var admins []User
-	db.Where("groups.admin = ?", true).Find(&admins)
+	collection := db.Collection("users")
+	cursor, err := collection.Find(context.Background(), bson.M{"groups.admin": true})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &admins); err != nil {
+		log.Fatal(err)
+	}
 
 	// Return the admins
 	logs.Debug("Admins Found: ", admins)
@@ -564,11 +570,20 @@ func ListAdmins() []User {
 
 func ListModerators() []User {
 	// Obtain the database connection from the `database` package
-	db := database.DB
+	db := database.DB_Main
 
 	// Retrieve the moderators from the database
 	var moderators []User
-	db.Where("groups.moderator = ?", true).Find(&moderators)
+	collection := db.Collection("users")
+	cursor, err := collection.Find(context.Background(), bson.M{"groups.moderator": true})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &moderators); err != nil {
+		log.Fatal(err)
+	}
 
 	// Return the moderators
 	logs.Debug("Moderators Found: ", moderators)
@@ -577,23 +592,40 @@ func ListModerators() []User {
 
 func ListJannies() []User {
 	// Obtain the database connection from the `database` package
-	db := database.DB
+	db := database.DB_Main
 
 	// Retrieve the jannies from the database
 	var jannies []User
-	db.Where("groups.janny = ?", true).Find(&jannies)
+	collection := db.Collection("users")
+	cursor, err := collection.Find(context.Background(), bson.M{"groups.janny": bson.M{"$ne": nil}})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &jannies); err != nil {
+		log.Fatal(err)
+	}
 
 	// Return the jannies
 	logs.Debug("Jannies Found: ", jannies)
 	return jannies
 }
-
 func ExpireUsers() {
 	fmt.Println("Checking user login expirations....")
-	db := database.DB
+	db := database.DB_Main
 
 	var users []User
-	db.Find(&users)
+	collection := db.Collection("users")
+	cursor, err := collection.Find(context.Background(), bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &users); err != nil {
+		log.Fatal(err)
+	}
 
 	// Iterate over the users
 	for _, user := range users {
@@ -605,7 +637,10 @@ func ExpireUsers() {
 			}
 
 			if time.Since(lastLogin).Hours() > 720 {
-				db.Delete(&user)
+				_, err := collection.DeleteOne(context.Background(), bson.M{"UUID": user.UUID})
+				if err != nil {
+					logs.Error("Failed to delete user: ", err)
+				}
 			}
 		}
 	}
@@ -613,7 +648,7 @@ func ExpireUsers() {
 
 func NewPremiumUser(c echo.Context, email string, transactionid string) {
 	userID := Getrandid()
-	db := database.DB
+	db := database.DB_Main
 	user := User{
 		UUID:     userID,
 		Username: strings.Split(email, "@")[0],
@@ -630,7 +665,7 @@ func NewPremiumUser(c echo.Context, email string, transactionid string) {
 		Email:         email,
 		TransactionID: transactionid,
 	}
-	db.Create(&user)
+	db.Collection("users").InsertOne(context.Background(), user)
 	//login the user
 	sess, _ := session.Get("session", c)
 	sess.Values["user"] = user
@@ -652,12 +687,12 @@ func DeleteUser(c echo.Context) error {
 	}
 
 	// Retrieve the user from the database
-	db := database.DB
+	db := database.DB_Main
 	var u User
-	db.Where("uuid = ?", user.UUID).First(&u)
+	db.Collection("users").FindOne(context.TODO(), bson.M{"UUID": user.UUID}).Decode(&u)
 
 	// Delete the user from the database
-	if err := db.Delete(&u).Error; err != nil {
+	if err := db.Collection("users").FindOneAndDelete(context.TODO(), bson.M{"UUID": user.UUID}).Err(); err != nil {
 		logs.Error("Failed to delete user")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete user"})
 	}

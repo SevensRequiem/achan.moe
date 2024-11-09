@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"achan.moe/logs"
 	"achan.moe/utils/config"
 
 	"github.com/dreamscached/minequery/v2"
@@ -23,14 +24,14 @@ func init() {
 
 	// Ensure globalConfig is initialized
 	if globalConfig.MinecraftIP == "" {
-		fmt.Println("Minecraft server address is not configured")
+		logs.Warn("Minecraft IP not set in global configuration")
 		return
 	}
 
 	// Fetch the server status and update currentStatus
 	status, err := GetServerStatus()
 	if err != nil {
-		fmt.Println("Error fetching server status:", err)
+		logs.Error("Failed to fetch minecraft server status:", err)
 		return
 	}
 	currentStatus = status
@@ -56,6 +57,7 @@ func GetServerStatus() (*ServerStatus, error) {
 
 	res, err := pinger.Ping17(globalConfig.MinecraftIP, globalConfig.MinecraftPort)
 	if err != nil {
+		logs.Error("Failed to ping minecraft server:", err)
 		return nil, fmt.Errorf("error querying server: %w", err)
 	}
 
@@ -66,12 +68,13 @@ func GetServerStatus() (*ServerStatus, error) {
 		MaxPlayers:  res.MaxPlayers,
 		Description: res.Description.String(),
 	}
-	fmt.Println("Fetched MC server status")
+	logs.Debug("Server status:", status)
 	return status, nil
 }
 func JSONStatus(c echo.Context) error {
 	// Check if currentStatus is nil
 	if currentStatus == nil {
+		logs.Debug("Server status not available")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Server status not available"})
 	}
 
@@ -80,6 +83,7 @@ func JSONStatus(c echo.Context) error {
 
 	jsonData, err := json.Marshal(status)
 	if err != nil {
+		logs.Error("Failed to marshal server status to JSON:", err)
 		return err
 	}
 

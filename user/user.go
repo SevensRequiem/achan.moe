@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -8,7 +9,9 @@ import (
 	"achan.moe/database"
 	"achan.moe/home"
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var user auth.User
@@ -20,31 +23,25 @@ type RecentReputation struct {
 	ID              string
 }
 
-func init() {
-	db := database.DB
-	db.AutoMigrate(&RecentReputation{})
-}
-
 func PlusReputation(c echo.Context) error {
-	if !auth.AuthCheck(c) {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
-	}
-	db := database.DB
+	db := database.DB_Users
 	userID := c.FormValue("id")
 	ip := c.RealIP()
 
 	var recentRep RecentReputation
-	if db.Where("ip = ? AND id = ?", ip, userID).First(&recentRep).Error == nil {
+	collection := db.Collection("recent_reputations")
+	err := collection.FindOne(context.Background(), bson.M{"ip": ip, "id": userID}).Decode(&recentRep)
+	if err == nil {
 		if recentRep.MinusReputation > 0 {
 			// Change reputation from minus to plus
 			recentRep.MinusReputation = 0
 			recentRep.PlusReputation = 1
 			user.MinusReputation--
 			user.PlusReputation++
-			if err := db.Save(&recentRep).Error; err != nil {
+			if _, err := collection.ReplaceOne(context.Background(), bson.M{"ip": ip, "id": userID}, recentRep); err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update recent reputation"})
 			}
-			if err := db.Save(&user).Error; err != nil {
+			if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"uuid": userID}, user); err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user reputation"})
 			}
 			return c.JSON(http.StatusOK, map[string]string{"message": "Reputation changed to positive"})
@@ -53,8 +50,8 @@ func PlusReputation(c echo.Context) error {
 	}
 
 	// Find the user by ID
-	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to query user"})
@@ -65,12 +62,12 @@ func PlusReputation(c echo.Context) error {
 
 	// Save the recent reputation
 	recentRep = RecentReputation{PlusReputation: 1, IP: ip, ID: userID}
-	if err := db.Save(&recentRep).Error; err != nil {
+	if _, err := collection.InsertOne(context.Background(), recentRep); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save recent reputation"})
 	}
 
 	// Update the user's reputation in the database
-	if err := db.Save(&user).Error; err != nil {
+	if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"uuid": userID}, user); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update reputation"})
 	}
 
@@ -78,25 +75,24 @@ func PlusReputation(c echo.Context) error {
 }
 
 func MinusReputation(c echo.Context) error {
-	if !auth.AuthCheck(c) {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
-	}
-	db := database.DB
+	db := database.DB_Users
 	userID := c.FormValue("id")
 	ip := c.RealIP()
 
 	var recentRep RecentReputation
-	if db.Where("ip = ? AND id = ?", ip, userID).First(&recentRep).Error == nil {
+	collection := db.Collection("recent_reputations")
+	err := collection.FindOne(context.Background(), bson.M{"ip": ip, "id": userID}).Decode(&recentRep)
+	if err == nil {
 		if recentRep.PlusReputation > 0 {
 			// Change reputation from plus to minus
 			recentRep.PlusReputation = 0
 			recentRep.MinusReputation = 1
 			user.PlusReputation--
 			user.MinusReputation++
-			if err := db.Save(&recentRep).Error; err != nil {
+			if _, err := collection.ReplaceOne(context.Background(), bson.M{"ip": ip, "id": userID}, recentRep); err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update recent reputation"})
 			}
-			if err := db.Save(&user).Error; err != nil {
+			if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"uuid": userID}, user); err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user reputation"})
 			}
 			return c.JSON(http.StatusOK, map[string]string{"message": "Reputation changed to negative"})
@@ -105,24 +101,24 @@ func MinusReputation(c echo.Context) error {
 	}
 
 	// Find the user by ID
-	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to query user"})
 	}
 
-	// Decrement the user's reputation
+	// Increment the user's reputation
 	user.MinusReputation++
 
 	// Save the recent reputation
 	recentRep = RecentReputation{MinusReputation: 1, IP: ip, ID: userID}
-	if err := db.Save(&recentRep).Error; err != nil {
+	if _, err := collection.InsertOne(context.Background(), recentRep); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save recent reputation"})
 	}
 
 	// Update the user's reputation in the database
-	if err := db.Save(&user).Error; err != nil {
+	if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"uuid": userID}, user); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update reputation"})
 	}
 
@@ -160,12 +156,11 @@ func convertAuthGroupToGroups(authGroup auth.Group) Groups {
 }
 
 func GetUser(c echo.Context) error {
-	db := database.DB
+	db := database.DB_Users
 	userID := c.Param("id")
 
-	var user auth.User
-	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to query user"})
@@ -185,17 +180,20 @@ func GetUser(c echo.Context) error {
 }
 
 func GetUserReputation(c echo.Context) error {
-	db := database.DB
+	db := database.DB_Users
 	userID := c.Param("id")
 
-	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to query user"})
 	}
 
-	return c.JSON(http.StatusOK, map[string]int{"plus": user.PlusReputation, "minus": user.MinusReputation})
+	return c.JSON(http.StatusOK, map[string]int{
+		"plus_reputation":  user.PlusReputation,
+		"minus_reputation": user.MinusReputation,
+	})
 }
 
 func ListUsers(c echo.Context) error {
@@ -203,13 +201,32 @@ func ListUsers(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 	}
 
-	db := database.DB
-	var users []auth.User
-	if err := db.Find(&users).Error; err != nil {
+	db := database.DB_Users
+	cursor, err := db.Collection("users").Find(context.Background(), bson.M{})
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list users"})
+	}
+	defer cursor.Close(context.Background())
+
+	var users []UserResponse
+	for cursor.Next(context.Background()) {
+		var user auth.User
+		if err := cursor.Decode(&user); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user"})
+		}
+		users = append(users, UserResponse{
+			Username:        user.Username,
+			UUID:            user.UUID,
+			Groups:          convertAuthGroupToGroups(user.Groups),
+			PlusReputation:  user.PlusReputation,
+			MinusReputation: user.MinusReputation,
+			Posts:           user.Posts,
+			Threads:         user.Threads,
+		})
 	}
 
 	return c.JSON(http.StatusOK, users)
+
 }
 
 func ListUsersByReputation(c echo.Context) error {
@@ -217,10 +234,30 @@ func ListUsersByReputation(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 	}
 
-	db := database.DB
-	var users []auth.User
-	if err := db.Order("plus_reputation desc").Find(&users).Error; err != nil {
+	db := database.DB_Users
+	cursor, err := db.Collection("users").Find(context.Background(), bson.M{}, &options.FindOptions{
+		Sort: bson.M{"plus_reputation": -1},
+	})
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list users by reputation"})
+	}
+	defer cursor.Close(context.Background())
+
+	var users []UserResponse
+	for cursor.Next(context.Background()) {
+		var user auth.User
+		if err := cursor.Decode(&user); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user"})
+		}
+		users = append(users, UserResponse{
+			Username:        user.Username,
+			UUID:            user.UUID,
+			Groups:          convertAuthGroupToGroups(user.Groups),
+			PlusReputation:  user.PlusReputation,
+			MinusReputation: user.MinusReputation,
+			Posts:           user.Posts,
+			Threads:         user.Threads,
+		})
 	}
 
 	return c.JSON(http.StatusOK, users)
@@ -231,13 +268,34 @@ func ListUsersByJoinDate(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 	}
 
-	db := database.DB
-	var users []auth.User
-	if err := db.Order("created_at desc").Find(&users).Error; err != nil {
+	db := database.DB_Users
+	cursor, err := db.Collection("users").Find(context.Background(), bson.M{}, &options.FindOptions{
+		Sort: bson.M{"join_date": 1},
+	})
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list users by join date"})
+	}
+	defer cursor.Close(context.Background())
+
+	var users []UserResponse
+	for cursor.Next(context.Background()) {
+		var user auth.User
+		if err := cursor.Decode(&user); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user"})
+		}
+		users = append(users, UserResponse{
+			Username:        user.Username,
+			UUID:            user.UUID,
+			Groups:          convertAuthGroupToGroups(user.Groups),
+			PlusReputation:  user.PlusReputation,
+			MinusReputation: user.MinusReputation,
+			Posts:           user.Posts,
+			Threads:         user.Threads,
+		})
 	}
 
 	return c.JSON(http.StatusOK, users)
+
 }
 
 func ListUsersByLastLogin(c echo.Context) error {
@@ -245,23 +303,49 @@ func ListUsersByLastLogin(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 	}
 
-	db := database.DB
-	var users []auth.User
-	if err := db.Order("last_login desc").Find(&users).Error; err != nil {
+	db := database.DB_Users
+	cursor, err := db.Collection("users").Find(context.Background(), bson.M{}, &options.FindOptions{
+		Sort: bson.M{"last_login": -1},
+	})
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list users by last login"})
+	}
+	defer cursor.Close(context.Background())
+
+	var users []UserResponse
+	for cursor.Next(context.Background()) {
+		var user auth.User
+		if err := cursor.Decode(&user); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user"})
+		}
+		users = append(users, UserResponse{
+			Username:        user.Username,
+			UUID:            user.UUID,
+			Groups:          convertAuthGroupToGroups(user.Groups),
+			PlusReputation:  user.PlusReputation,
+			MinusReputation: user.MinusReputation,
+			Posts:           user.Posts,
+			Threads:         user.Threads,
+		})
 	}
 
 	return c.JSON(http.StatusOK, users)
-}
 
+}
 func ListAdmins(c echo.Context) error {
 	if !auth.AdminCheck(c) {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 	}
 
-	db := database.DB
+	db := database.DB_Users
 	var users []auth.User
-	if err := db.Where("admin = ?", true).Find(&users).Error; err != nil {
+	cursor, err := db.Collection("users").Find(context.Background(), bson.M{"groups.admin": true})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list admins"})
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &users); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list admins"})
 	}
 
@@ -273,9 +357,15 @@ func ListModerators(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 	}
 
-	db := database.DB
+	db := database.DB_Users
 	var users []auth.User
-	if err := db.Where("moderator = ?", true).Find(&users).Error; err != nil {
+	cursor, err := db.Collection("users").Find(context.Background(), bson.M{"groups.moderator": true})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list moderators"})
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &users); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list moderators"})
 	}
 
@@ -287,9 +377,15 @@ func ListJannies(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 	}
 
-	db := database.DB
+	db := database.DB_Users
 	var users []auth.User
-	if err := db.Where("jannie = ?", true).Find(&users).Error; err != nil {
+	cursor, err := db.Collection("users").Find(context.Background(), bson.M{"groups.janny.boards": bson.M{"$ne": nil}})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list jannies"})
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &users); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list jannies"})
 	}
 
@@ -300,7 +396,7 @@ func UpdateUserGroups(c echo.Context) error {
 	if !auth.AdminCheck(c) {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
 	}
-	db := database.DB
+	db := database.DB_Users
 	userID := c.FormValue("id")
 	admin := c.FormValue("admin")
 	moderator := c.FormValue("moderator")
@@ -312,8 +408,8 @@ func UpdateUserGroups(c echo.Context) error {
 	var user auth.User
 
 	// Find the user by ID
-	if err := db.First(&user, "uuid = ?", userID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to query user"})
@@ -343,8 +439,8 @@ func UpdateUserGroups(c echo.Context) error {
 	}
 
 	// Save the updated user to the database
-	if err := db.Save(&user).Error; err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update groups"})
+	if err := db.Collection("users").FindOneAndReplace(context.Background(), bson.M{"uuid": userID}, user).Err(); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user groups"})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Groups updated"})

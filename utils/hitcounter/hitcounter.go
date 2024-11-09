@@ -1,12 +1,13 @@
 package hitcounter
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
 
 	"achan.moe/database"
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type HitCounter struct {
@@ -16,28 +17,18 @@ type HitCounter struct {
 	cache map[string]time.Time
 }
 
-var db = database.DB
+var db = database.DB_Main
 
 func init() {
-	db.AutoMigrate(&HitCounter{})
-	ensureInitialRecord()
-}
+	initialdocument()
 
-func ensureInitialRecord() {
-	var hitCounter HitCounter
-	if err := db.First(&hitCounter, 1).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			hitCounter = HitCounter{ID: 1, Hits: 0}
-			if err := db.Create(&hitCounter).Error; err != nil {
-				log.Fatalf("Failed to create initial hit counter record: %v", err)
-			}
-			log.Println("Created initial hit counter record.")
-		} else {
-			log.Fatalf("Failed to check initial hit counter record: %v", err)
-		}
+}
+func initialdocument() {
+	_, err := db.Collection("hits").InsertOne(context.Background(), bson.M{"hits": 0})
+	if err != nil {
+		log.Fatal(err)
 	}
 }
-
 func NewHitCounter() *HitCounter {
 	log.Println("Creating a new HitCounter...")
 	return &HitCounter{
@@ -55,7 +46,7 @@ func (h *HitCounter) Hit(ip string) {
 	}
 
 	// Increment the count in the first row
-	err := db.Model(&HitCounter{}).Where("id = ?", 1).Update("hits", gorm.Expr("hits + ?", 1)).Error
+	_, err := db.Collection("hits").UpdateOne(context.Background(), bson.M{}, bson.M{"$inc": bson.M{"hits": 1}})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -70,7 +61,7 @@ func (h *HitCounter) GetHits() int {
 	defer h.mutex.Unlock()
 
 	var hit HitCounter
-	err := db.First(&hit, 1).Error
+	err := db.Collection("hits").FindOne(context.Background(), bson.M{}).Decode(&hit)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -1,8 +1,9 @@
 package schedule
 
 import (
-	"fmt"
 	"time"
+
+	"achan.moe/logs"
 )
 
 type Task struct {
@@ -30,7 +31,7 @@ func (s *Scheduler) ScheduleTask(task Task) {
 
 func (s *Scheduler) Run() {
 	s.StartTime = time.Now()
-	fmt.Println("Schedule started at: ", s.StartTime)
+	logs.Info("Scheduler started at: ", s.StartTime)
 
 	for _, task := range s.Tasks {
 		go func(t Task) {
@@ -41,7 +42,7 @@ func (s *Scheduler) Run() {
 				t.Action()
 				s.LastUpdate = time.Now()
 				s.LastUpdateDuration = s.LastUpdate.Sub(s.StartTime)
-				fmt.Println("Task executed at: ", s.LastUpdate)
+				logs.Info("Task executed: ", t.Duration)
 			}
 		}(task)
 	}

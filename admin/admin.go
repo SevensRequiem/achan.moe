@@ -1,15 +1,14 @@
 package admin
 
 import (
-	"errors"
+	"context"
 	"net/http"
-	"os"
+
+	"go.mongodb.org/mongo-driver/bson"
 
 	"achan.moe/auth"
 	"achan.moe/database"
-	"achan.moe/logs"
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 )
 
 // Board is a struct for a board
@@ -51,8 +50,6 @@ type RecentPosts struct {
 	Timestamp string `gob:"Timestamp"`
 }
 
-var db = database.DB
-
 // CreateBoard creates a new board
 func CreateBoard(c echo.Context) error {
 	if !auth.AdminCheck(c) {
@@ -78,47 +75,62 @@ func CreateBoard(c echo.Context) error {
 	if recentposts == "" {
 		return c.JSON(http.StatusBadRequest, "Recentposts cannot be empty")
 	}
-
-	imgonly := c.FormValue("imageonly")
-	if imgonly == "" {
-		return c.JSON(http.StatusBadRequest, "Imageonly cannot be empty")
-	}
+	imgonly := c.FormValue("imageonly") == "true"
 
 	// check if board exists
 	var board Board
-	db := database.DB
-	result := db.Where("board_id = ?", boardID).First(&board)
-	if result.Error == nil {
-		// Record is found, throw an error
-		logs.Error("Record found, operation not allowed in CreateBoard")
-		return c.JSON(http.StatusBadRequest, "Record found, operation not allowed")
-	} else if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		// Record not found, proceed with your operation
-		if err := database.DB.Exec("INSERT INTO boards (board_id, name, description, latest_posts, image_only) VALUES (?, ?, ?, ?, ?)", boardID, name, description, recentposts, imgonly).Error; err != nil {
-			return c.JSON(http.StatusInternalServerError, "Failed to insert record")
-		}
-		os.Mkdir("boards/"+boardID, 0755)            // Consider error handling for directory creation
-		os.Mkdir("boards/"+boardID+"/banners", 0755) // Consider error handling for directory creation
-		return c.JSON(http.StatusOK, board)          // Respond with the created board
-	} else {
-		// Some other error occurred during the query execution
-		logs.Error("Error occurred during query execution in CreateBoard")
-		return c.JSON(http.StatusInternalServerError, "Internal server error")
+	db := database.DB_Main
+	collection := db.Collection("boards")
+	err := collection.FindOne(context.Background(), bson.M{"board_id": boardID}).Decode(&board)
+	if err == nil {
+		return c.JSON(http.StatusBadRequest, "Board already exists")
 	}
+	boardsclient := database.Client
+
+	// create board
+	board = Board{
+		BoardID:     boardID,
+		Name:        name,
+		Description: description,
+		PostCount:   0,
+		ImageOnly:   imgonly,
+		Locked:      false,
+		Archived:    false,
+	}
+	_, err = collection.InsertOne(context.Background(), board)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "Error creating board")
+	}
+
+	if boardsclient == nil {
+		return c.JSON(http.StatusInternalServerError, "Database client is not initialized")
+	}
+
+	boardsclient.Database(boardID)
+	boardsclient.Database(boardID).CreateCollection(context.Background(), "images")
+	boardsclient.Database(boardID).CreateCollection(context.Background(), "thumbs")
+	return c.JSON(http.StatusOK, "Board created")
 }
 
 // DeleteBoard deletes a board
 func DeleteBoard(c echo.Context) {
 	if !auth.AdminCheck(c) {
 		c.JSON(http.StatusUnauthorized, "Unauthorized")
-		logs.Error("Unauthorized DeleteBoard request")
+		return
 	}
-	boardID := c.Param("b")
+
+	boardID := c.Param("id")
 	if boardID == "" {
 		c.JSON(http.StatusBadRequest, "ID cannot be empty")
+		return
 	}
-	db := database.DB
-	db.Delete(&Board{}, "board_id = ?", boardID)
 
-	os.RemoveAll("boards/" + boardID)
+	db := database.DB_Main
+	collection := db.Collection("boards")
+	_, err := collection.DeleteOne(context.Background(), bson.M{"board_id": boardID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, "Error deleting board")
+		return
+	}
+	c.JSON(http.StatusOK, "Board deleted")
 }

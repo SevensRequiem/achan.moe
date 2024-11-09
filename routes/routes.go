@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -159,16 +158,16 @@ func Routes(e *echo.Echo) {
 	e.GET("/sitemap.xml", func(c echo.Context) error {
 		return c.File("static/sitemap.xml")
 	})
-	e.GET("/file/:b/:f", func(c echo.Context) error {
-		board := c.Param("b")
-		file := c.Param("f")
-		filePath := fmt.Sprintf("boards/%s/%s", board, file)
-		return c.File(filePath)
+	e.GET("/image/:b/:i", func(c echo.Context) error {
+		imageID := c.Param("i")
+		boardID := c.Param("b")
+		return board.ReturnImage(c, boardID, imageID)
 	})
-	e.GET("/thumb/:f", func(c echo.Context) error {
-		file := c.Param("f")
-		filepath := fmt.Sprintf("thumbs/%s", file)
-		return c.File(filepath)
+
+	e.GET("/thumb/:b/:i", func(c echo.Context) error {
+		thumbID := c.Param("i")
+		boardID := c.Param("b")
+		return board.ReturnThumb(c, boardID, thumbID)
 	})
 	e.GET("/banner/:b", func(c echo.Context) error {
 		boardid := c.Param("b")
@@ -292,45 +291,35 @@ func Routes(e *echo.Echo) {
 		return nil
 	})
 
-	e.POST("/board/:b/:t/:p", func(c echo.Context) error {
+	e.POST("/post/:b/:t", func(c echo.Context) error {
 		board.CreatePost(c)
 		return nil
 	})
 
 	e.DELETE("/board/:b/:t", func(c echo.Context) error {
 		boardID := c.Param("b")
+		threadID := c.Param("t")
 		if !(auth.AdminCheck(c) || auth.ModeratorCheck(c) || auth.JannyCheck(c, boardID)) {
 			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
-		board.DeleteThread(c)
+		board.DeleteThread(c, boardID, threadID)
 		return nil
 	})
 
 	e.DELETE("/board/:b/:t/:p", func(c echo.Context) error {
 		boardID := c.Param("b")
+		threadID := c.Param("t")
+		postID := c.Param("p")
+
 		if !(auth.AdminCheck(c) || auth.ModeratorCheck(c) || auth.JannyCheck(c, boardID)) {
 			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
-		board.DeletePost(c)
+		board.DeletePost(c, boardID, threadID, postID)
 		return nil
 	})
 
-	e.POST("/board/:b/:t/:p/report", func(c echo.Context) error {
+	e.POST("/board/:b/report", func(c echo.Context) error {
 		board.ReportPost(c)
-		return nil
-	})
-
-	e.POST("/board/:b/:t/report", func(c echo.Context) error {
-		board.ReportThread(c)
-		return nil
-	})
-
-	e.POST("/board/:b/:t/:p/delete", func(c echo.Context) error {
-		boardID := c.Param("b")
-		if !(auth.AdminCheck(c) || auth.ModeratorCheck(c) || auth.JannyCheck(c, boardID)) {
-			return c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		board.DeletePost(c)
 		return nil
 	})
 	user.Routes(e)

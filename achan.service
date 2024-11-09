@@ -1,0 +1,14 @@
+[Unit]
+Description=achan.moe
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5s
+WorkingDirectory=/opt/achan
+ExecStart=/opt/achan/achan.moe
+User=achan
+
+[Install]
+WantedBy=multi-user.target

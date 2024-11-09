@@ -36,33 +36,11 @@
         </script>
         
         </script>
-        <fieldset id="thread" data-id="{{.Thread.PostID}}">
-            <legend><span class="author" title="{{.Thread.TrueUser}}">{{.Thread.Author}}</span> // <span class="subject">{{.Thread.Subject}}</span> - {{.Thread.BoardID}}/{{.Thread.ThreadID}} @
-                {{.Thread.Timestamp}}{{if .Thread.ImageURL}} <span>File: <span class="file">{{.Thread.ImageURL}}</span></span>{{end}}{{if or .IsAdmin (or .IsModerator .IsJanny)}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a>|<a class="mod" href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}}
- <a class="postid" href="#" data-id="{{.Thread.PostID}}">#{{.Thread.PostID}}</a>
-            </legend>
-            {{if .Thread.ImageURL}}
-            <img src="/file/{{.BoardID}}/{{.Thread.ImageURL}}" alt="Image" id="threadfile">
-            {{end}}
-            <p class="postcontent">{{.Thread.Content}}</p>
-            <script>
-                const threadfile = document.getElementById("threadfile");
-                const srcurl = threadfile.src;
-                if (/\.(png|jpg|jpeg|gif)$/i.test(srcurl)) {
-                } else if (/\.(webm|mp4)$/i.test(srcurl)) {
-                    threadfile.outerHTML = `<video controls><source src="${srcurl}" type="video/${srcurl.split('.').pop()}"></video>`;
-                } else if (/\.(mp3|wav)$/i.test(srcurl)) {
-                    threadfile.outerHTML = `<audio controls><source src="${srcurl}" type="audio/${srcurl.split('.').pop()}"></audio>`;
-                } else {
-                    threadfile.outerHTML = `<a href="${srcurl}">Download File</a>`;
-                }
-            </script>
-        </fieldset>
         {{if or .IsAdmin (or .IsModerator .IsJanny)}}
         <script>
-            const url = "/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}";
-            const threadid = {{.Thread.ThreadID }};
-            const boardid = {{.Thread.BoardID }};
+            const url = "/board/{{.BoardID}}/{{.ThreadID}}";
+            const threadid = {{.ThreadID }};
+            const boardid = {{.BoardID }};
             const deleteThread = async () => {
                 const response = await fetch(url, {
                     method: "DELETE",
@@ -72,7 +50,7 @@
                     body: JSON.stringify({ threadid, boardid })
                 });
                 if (response.ok) {
-                    window.location.href = "/board/{{.Thread.BoardID}}";
+                    window.location.href = "/board/{{.BoardID}}";
                 }
             }
         </script>
@@ -95,13 +73,33 @@
                 }
             </script>
             {{end}}
+            {{if .Thread}}
+            <fieldset class="post" id="thread">
+                <legend><span class="author" title="{{.Thread.TrueUser}}">{{.Thread.Author}}</span> 
+                    <span id="unixtime">{{.Thread.Timestamp}}</span>
+                    {{if .Thread.Image}}<span>File: {{.Thread.Image}}</span>
+                    <a href="/image/{{.BoardID}}/{{.Thread.Image}}" class="file">Download</a>
+                    {{end}}
+                    {{if or .IsAdmin (or .IsModerator .IsJanny)}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}}
+                </legend>
+                {{if .Thread.Image}}
+                <img src="/image/{{.BoardID}}/{{.Thread.Image}}" alt="Post Image" class="postfile" loading="lazy">
+                {{end}}
+                <p class="postcontent">{{.Thread.Content}}</p>
+            </fieldset>
+            {{end}}
             {{range .Posts}}
             <fieldset class="post">
-                <legend><a href="#" class="postid" data-id="{{.PostID}}">#{{.PostID}}</a> <span class="author" title="{{.TrueUser}}">{{.Author}}</span> <span>{{.Timestamp}}</span>{{if .ImageURL}} <span>File: {{.ImageURL}}</span>{{end}}
+                <legend><a href="#" class="postid" data-id="{{.PostID}}">#{{.PostID}}</a> 
+                    <span class="author" title="{{.TrueUser}}">{{.Author}}</span> 
+                    <span id="unixtime">{{.Timestamp}}</span>
+                    {{if .Image}}<span>File: {{.Image}}</span>
+                    <a href="/image/{{.BoardID}}/{{.Image}}" class="file">Download</a>
+                    {{end}}
                     {{if or $.IsAdmin (or $.IsModerator $.IsJanny)}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
                 </legend>
-                {{if .ImageURL}}
-                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Post Image" class="postfile">
+                {{if .Image}}
+                <img src="/image/{{.BoardID}}/{{.Image}}" alt="Post Image" class="postfile" loading="lazy">
                 {{end}}
                 <p class="postcontent">{{.Content}}</p>
             
@@ -110,18 +108,32 @@
         </div>
     </div>
             <script>
-                document.querySelectorAll(".postfile").forEach(postfile => {
-                    const postsrc = postfile.src;
-                    if (/\.(png|jpg|jpeg|gif)$/i.test(postsrc)) {
-                        // Image handling logic here, if necessary
-                    } else if (/\.(webm|mp4)$/i.test(postsrc)) {
-                        postfile.outerHTML = `<video controls><source src="${postsrc}" type="video/${postsrc.split('.').pop()}"></video>`;
-                    } else if (/\.(mp3|wav)$/i.test(postsrc)) {
-                        postfile.outerHTML = `<audio controls><source src="${postsrc}" type="audio/${postsrc.split('.').pop()}"></audio>`;
-                    } else {
+            document.querySelectorAll(".postfile").forEach(postfile => {
+                const postsrc = postfile.src;
+            
+                fetch(postsrc)
+                    .then(response => {
+                        const contentType = response.headers.get("content-type");
+                        if (contentType.startsWith("image/")) {
+                            // Do nothing, as it's already an image
+                        } else if (contentType.startsWith("video/")) {
+                            postfile.outerHTML = `<video controls><source src="${postsrc}" type="${contentType}"></video>`;
+                        } else if (contentType.startsWith("audio/")) {
+                            postfile.outerHTML = `<audio controls><source src="${postsrc}" type="${contentType}"></audio>`;
+                        } else {
+                            postfile.outerHTML = `<a href="${postsrc}">Download File</a>`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching file:', error);
                         postfile.outerHTML = `<a href="${postsrc}">Download File</a>`;
-                    }
-                });
+                    });
+            });
+
+            document.querySelectorAll("#unixtime").forEach(unixtime => {
+                const date = new Date(parseInt(unixtime.innerText) * 1000);
+                unixtime.innerText = date.toLocaleString();
+            });
             </script>
         </div>
         <hr>
@@ -129,7 +141,7 @@
         <hr>
         <fieldset class="reply">
             <legend>Reply</legend>
-            <form action="/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}" method="post" enctype="multipart/form-data" id="postform">
+            <form action="/post/{{.BoardID}}/{{.ThreadID}}" method="post" enctype="multipart/form-data" id="postform">
                 <input type="text" id="boardID" name="b" value="{{.BoardID}}" hidden><br><br>
                 <label for="author">Username:</label>
                 <input type="text" id="author" name="author" value="Anonymous" required><br><br>
@@ -144,7 +156,6 @@
             </form>
         </fieldset>
         <script>
-            //show current chars/maxlength at the bottom right of the textarea
             document.addEventListener('DOMContentLoaded', function() {
                 const formcontent = document.getElementById('formcontent');
                 if (formcontent) {
@@ -161,13 +172,13 @@
 
         </script>
         <script>
-            //axios for form submission
+
             document.getElementById('submitpost').addEventListener('click', function() {
-                const postform = document.getElementById('postform'); // Select the form with the specific ID
+                const postform = document.getElementById('postform'); 
                 const postformData = new FormData(postform);
                 axios.post(postform.action, postformData)
                     .then(response => {
-                        location.reload(); // Reload the page to see the new thread
+                        location.reload(5 * 1000);
                     })
                     .catch(error => {
                         console.error(error);
@@ -186,6 +197,7 @@
               postContents[i].innerHTML = marked.parse(postContents[i].innerHTML);
             }
           });
+          
  </script>
 
 
@@ -351,24 +363,19 @@
         const form = document.querySelector('.reply');
         const postContents = document.querySelectorAll('.postcontent');
 
-        // Function to toggle the visibility of the reply form
         const loadForm = () => {
             form.style.display = form.style.display === 'flex' ? 'none' : 'flex';
         };
 
-        // Function to display the reply form
         const openForm = () => {
             form.style.display = 'flex';
         };
 
-        // Decode HTML entities
         const decodeHtmlEntities = (html) => {
             const textarea = document.createElement('textarea');
             textarea.innerHTML = html;
             return textarea.value;
         };
-// Function to scroll to the post with the given ID
-// Function to scroll to the post with the given ID
 const showPost = (postId) => {
         const post = document.querySelector(`.postid[data-id='${postId}']`);
         if (post) {
@@ -376,17 +383,14 @@ const showPost = (postId) => {
         }
     };
 
-    // Attach showPost to the window object to make it globally accessible
     window.showPost = showPost;
 
-    // Apply greentext formatting
     const greenText = () => {
         const gtext = document.querySelectorAll('.postcontent p');
         gtext.forEach(post => {
             let lines = post.innerHTML.split('\n');
             lines = lines.map(line => {
                 if (line.startsWith('&gt;&gt;')) {
-                    // capture the post ID and format it
                     const postId = line.slice(4).trim();
                     return `<span class="replyquote"><a href="#" onclick="showPost('${postId}');">${postId}</a></span>`;
                 } else if (line.startsWith('&gt;')) {
@@ -398,21 +402,18 @@ const showPost = (postId) => {
             post.innerHTML = lines.join('\n');
         });
     };
-        // Apply markdown parsing
         const applyMarkdown = () => {
             postContents.forEach(post => {
                 post.innerHTML = marked.parse(decodeHtmlEntities(post.innerHTML));
             });
         };
 
-        // Decode and update posts
         const updatePosts = () => {
             postContents.forEach(post => {
                 post.innerHTML = decodeHtmlEntities(post.innerHTML);
             });
         };
 
-        // Add a reply reference to a specific post
         const replyTo = (postid) => {
             openForm();
             const content = document.getElementById('formcontent');
@@ -420,7 +421,6 @@ const showPost = (postId) => {
             content.focus();
         };
 
-        // Draggable reply form
         let isDragging = false;
         let offset = [0, 0];
 
@@ -442,12 +442,10 @@ const showPost = (postId) => {
             }
         };
 
-        // Event listeners for dragging
         form.addEventListener('mousedown', startDragging, true);
         document.addEventListener('mouseup', stopDragging, true);
         document.addEventListener('mousemove', drag, true);
 
-        // Initialize functionalities
         updatePosts();
         greenText();
         applyMarkdown();
@@ -464,21 +462,6 @@ const showPost = (postId) => {
         content.focus();
     };
     
-    const getSessionCookie = () => {
-        const name = "session=";
-        //get session cookie and log it to console
-        const decodedCookie = decodeURIComponent(document.cookie);
-        const cookieArray = decodedCookie.split(';');
-        for(let i = 0; i < cookieArray.length; i++) {
-            const cookie = cookieArray[i].trim();
-            if (cookie.indexOf(name + "=") === 0) {
-                console.log(cookie);
-            }
-        }
-    }
-
-
-    getSessionCookie();
 </script>
 
 <script>

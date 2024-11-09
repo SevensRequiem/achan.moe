@@ -3,6 +3,8 @@ package queue
 import (
 	"fmt"
 	"sync"
+
+	"achan.moe/logs"
 )
 
 // Queue represents a thread-safe FIFO queue to process functions.
@@ -78,21 +80,21 @@ func (q *Queue) Process() {
 			select {
 			case f, ok := <-q.queue:
 				if !ok {
-					fmt.Printf("Queue %s is closed, stopping processing\n", q.Name)
+					logs.Debug("Queue %s is closed", q.Name)
 					return
 				}
 				fmt.Printf("Function executing from queue %s\n", q.Name)
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
-							fmt.Printf("Function panicked from queue %s: %v\n", q.Name, r)
+							logs.Warn("Recovered from panic in queue %s: %v", q)
 						}
 					}()
 					f() // Execute the function
 				}()
-				fmt.Printf("Function executed from queue %s\n", q.Name)
+				logs.Debug("Function executed from queue %s", q.Name)
 			case <-q.stop:
-				fmt.Printf("Queue %s processing stopped\n", q.Name)
+				logs.Debug("Queue %s is stopped", q.Name)
 				return
 			}
 		}
@@ -121,7 +123,7 @@ func (qm *QueueManager) GetQueue(name string, bufferSize int) *Queue {
 	}
 	q := New(name, bufferSize)
 	qm.queues[name] = q
-	fmt.Printf("Queue %s created\n", name)
+	logs.Debug("Queue %s created", name)
 	return q
 }
 
@@ -130,7 +132,7 @@ func (qm *QueueManager) StopAll() {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 	for name, q := range qm.queues {
-		fmt.Printf("Stopping queue %s\n", name)
+		logs.Debug("Stopping queue %s", name)
 		q.Stop()
 	}
 }
@@ -141,7 +143,7 @@ func (qm *QueueManager) ProcessQueuesWithPrefix(prefix string) {
 	defer qm.mu.Unlock()
 	for name, q := range qm.queues {
 		if len(name) >= len(prefix) && name[:len(prefix)] == prefix {
-			fmt.Printf("Starting processing for queue %s\n", name)
+			logs.Debug("Starting processing for queue %s", name)
 			q.Process()
 		}
 	}
@@ -152,7 +154,7 @@ func (qm *QueueManager) ProcessAll() {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 	for name, q := range qm.queues {
-		fmt.Printf("Starting processing for queue %s\n", name)
+		logs.Debug("Starting processing for queue %s", name)
 		q.Process()
 	}
 }

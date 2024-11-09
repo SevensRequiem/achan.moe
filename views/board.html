@@ -84,7 +84,11 @@
                 {{if .Sticky}}
                 <li class="sticky">
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                    <img src="/thumb/{{.ThumbURL}}" alt="Image">
+                    {{if .Thumbnail}}
+                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
+                {{else if .Image}}
+                    <img src="/image/{{.BoardID}}/{{.Image}}" alt="Image" class="postfile">
+                {{end}}
                     <span class="subject">{{.Subject}}</span>
                     <p>{{.PartialContent}}</p>
                     <span class="postcount">{{.PostCount}} / 300</span>
@@ -97,7 +101,11 @@
                 {{if not .Sticky}}
                 <li>
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img src="/thumb/{{.ThumbURL}}" alt="Image">
+                    {{if .Thumbnail}}
+                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
+                {{else if .Image}}
+                    <img src="/image/{{.BoardID}}/{{.Image}}" alt="Image" class="postfile">
+                {{end}}
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
                         <span class="postcount">{{.PostCount}} / 300</span>
@@ -111,7 +119,11 @@
                 {{if .Sticky}}
                 <li class="sticky">
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img src="/thumb/{{.ThumbURL}}" alt="Image">
+                    {{if .Thumbnail}}
+                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
+                {{else if .Image}}
+                    <img src="/image/{{.BoardID}}/{{.Image}}" alt="Image" class="postfile">
+                {{end}}
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
                         <span class="postcount">{{.PostCount}} / 300</span>
@@ -124,7 +136,11 @@
                 {{if not .Sticky}}
                 <li>
                     <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                        <img src="/thumb/{{.ThumbURL}}" alt="Image">
+                    {{if .Thumbnail}}
+                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
+                {{else if .Image}}
+                    <img src="/image/{{.BoardID}}/{{.Image}}" alt="Image" class="postfile">
+                {{end}}
                         <span class="subject">{{.Subject}}</span>
                         <p>{{.PartialContent}}</p>
                         <span class="postcount">{{.PostCount}} / 300</span>
@@ -137,6 +153,14 @@
 
     </ul>
 </fieldset>
+<script>
+            document.querySelectorAll(".postfile").forEach(postfile => {
+            const postsrc = postfile.src;
+            if (postsrc.includes("/thumb/thumbs")) {
+                postfile.src = postsrc.replace("/thumb/thumbs", "/thumb");
+            }
+        });
+</script>
 <div id="cirno">
     <img src="/assets/cirno.png" alt="Cirno">
 </div>

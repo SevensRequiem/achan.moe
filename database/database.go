@@ -2,112 +2,275 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"achan.moe/logs"
-	"github.com/go-gorm/caches/v4"
 	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
-var DB *gorm.DB
-
-type memoryCacher struct {
-	store *sync.Map
-}
-
-func (c *memoryCacher) init() {
-	if c.store == nil {
-		c.store = &sync.Map{}
-	}
-}
-
-func (c *memoryCacher) Get(ctx context.Context, key string, q *caches.Query[any]) (*caches.Query[any], error) {
-	c.init()
-	val, ok := c.store.Load(key)
-	if !ok {
-		logs.Error("Key not found in cache")
-		return nil, nil
-	}
-
-	if err := q.Unmarshal(val.([]byte)); err != nil {
-		logs.Error("Failed to unmarshal cache value: %v", err)
-		return nil, err
-	}
-	logs.Debug("Cache hit")
-	return q, nil
-}
-
-func (c *memoryCacher) Store(ctx context.Context, key string, val *caches.Query[any]) error {
-	c.init()
-	res, err := val.Marshal()
-	if err != nil {
-		logs.Error("Failed to marshal cache value: %v", err)
-		return err
-	}
-
-	c.store.Store(key, res)
-	logs.Debug("Cache stored")
-	return nil
-}
-
-func (c *memoryCacher) Invalidate(ctx context.Context) error {
-	c.store = &sync.Map{}
-	logs.Debug("Cache invalidated")
-	return nil
-}
+var DB_Main *mongo.Database
+var DB_Boards *mongo.Database
+var DB_Actions *mongo.Database
+var DB_Archive *mongo.Database
+var DB_Users *mongo.Database
+var Client *mongo.Client
+var MySQL *gorm.DB
 
 func init() {
-	Init()
-}
+	err := godotenv.Load()
+	if err != nil {
+		logs.Error("Error loading .env file")
+	}
 
-func Init() *gorm.DB {
-	godotenv.Load()
+	client, err := mongo.NewClient(options.Client().ApplyURI(os.Getenv("MONGO_URI")))
+	if err != nil {
+		logs.Error("Error creating MongoDB client")
+		return
+	}
 
-	username := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASS")
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	dbname := os.Getenv("DB_NAME")
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", username, password, host, port, dbname)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = client.Connect(ctx)
+	if err != nil {
+		logs.Error("Error connecting to MongoDB")
+		return
+	}
+
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		logs.Error("Error pinging MongoDB")
+		return
+	}
+
+	Client = client
+	DB_Main = client.Database("achan")
+	DB_Actions = client.Database("actions")
+
+	logs.Info("Connected to MongoDB")
+
+	// create collections
+	if DB_Main != nil {
+		DB_Main.CreateCollection(context.Background(), "users")
+		DB_Main.CreateCollection(context.Background(), "reports")
+		DB_Main.CreateCollection(context.Background(), "sessions")
+		DB_Main.CreateCollection(context.Background(), "settings")
+		DB_Main.CreateCollection(context.Background(), "bans")
+		DB_Main.CreateCollection(context.Background(), "old_bans")
+		DB_Main.CreateCollection(context.Background(), "boards")
+		DB_Main.CreateCollection(context.Background(), "recent_posts")
+		DB_Main.CreateCollection(context.Background(), "data")
+		DB_Main.CreateCollection(context.Background(), "news")
+		DB_Main.CreateCollection(context.Background(), "hits")
+	} else {
+		logs.Error("DB_Main is nil")
+	}
+
+	if DB_Actions != nil {
+		DB_Actions.CreateCollection(context.Background(), "actions")
+		DB_Actions.CreateCollection(context.Background(), "reports")
+		DB_Actions.CreateCollection(context.Background(), "sessions")
+		DB_Actions.CreateCollection(context.Background(), "settings")
+		DB_Actions.CreateCollection(context.Background(), "bans")
+		DB_Actions.CreateCollection(context.Background(), "old_bans")
+		DB_Actions.CreateCollection(context.Background(), "boards")
+		DB_Actions.CreateCollection(context.Background(), "recent_posts")
+		DB_Actions.CreateCollection(context.Background(), "data")
+		DB_Actions.CreateCollection(context.Background(), "news")
+		DB_Actions.CreateCollection(context.Background(), "hits")
+		DB_Actions.CreateCollection(context.Background(), "users")
+	} else {
+		logs.Error("DB_Actions is nil")
+	}
+
+	// mysql connection
+	dsn := os.Getenv("MYSQL_URI")
 	if dsn == "" {
-		logs.Fatal("Failed to get database connection string")
+		logs.Error("No MySQL DSN provided")
+		return
 	}
-
-	var err error
-	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	MySQL, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		logs.Fatal("Failed to connect to database: %v", err)
+		logs.Error("Error opening MySQL connection: %v", err)
+		return
 	}
 
-	cachesPlugin := &caches.Caches{Conf: &caches.Config{
-		Cacher: &memoryCacher{},
-	}}
-
-	if err := DB.Use(cachesPlugin); err != nil {
-		logs.Fatal("Failed to use cache plugin: %v", err)
-	}
-
-	sqlDB, err := DB.DB()
+	sqlDB, err := MySQL.DB()
 	if err != nil {
-		logs.Fatal("Failed to access underlying DB connection: %v", err)
+		logs.Error("Error getting SQL DB from GORM: %v", err)
+		return
 	}
 
-	sqlDB.SetMaxIdleConns(100)
-	sqlDB.SetMaxOpenConns(1000)
-	sqlDB.SetConnMaxLifetime(15 * time.Minute)
-
-	return DB
+	err = sqlDB.Ping()
+	if err != nil {
+		logs.Error("Error pinging MySQL: %v", err)
+		MySQL = nil
+		return
+	}
 }
 
-func Close() {
-	sqlDB, err := DB.DB()
+func GetCollection(collection string) *mongo.Collection {
+	return DB_Main.Collection(collection)
+}
+
+func Createboards() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cursor, err := DB_Main.Collection("boards").Find(ctx, bson.M{})
 	if err != nil {
-		logs.Error("Failed to access underlying DB connection: %v", err)
+		logs.Error("Error finding boards")
+		return
 	}
-	sqlDB.Close()
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var board string
+		if err := cursor.Decode(&board); err != nil {
+			logs.Error("Error decoding board")
+			continue
+		}
+		Client.Database(board)
+	}
+	if err := cursor.Err(); err != nil {
+		logs.Error("Cursor error")
+	}
+}
+
+func Migrateboardsfromsql() {
+	if MySQL == nil {
+		logs.Error("MySQL connection is not initialized")
+		return
+	}
+
+	var boards []struct {
+		BoardID     string `gorm:"column:board_id"`
+		Name        string
+		Description string
+		PostCount   int
+		ImageOnly   bool
+		Locked      bool
+		Archived    bool
+		LatestPosts int
+		Pages       int
+	}
+	result := MySQL.Table("boards").Find(&boards)
+	if result.Error != nil {
+		logs.Error("Error querying MySQL: %v", result.Error)
+		return
+	}
+
+	for _, board := range boards {
+		// Check if the board already exists in MongoDB
+		var existingBoard bson.M
+		err := DB_Main.Collection("boards").FindOne(context.Background(), bson.M{"board_id": board.BoardID}).Decode(&existingBoard)
+		if err != nil && err != mongo.ErrNoDocuments {
+			logs.Error("Error checking if board exists: %v", err)
+			continue
+		}
+		if err == nil {
+			logs.Info("Board already exists: %v", board.BoardID)
+			continue
+		}
+
+		// Create collections for the board
+		err = Client.Database(board.BoardID).CreateCollection(context.Background(), "thumbs")
+		if err != nil {
+			logs.Error("Error creating thumbs collection: %v", err)
+			continue
+		}
+		err = Client.Database(board.BoardID).CreateCollection(context.Background(), "images")
+		if err != nil {
+			logs.Error("Error creating images collection: %v", err)
+			continue
+		}
+
+		// Insert the board into MongoDB
+		_, err = DB_Main.Collection("boards").InsertOne(context.Background(), bson.M{
+			"boardid":      board.BoardID,
+			"name":         board.Name,
+			"description":  board.Description,
+			"post_count":   board.PostCount,
+			"image_only":   board.ImageOnly,
+			"locked":       board.Locked,
+			"archived":     board.Archived,
+			"latest_posts": board.LatestPosts,
+			"pages":        board.Pages,
+		})
+		if err != nil {
+			logs.Error("Error inserting board: %v", err)
+		}
+	}
+}
+
+func Migratebansfromsql() {
+	if MySQL == nil {
+		logs.Error("MySQL connection is not initialized")
+		return
+	}
+
+	var bans []struct {
+		ID     string
+		IP     string
+		Reason string
+		Time   int64
+		Board  string
+	}
+	result := MySQL.Table("bans").Find(&bans)
+	if result.Error != nil {
+		logs.Error("Error querying MySQL: %v", result.Error)
+		return
+	}
+
+	for _, ban := range bans {
+		// Check if the ban already exists in MongoDB
+		var existingBan bson.M
+		err := DB_Main.Collection("bans").FindOne(context.Background(), bson.M{"id": ban.ID}).Decode(&existingBan)
+		if err == nil {
+			logs.Info("Ban already exists: %v", ban.ID)
+			continue
+		}
+
+		// Insert the ban into MongoDB
+		_, err = DB_Main.Collection("bans").InsertOne(context.Background(), bson.M{
+			"id":     ban.ID,
+			"ip":     ban.IP,
+			"reason": ban.Reason,
+			"time":   ban.Time,
+			"board":  ban.Board,
+		})
+		if err != nil {
+			logs.Error("Error inserting ban: %v", err)
+		}
+	}
+}
+
+func Drops() {
+	// get all boards
+	cursor, err := DB_Main.Collection("boards").Find(context.Background(), bson.M{})
+	if err != nil {
+		logs.Error("Error finding boards")
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	for cursor.Next(context.Background()) {
+		var board bson.M
+		if err := cursor.Decode(&board); err != nil {
+			logs.Error("Error decoding board")
+			continue
+		}
+		Client.Database(board["boardid"].(string)).Drop(context.Background())
+	}
+	if err := cursor.Err(); err != nil {
+		logs.Error("Cursor error")
+	}
+
+	Client.Database("achan").Collection("boards").Drop(context.Background())
 }

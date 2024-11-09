@@ -1,445 +1,262 @@
 package board
 
 import (
-	"encoding/gob"
+	"bytes"
+	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"html/template"
-	"io/ioutil"
+	"image"
+	"io"
 	"mime/multipart"
 	"net/http"
-	"net/url"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
+
+	_ "image/gif"
+	_ "image/jpeg"
+	"image/png"
+	_ "image/png"
 
 	"achan.moe/auth"
 	"achan.moe/database"
-	"achan.moe/images"
 	"achan.moe/logs"
 	"achan.moe/utils/queue"
-	"achan.moe/utils/sitemap"
-	"github.com/google/uuid"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
+	"github.com/nfnt/resize"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/exp/rand"
-	"golang.org/x/time/rate"
 )
 
 type Board struct {
-	BoardID     string `gob:"id" gorm:"column:board_id"`
-	Name        string `gob:"name"`
-	Description string `gob:"description"`
-	PostCount   int64  `gob:"post_count"`
-	ImageOnly   bool   `gob:"image_only"`
-	Locked      bool   `gob:"locked"`
-	Archived    bool   `gob:"archived"` //todo
-	LatestPosts bool   `gob:"latest_posts"`
-	Pages       int    `gob:"pages"` //todo
+	BoardID     string `bson:"boardid"`
+	Name        string `bson:"name"`
+	Description string `bson:"description"`
+	PostCount   int64  `bson:"post_count"`
+	ImageOnly   bool   `bson:"image_only"`
+	Locked      bool   `bson:"locked"`
+	Archived    bool   `bson:"archived"`
+	LatestPosts bool   `bson:"latest_posts"`
+	Pages       int    `bson:"pages"`
+}
+
+type ThreadPost struct {
+	ID             primitive.ObjectID `bson:"_id,omitempty"`
+	BoardID        string             `bson:"boardid"`
+	ThreadID       string             `bson:"thread_id"`
+	PostID         string             `bson:"post_id"`
+	Content        string             `bson:"content"`
+	PartialContent string             `bson:"partial_content"`
+	Image          string             `bson:"image"`
+	Thumbnail      string             `bson:"thumb"`
+	Subject        string             `bson:"subject"`
+	Author         string             `bson:"author"`
+	TrueUser       string             `bson:"true_user"`
+	Timestamp      int64              `bson:"timestamp"`
+	IP             string             `bson:"ip"`
+	Sticky         bool               `bson:"sticky"`
+	Locked         bool               `bson:"locked"`
+	PostCount      int                `bson:"post_count"`
+	ReportCount    int                `bson:"report_count"`
 }
 
 type Post struct {
-	BoardID        string `gob:"BoardID"`
-	ThreadID       string `gob:"ThreadID"`
-	PostID         string `gob:"PostID"`
-	Content        string `gob:"Content"`
-	PartialContent string `gob:"PartialContent"`
-	ImageURL       string `gob:"ImageURL"`
-	ThumbURL       string `gob:"ThumbURL"`
-	Subject        string `gob:"Subject"`
-	Author         string `gob:"Author"`
-	TrueUser       string `gob:"TrueUser"`
-	ParentID       string `gob:"ParentID"`
-	Timestamp      string `gob:"Timestamp"`
-	IP             string `gob:"IP"`
-	Sticky         bool   `gob:"Sticky"`
-	Locked         bool   `gob:"Locked"`
-	PostCount      int    `gob:"PostCount"`
-	ReportCount    int    `gob:"ReportCount"`
+	ID             primitive.ObjectID `bson:"_id,omitempty"`
+	BoardID        string             `bson:"boardid"`
+	ParentID       string             `bson:"parent_id"`
+	PostID         string             `bson:"post_id"`
+	Content        string             `bson:"content"`
+	PartialContent string             `bson:"partial_content"`
+	Image          string             `bson:"image"`
+	Thumbnail      string             `bson:"thumb"`
+	Subject        string             `bson:"subject"`
+	Author         string             `bson:"author"`
+	TrueUser       string             `bson:"true_user"`
+	Timestamp      int64              `bson:"timestamp"`
+	IP             string             `bson:"ip"`
+	ReportCount    int                `bson:"report_count"`
 }
 
 type RecentPosts struct {
-	ID             int64  `gob:"ID"`
-	BoardID        string `gob:"BoardID"`
-	ThreadID       string `gob:"ThreadID"`
-	PostID         string `gob:"PostID"`
-	Content        string `gob:"Content"`
-	PartialContent string `gob:"PartialContent"`
-	ImageURL       string `gob:"ImageURL"`
-	ThumbURL       string `gob:"ThumbURL"`
-	Subject        string `gob:"Subject"`
-	Author         string `gob:"Author"`
-	TrueUser       string `gob:"TrueUser"`
-	ParentID       string `gob:"ParentID"`
-	Timestamp      string `gob:"Timestamp"`
+	ID             int64  `bson:"_id,omitempty"`
+	BoardID        string `bson:"boardid"`
+	ThreadID       string `bson:"thread_id"`
+	PostID         string `bson:"post_id"`
+	Content        string `bson:"content"`
+	PartialContent string `bson:"partial_content"`
+	Image          string `bson:"image_url"`
+	Thumbnail      string `bson:"thumb_url"`
+	Subject        string `bson:"subject"`
+	Author         string `bson:"author"`
+	TrueUser       string `bson:"true_user"`
+	ParentID       string `bson:"parent_id"`
+	Timestamp      int64  `bson:"timestamp"`
+}
+
+type Image struct {
+	ID       primitive.ObjectID `bson:"_id,omitempty"`
+	Image    []byte             `bson:"image"`
+	Filetype string             `bson:"filetype"`
+	Size     int64              `bson:"size"`
+	Height   int                `bson:"height"`
+	Width    int                `bson:"width"`
 }
 
 type Recents struct {
-	ID     int64  `gob:"ID" gorm:"primaryKey"`
-	PostID string `gob:"PostID"`
+	ID     int64  `bson:"_id,omitempty"`
+	PostID string `bson:"post_id"`
 }
 
 type PostCounter struct {
-	ID        int   `gob:"ID" gorm:"primaryKey"`
-	PostCount int64 `gob:"PostCount" gorm:"default:0"`
+	ID        int   `bson:"_id,omitempty"`
+	PostCount int64 `bson:"post_count"`
 }
 
 var User = auth.User{}
 var manager = queue.NewQueueManager()
-var q = manager.GetQueue("thread", 1000)
+var q = manager.GetQueue("thread", 10)
+var client = database.Client
 
 func init() {
-	db := database.DB
-
-	db.AutoMigrate(&Board{})
-	db.AutoMigrate(&RecentPosts{})
-	db.AutoMigrate(&Recents{})
-	db.AutoMigrate(&PostCounter{})
 	manager.ProcessQueuesWithPrefix("thread")
 }
 
-func extractThreadData(c echo.Context) (string, string, string, string, string, string, *multipart.FileHeader, error) {
-	boardID := c.Param("b")
-	content := c.FormValue("content")
-	subject := c.FormValue("subject")
-	author := c.FormValue("author")
-	image, err := c.FormFile("image")
-	if err != nil && err != http.ErrMissingFile {
-		logs.Error("Error getting image file: %v", err)
-		return "", "", "", "", "", "", nil, err
-	}
-
-	trueuser := "Anonymous"
-	if auth.AuthCheck(c) {
-		trueuser = auth.LoggedInUser(c).UUID
-	}
-
-	sanitize(content, subject, author)
-	return boardID, content, subject, author, trueuser, c.FormValue("isSticky"), image, nil
-}
-
-func processThread(c echo.Context, boardID, content, subject, author, trueuser, stickyValue string, image *multipart.FileHeader) error {
-	if boardID == "" {
-		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
-	}
-	if CheckIfLocked(boardID) {
-		return c.JSON(http.StatusBadRequest, "Board is locked")
-	}
-	if CheckIfArchived(boardID) {
-		return c.JSON(http.StatusBadRequest, "Board is archived")
-	}
-	imgonly := CheckIfImageOnly(boardID)
-	if imgonly && content != "" {
-		return c.JSON(http.StatusBadRequest, "This board only allows image posts")
-	}
-	files, err := ioutil.ReadDir("boards/" + boardID)
+func saveThumb(boardID string, imageFile *multipart.FileHeader) (string, error) {
+	db := client.Database(boardID)
+	file, err := imageFile.Open()
 	if err != nil {
-		return err
-	}
-	threadID := 1
-	for _, file := range files {
-		if !file.IsDir() && strings.HasSuffix(file.Name(), ".gob") {
-			threadID++
-		}
-	}
-	if threadID > 30 {
-		DeleteLastThread(boardID)
-	}
-	if content == "" && !imgonly {
-		if image == nil {
-			return c.JSON(http.StatusBadRequest, "Content cannot be empty")
-		} else {
-			content = ""
-		}
-	}
-	if subject == "" {
-		subject = "No Subject"
-	}
-	if author == "" {
-		return c.JSON(http.StatusBadRequest, "Author cannot be empty")
-	}
-	if image == nil {
-		return c.JSON(http.StatusBadRequest, "Image is required for threads")
-	}
-	if image.Size > 11<<20 {
-		return c.JSON(http.StatusBadRequest, "File is too large")
-	}
-	ext := filepath.Ext(image.Filename)
-	if !isValidImageExtension(ext) {
-		return c.JSON(http.StatusBadRequest, "Invalid image extension")
-	}
-	// After the image is saved, generate the thumbnail
-	imageURL, err := saveImage(boardID, image)
-	if err != nil {
-		return err
-	}
-
-	// Construct the full input path for the thumbnail generation
-	inputImagePath := "boards/" + boardID + "/" + imageURL
-	ext = filepath.Ext(imageURL)
-	trimmedURL := strings.TrimSuffix(imageURL, ext)
-	thumbnailPath := "thumbs/" + trimmedURL + ".jpg"
-
-	// Generate the thumbnail
-	if err := images.GenerateThumbnail(inputImagePath, thumbnailPath, 200, 200); err != nil {
-		logs.Error("Error generating thumbnail: %v", err)
-		return fmt.Errorf("thumbnail generation failed: %w", err)
-	}
-
-	AddGlobalPostCount()
-	AddBoardPostCount(boardID)
-	sticky := stickyValue == "on"
-	locked := false
-	if !auth.AdminCheck(c) {
-		lockedValue := c.FormValue("isLocked")
-		locked = lockedValue == "on"
-	}
-	if len(subject) > 30 {
-		subject = subject[:30]
-	}
-
-	post := Post{
-		BoardID:        boardID,
-		ThreadID:       strconv.Itoa(threadID),
-		PostID:         GenUUID(),
-		Content:        content,
-		PartialContent: content[:min(len(content), 20)],
-		ImageURL:       imageURL,
-		ThumbURL:       trimmedURL + ".jpg",
-		Subject:        subject,
-		Author:         author,
-		TrueUser:       trueuser,
-		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
-		IP:             c.RealIP(),
-		Sticky:         sticky,
-		Locked:         locked,
-	}
-
-	addToRecents(post.PostID)
-
-	boardDir := "boards/" + boardID
-	jsonFilePath := boardDir + "/" + strconv.Itoa(threadID) + ".gob"
-	file, err := os.OpenFile(jsonFilePath, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		logs.Error("Error opening file: %v", err)
-		return err
+		return "", err
 	}
 	defer file.Close()
-	var posts []Post
-	if err := gob.NewDecoder(file).Decode(&posts); err != nil {
-		if err.Error() != "EOF" {
-			logs.Error("Error decoding JSON: %v", err)
-			return err
-		}
+
+	img, _, err := image.Decode(file)
+	if err != nil {
+		logs.Error("Error decoding image: %v", err)
+		return "", err
 	}
-	posts = append(posts, post)
-	if err := file.Truncate(0); err != nil {
-		logs.Error("Error truncating file: %v", err)
-		return err
+
+	thumb := resize.Thumbnail(250, 250, img, resize.Lanczos3)
+	var thumbBuffer bytes.Buffer
+	err = png.Encode(&thumbBuffer, thumb)
+	if err != nil {
+		logs.Error("Error encoding thumbnail: %v", err)
+		return "", err
 	}
-	if _, err := file.Seek(0, os.SEEK_SET); err != nil {
-		logs.Error("Error seeking file: %v", err)
-		return err
+
+	imageDoc := Image{
+		Image:    thumbBuffer.Bytes(),
+		Filetype: "image/png",
+		Size:     int64(thumbBuffer.Len()),
+		Height:   thumb.Bounds().Dy(),
+		Width:    thumb.Bounds().Dx(),
 	}
-	if err := gob.NewEncoder(file).Encode(posts); err != nil {
-		logs.Error("Error encoding JSON: %v", err)
-		return err
+
+	result, err := db.Collection("thumbs").InsertOne(context.Background(), imageDoc)
+	if err != nil {
+		logs.Error("Error inserting thumbnail: %v", err)
+		return "", err
 	}
-	if LatestPostsCheck(c, boardID) {
-		AddRecentPost(post)
+
+	return result.InsertedID.(primitive.ObjectID).Hex(), nil
+}
+
+func saveImage(boardID string, imageFile *multipart.FileHeader) (string, error) {
+	db := client.Database(boardID)
+	file, err := imageFile.Open()
+	if err != nil {
+		return "", err
 	}
-	logs.Info("Thread created: %v", post.BoardID, post.ThreadID)
-	sitemap := sitemap.Sitemap{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9"}
-	sitemap.AddURL("https://achan.moe/board/"+url.PathEscape(boardID)+"/"+strconv.Itoa(threadID), "daily", "0.5")
+	defer file.Close()
+
+	// Read the file into a byte slice
+	imageData, err := io.ReadAll(file)
+	if err != nil {
+		logs.Error("Error reading image file: %v", err)
+		return "", err
+	}
+
+	imageDoc := Image{
+		Image:    imageData,
+		Filetype: imageFile.Header.Get("Content-Type"),
+		Size:     imageFile.Size,
+		// Height and Width can be set if you decode the image
+	}
+
+	result, err := db.Collection("images").InsertOne(context.Background(), imageDoc)
+	if err != nil {
+		logs.Error("Error inserting image: %v", err)
+		return "", err
+	}
+
+	return result.InsertedID.(primitive.ObjectID).Hex(), nil
+}
+
+func ReturnThumb(c echo.Context, boardID string, thumbID string) error {
+	db := client.Database(boardID)
+	ctx := context.Background()
+
+	objectID, err := primitive.ObjectIDFromHex(thumbID)
+	if err != nil {
+		logs.Error("Invalid thumbnail ID '%s': %v", thumbID, err)
+		return c.String(http.StatusBadRequest, "Invalid thumbnail ID")
+	}
+
+	var image Image
+	err = db.Collection("thumbs").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
+	if err != nil {
+		logs.Error("Error finding thumbnail: %v", err)
+		return c.String(http.StatusNotFound, "Thumbnail not found")
+	}
+
+	c.Response().Header().Set("Content-Type", image.Filetype)
+	c.Response().Header().Set("Content-Length", strconv.FormatInt(image.Size, 10))
+	c.Response().WriteHeader(http.StatusOK)
+	c.Response().Write(image.Image)
+
 	return nil
 }
 
-func CreateThread(c echo.Context) error {
-	if auth.PremiumCheck(c) {
-		limiter := rate.NewLimiter(rate.Every(5*time.Minute), 1)
-		if !limiter.Allow() {
-			logs.Debug("5 Minute cooldown")
-			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
-		}
-	}
+func ReturnImage(c echo.Context, boardID string, imageID string) error {
+	db := client.Database(boardID)
+	ctx := context.Background()
 
-	boardID, content, subject, author, trueuser, stickyValue, image, err := extractThreadData(c)
+	objectID, err := primitive.ObjectIDFromHex(imageID)
 	if err != nil {
-		logs.Error("Error extracting thread data: %v", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		logs.Error("Invalid image ID '%s': %v", imageID, err)
+		return c.String(http.StatusBadRequest, "Invalid image ID")
 	}
 
-	q.Enqueue(func() {
-		if err := processThread(c, boardID, content, subject, author, trueuser, stickyValue, image); err != nil {
-			logs.Error("Error processing thread: %v", err)
-		}
-	})
+	var image Image
+	err = db.Collection("images").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
+	if err != nil {
+		logs.Error("Error finding image: %v", err)
+		return c.String(http.StatusNotFound, "Image not found")
+	}
+
+	c.Response().Header().Set("Content-Type", image.Filetype)
+	c.Response().Header().Set("Content-Length", strconv.FormatInt(image.Size, 10))
+	c.Response().WriteHeader(http.StatusOK)
+	c.Response().Write(image.Image)
 
 	return nil
 }
 func addToRecents(postID string) {
-	db := database.DB
-	db.Create(&Recents{PostID: postID})
-}
-func extractPostData(c echo.Context) (string, string, string, string, string, *multipart.FileHeader, error) {
-	boardID := c.Param("b")
-	content := c.FormValue("content")
-	author := c.FormValue("author")
-	image, err := c.FormFile("image")
-	if err != nil && err != http.ErrMissingFile {
-		logs.Error("Error getting image file: %v", err)
-		return "", "", "", "", "", nil, err
-	}
-
-	trueuser := "Anonymous"
-	if auth.AuthCheck(c) {
-		trueuser = auth.LoggedInUser(c).UUID
-	}
-
-	sanitize(content, "", author)
-
-	return boardID, content, c.FormValue("replyto"), author, trueuser, image, nil
-}
-
-func processPost(c echo.Context, boardID, content, replyto, author, trueuser string, image *multipart.FileHeader, postid string) error {
-	if boardID == "" {
-		logs.Error("Board ID cannot be empty")
-		return c.JSON(http.StatusBadRequest, "Board ID cannot be empty")
-	}
-	if CheckIfThreadLocked(c, boardID, c.Param("t")) {
-		logs.Error("Thread is locked")
-		return c.JSON(http.StatusBadRequest, "Thread is locked")
-	}
-	if CheckIfLocked(boardID) {
-		logs.Error("Board is locked")
-		return c.JSON(http.StatusBadRequest, "Board is locked")
-	}
-	if CheckIfArchived(boardID) {
-		logs.Error("Board is archived")
-		return c.JSON(http.StatusBadRequest, "Board is archived")
-	}
-	imgonly := CheckIfImageOnly(boardID)
-	if imgonly && content != "" {
-		logs.Error("This board only allows image posts")
-		return c.JSON(http.StatusBadRequest, "This board only allows image posts")
-	}
-	threadID, err := strconv.Atoi(c.Param("t"))
-	if err != nil {
-		logs.Error("Invalid thread ID")
-		return c.JSON(http.StatusBadRequest, "Invalid thread ID")
-	}
-	if threadIsFull(boardID, threadID) {
-		logs.Error("Thread is full")
-		return c.JSON(http.StatusBadRequest, "Thread is full")
-	}
-	if content == "" && !imgonly {
-		if image == nil {
-			logs.Error("Content cannot be empty")
-			return c.JSON(http.StatusBadRequest, "Content cannot be empty")
-		} else {
-			content = ""
-		}
-	}
-	if author == "" {
-		logs.Error("Author cannot be empty")
-		return c.JSON(http.StatusBadRequest, "Author cannot be empty")
-	}
-	var imageURL string
-	if image != nil {
-		if image.Size > 11<<20 {
-			logs.Error("File is too large")
-			return c.JSON(http.StatusBadRequest, "File is too large")
-		}
-		ext := filepath.Ext(image.Filename)
-		if !isValidImageExtension(ext) {
-			logs.Error("Invalid image extension")
-			return c.JSON(http.StatusBadRequest, "Invalid image extension")
-		}
-		imageURL, err = saveImage(boardID, image)
-		if err != nil {
-			logs.Error("Error saving image: %v", err)
-			return err
-		}
-		go images.GenerateThumbnail("boards/"+boardID+"/"+imageURL, "thumbs/"+imageURL, 200, 200)
-	}
-	AddGlobalPostCount()
-	AddBoardPostCount(boardID)
-	AddThreadPostCount(boardID, threadID)
-	post := Post{
-		BoardID:        boardID,
-		ThreadID:       strconv.Itoa(threadID),
-		PostID:         postid,
-		Content:        content,
-		PartialContent: content[:min(len(content), 20)],
-		ImageURL:       imageURL,
-		ThumbURL:       "thumbs/" + imageURL,
-		Author:         author,
-		TrueUser:       trueuser,
-		Timestamp:      time.Now().Format("01-02-2006 15:04:05"),
-		IP:             c.RealIP(),
-		ParentID:       replyto,
-	}
-	addToRecents(post.PostID)
-	if err := addPostToFile(boardID, threadID, post); err != nil {
-		logs.Error("Error adding post to file: %v", err)
-		return err
-	}
-	SetSessionSelfPostID(c, post.PostID)
-	logs.Info("Post created: %v", post.BoardID, post.ThreadID, post.PostID)
-	return nil
-}
-func CreatePost(c echo.Context) error {
-	boardID, content, replyto, author, trueuser, image, err := extractPostData(c)
-	if err != nil {
-		logs.Error("Error extracting post data: %v", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-	}
-
-	if auth.PremiumCheck(c) {
-		limiter := rate.NewLimiter(rate.Every(5*time.Minute), 1)
-		if !limiter.Allow() {
-			logs.Debug("5 Minute cooldown")
-			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "5 Minute cooldown"})
-		}
-	}
-	postID := GenUUID()
-
-	// Save session synchronously before enqueuing the task
-	updatedIDs, err := SetSessionSelfPostID(c, postID)
-	if err != nil {
-		logs.Error("Failed to update session: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update session"})
-	}
-	sess, err := session.Get("session", c)
-	if err != nil {
-		logs.Error("Failed to get session: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get session"})
-	}
-	sess.Values["self_post_id"] = updatedIDs
-	if err := sess.Save(c.Request(), c.Response()); err != nil {
-		logs.Error("Failed to save session: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save session"})
-	}
-	if replyto != "" && !checkReplyID(replyto) {
-		logs.Error("Invalid reply ID")
-		return c.JSON(http.StatusBadRequest, "Invalid reply ID")
-	}
-
-	q.Enqueue(func() {
-		if err := processPost(c, boardID, content, replyto, author, trueuser, image, postID); err != nil {
-			logs.Error("Error processing post: %v", err)
-		}
-	})
-
-	return nil
+	db := database.DB_Main
+	db.Collection("recents").InsertOne(context.Background(), bson.M{"post_id": postID})
 }
 
 func checkReplyID(replyID string) bool {
-	db := database.DB
-	return db.Where("post_id = ?", replyID).First(&Post{}).RowsAffected > 0
+	db := database.DB_Main
+	var post Post
+	db.Collection("posts").FindOne(context.Background(), bson.M{"post_id": replyID}).Decode(&post)
+	return post.ParentID == replyID
 }
 func isValidImageExtension(ext string) bool {
 	validExtensions := []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".webm"}
@@ -452,10 +269,13 @@ func isValidImageExtension(ext string) bool {
 	return false
 }
 
-func GenUUID() string {
-	db := database.DB
+func GenUUID(boardid string) string {
+	if boardid == "" {
+		logs.Fatal("Error: boardid cannot be empty")
+	}
+
+	db := database.Client.Database(boardid)
 	for {
-		rand.Seed(uint64(time.Now().UnixNano()))
 		b := make([]byte, 4)
 		_, err := rand.Read(b)
 		if err != nil {
@@ -463,12 +283,17 @@ func GenUUID() string {
 		}
 		id := hex.EncodeToString(b)
 
-		if db.Where("post_id = ?", id).First(&Recents{}).RowsAffected == 0 {
+		// Check for UUID collision
+		var result bson.M
+		err = db.Collection("posts").FindOne(context.Background(), bson.M{"post_id": id}).Decode(&result)
+		if err == mongo.ErrNoDocuments {
+			// No collision, return the generated UUID
 			return id
+		} else if err != nil {
+			logs.Error("Error checking UUID: %v", err)
+		} else {
+			logs.Debug("UUID collision, retrying")
 		}
-
-		logs.Debug("UUID collision, retrying")
-		GenUUID()
 	}
 }
 
@@ -483,267 +308,206 @@ func LatestPostsCheck(c echo.Context, boardID string) bool {
 }
 
 func CheckIfThreadLocked(c echo.Context, boardID string, threadID string) bool {
-	filepath := "boards/" + boardID + "/" + threadID + ".gob"
-	file, err := os.Open(filepath)
-	if err != nil {
-		return false
-	}
-	defer file.Close()
-	var posts []Post
-	gob.NewDecoder(file).Decode(&posts)
-	logs.Debug("Thread locked: %v", posts[0].Locked)
-	return posts[0].Locked
+	db := database.DB_Boards.Collection(boardID)
+	var threadpost ThreadPost
+	db.FindOne(context.Background(), bson.M{"boardid": boardID, "thread_id": threadID, "locked": true}).Decode(&threadpost)
+	return threadpost.Locked
 }
 
 func CheckLatestPosts(boardID string) bool {
-	db := database.DB
-
+	db := database.DB_Main.Collection("recent_posts")
 	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
+	db.FindOne(context.Background(), bson.M{"boardid": boardID}).Decode(&board)
 	return board.LatestPosts
 }
 
-func addPostToFile(boardID string, threadID int, post Post) error {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
-	file, err := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		logs.Error("Error opening file: %v", err)
-		return err
-	}
-	defer file.Close()
-
-	var posts []Post
-	if err := gob.NewDecoder(file).Decode(&posts); err != nil {
-		logs.Error("Error decoding JSON: %v", err)
-		return err
-	}
-
-	posts = append(posts, post)
-
-	if err := file.Truncate(0); err != nil {
-		logs.Error("Error truncating file: %v", err)
-		return err
-	}
-	if _, err := file.Seek(0, os.SEEK_SET); err != nil {
-		logs.Error("Error seeking file: %v", err)
-		return err
-	}
-	if err := gob.NewEncoder(file).Encode(posts); err != nil {
-		logs.Error("Error encoding JSON: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func saveImage(boardID string, image *multipart.FileHeader) (string, error) {
-	if image == nil {
-		logs.Error("Image is nil")
-		return "", nil
-	}
-	imagename := uuid.New().String()
-	imageExt := filepath.Ext(image.Filename)
-	if imageExt == "" {
-		logs.Error("Invalid image extension")
-		return "", fmt.Errorf("invalid image extension")
-	}
-
-	imageFile, err := image.Open()
-	if err != nil {
-		logs.Error("Error opening image file: %v", err)
-		return "", fmt.Errorf("error opening image file: %v", err)
-	}
-	defer imageFile.Close()
-
-	imageData, err := ioutil.ReadAll(imageFile)
-	if err != nil {
-		logs.Error("Error reading image file: %v", err)
-		return "", fmt.Errorf("error reading image file: %v", err)
-	}
-
-	imageURL := imagename + imageExt
-	baseImgDir := "boards/" + boardID + "/" + imagename + imageExt
-	if err := ioutil.WriteFile(baseImgDir, imageData, 0644); err != nil {
-		logs.Error("Error writing image file: %v", err)
-		return "", fmt.Errorf("error writing image file: %v", err)
-	}
-
-	return imageURL, nil
-}
-
 func threadIsFull(boardID string, threadID int) bool {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
-	file, err := os.Open(filepath)
+	db := client.Database(boardID)
+	ctx := context.Background()
+	cursor, err := db.Collection(strconv.Itoa(threadID)).Find(ctx, bson.M{})
 	if err != nil {
-		logs.Error("Error opening file: %v", err)
+		logs.Error("Error finding posts: %v", err)
+		return false
+	}
+	defer cursor.Close(ctx)
+	var posts []Post
+	for cursor.Next(ctx) {
+		var post Post
+		if err := cursor.Decode(&post); err != nil {
+			logs.Error("Error decoding post: %v", err)
+			return false
+		}
+		posts = append(posts, post)
+	}
+	if len(posts) >= 500 {
 		return true
 	}
-	defer file.Close()
-	var posts []Post
-	gob.NewDecoder(file).Decode(&posts)
-	return len(posts) >= 300
+	return false
 }
 
-func DeleteLastThread(boardID string) {
-	dir := "boards/" + boardID
-	files, err := ioutil.ReadDir(dir)
+func DeleteLastThread(c echo.Context, boardID string) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	cursor, err := db.Collection("threads").Find(ctx, bson.M{})
 	if err != nil {
-		logs.Error("Error reading directory: %v", err)
+		logs.Error("Error finding threads: %v", err)
 		return
 	}
-	var oldestThread string
-	oldestTime := time.Now()
-	for _, file := range files {
-		if !file.IsDir() {
-			filepath := dir + "/" + file.Name()
-			f, err := os.Open(filepath)
-			if err != nil {
-				logs.Error("Error opening file: %v", err)
-				continue
-			}
-			var posts []Post
-			if err := gob.NewDecoder(f).Decode(&posts); err != nil || len(posts) == 0 {
-				logs.Error("Error decoding JSON: %v", err)
-				f.Close()
-				continue
-			}
-			f.Close()
-			timestamp, err := time.Parse("01-02-2006 15:04:05", posts[0].Timestamp)
-			if err != nil {
-				logs.Error("Error parsing timestamp: %v", err)
-				continue
-			}
-			if timestamp.Before(oldestTime) {
-				oldestTime = timestamp
-				oldestThread = file.Name()
-			}
+	defer cursor.Close(ctx)
+	var threads []ThreadPost
+	for cursor.Next(ctx) {
+		var thread ThreadPost
+		if err := cursor.Decode(&thread); err != nil {
+			logs.Error("Error decoding thread: %v", err)
+			return
 		}
+		threads = append(threads, thread)
 	}
-	if oldestThread != "" {
-		os.Remove(dir + "/" + oldestThread)
+	if len(threads) == 0 {
+		return
 	}
+	latestThread := threads[len(threads)-1]
+	DeleteThread(c, boardID, latestThread.ThreadID)
 }
 func PurgeBoard(boardID string) {
-	dir := "boards/" + boardID
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		logs.Error("Error reading directory: %v", err)
-		return
-	}
-	for _, file := range files {
-		if !file.IsDir() {
-			filepath := dir + "/" + file.Name()
-			os.Remove(filepath)
-		}
-	}
+	db := client.Database(boardID)
+	ctx := context.Background()
+	db.Drop(ctx)
 }
 func GetBoards() []Board {
-	db := database.DB
-
+	db := database.DB_Main.Collection("boards")
+	ctx := context.Background()
+	cursor, err := db.Find(ctx, bson.M{})
+	if err != nil {
+		logs.Error("Error finding boards: %v", err)
+		return nil
+	}
+	defer cursor.Close(ctx)
 	var boards []Board
-	db.Find(&boards)
-
+	for cursor.Next(ctx) {
+		var board Board
+		if err := cursor.Decode(&board); err != nil {
+			logs.Error("Error decoding board: %v", err)
+			return nil
+		}
+		boards = append(boards, board)
+	}
 	return boards
 }
 
 func GetLatestPosts(n int) ([]RecentPosts, error) {
-	db := database.DB
-
-	var posts []RecentPosts
-	db.Order("timestamp DESC").Limit(n).Find(&posts)
-
-	return posts, nil
+	db := database.DB_Main.Collection("recent_posts")
+	ctx := context.Background()
+	cursor, err := db.Find(ctx, bson.M{})
+	if err != nil {
+		logs.Error("Error finding recent posts: %v", err)
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	var recentPosts []RecentPosts
+	for cursor.Next(ctx) {
+		var post RecentPosts
+		if err := cursor.Decode(&post); err != nil {
+			logs.Error("Error decoding post: %v", err)
+			return nil, err
+		}
+		recentPosts = append(recentPosts, post)
+	}
+	return recentPosts, nil
 }
 
 func GetBoardName(boardID string) string {
-	db := database.DB
-
+	db := database.DB_Main.Collection("boards")
+	ctx := context.Background()
 	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
+	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
 	return board.Name
+
 }
 
 func GetBoard(boardID string) Board {
-	db := database.DB
-
+	db := database.DB_Main.Collection("boards")
+	ctx := context.Background()
 	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
+	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
 	return board
+
 }
 
 func GetBoardID(boardID string) string {
-	db := database.DB
-
+	db := database.DB_Main.Collection("boards")
+	ctx := context.Background()
 	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
+	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
+	fmt.Println(board.BoardID)
 	return board.BoardID
 }
 
-// need to fix ai hallucination here
-func GetThreads(boardID string) []Post {
-	dir := "boards/" + boardID
-	files, err := os.ReadDir(dir)
+func GetThreads(boardID string) []ThreadPost {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	cursor, err := db.ListCollections(ctx, bson.M{})
 	if err != nil {
-		logs.Error("Error reading directory: %v", err)
+		logs.Error("Error finding collections: %v", err)
 		return nil
 	}
-
-	type ThreadInfo struct {
-		FirstPost     Post
-		LastTimestamp time.Time
+	defer cursor.Close(ctx)
+	var threads []struct {
+		ThreadPost        ThreadPost
+		LastPostTimestamp int64
 	}
-
-	var threadInfos []ThreadInfo
-
-	for _, file := range files {
-		if !file.IsDir() && filepath.Ext(file.Name()) == ".gob" {
-			filePath := filepath.Join(dir, file.Name())
-			f, err := os.Open(filePath)
-			if err != nil {
-				logs.Error("Error opening file %s: %v", filePath, err)
-				continue
-			}
-
-			var posts []Post
-			if err := gob.NewDecoder(f).Decode(&posts); err != nil || len(posts) == 0 {
-				f.Close()
-				if err != nil {
-					logs.Error("Error decoding JSON for file %s: %v", filePath, err)
-				}
-				continue
-			}
-			f.Close()
-
-			// Parse the last post's timestamp
-			lastPost := posts[len(posts)-1]
-			lastTimestamp, err := time.Parse("01-02-2006 15:04:05", lastPost.Timestamp)
-			if err != nil {
-				logs.Error("Error parsing timestamp for file %s: %v", filePath, err)
-				continue
-			}
-
-			// Append ThreadInfo with the first post and the last timestamp
-			threadInfos = append(threadInfos, ThreadInfo{
-				FirstPost:     posts[0],
-				LastTimestamp: lastTimestamp,
-			})
+	for cursor.Next(ctx) {
+		var collection struct {
+			Name string `bson:"name"`
 		}
+		if err := cursor.Decode(&collection); err != nil {
+			logs.Error("Error decoding collection: %v", err)
+			return nil
+		}
+		if collection.Name == "thumbs" || collection.Name == "images" {
+			continue
+		}
+		var threadPost ThreadPost
+		err := db.Collection(collection.Name).FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.D{{"timestamp", 1}})).Decode(&threadPost)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				continue
+			}
+			logs.Error("Error finding first document in collection %s: %v", collection.Name, err)
+			return nil
+		}
+		var lastPost ThreadPost
+		err = db.Collection(collection.Name).FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.D{{"timestamp", -1}})).Decode(&lastPost)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				continue
+			}
+			logs.Error("Error finding last document in collection %s: %v", collection.Name, err)
+			return nil
+		}
+		threads = append(threads, struct {
+			ThreadPost        ThreadPost
+			LastPostTimestamp int64
+		}{
+			ThreadPost:        threadPost,
+			LastPostTimestamp: lastPost.Timestamp,
+		})
 	}
 
-	// Sort threadInfos slice based on lastTimestamp in descending order
-	sort.Slice(threadInfos, func(i, j int) bool {
-		return threadInfos[i].LastTimestamp.After(threadInfos[j].LastTimestamp)
+	sort.SliceStable(threads, func(i, j int) bool {
+		if threads[i].ThreadPost.Sticky != threads[j].ThreadPost.Sticky {
+			return threads[i].ThreadPost.Sticky
+		}
+		return threads[i].LastPostTimestamp > threads[j].LastPostTimestamp
 	})
 
-	// Extract the sorted first posts
-	var sortedPosts []Post
-	for _, info := range threadInfos {
-		sortedPosts = append(sortedPosts, info.FirstPost)
+	var sortedThreads []ThreadPost
+	for _, thread := range threads {
+		sortedThreads = append(sortedThreads, thread.ThreadPost)
 	}
 
-	return sortedPosts
+	return sortedThreads
 }
-
 func SetSessionSelfPostID(c echo.Context, postID string) ([]string, error) {
 	sess, err := session.Get("session", c)
 	if err != nil {
@@ -761,427 +525,532 @@ func SetSessionSelfPostID(c echo.Context, postID string) ([]string, error) {
 	return updatedIDs, nil
 }
 
-func GetPosts(boardID string, threadID int) []Post {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
-	file, err := os.Open(filepath)
+func GetThread(boardID string, threadID string) ThreadPost {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	var threadpost ThreadPost
+	err := db.Collection(threadID).FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.D{{"timestamp", 1}})).Decode(&threadpost)
 	if err != nil {
-		logs.Error("Error opening file: %v", err)
+		logs.Error("Error finding first document in collection %s: %v", threadID, err)
+	}
+	return threadpost
+}
+
+func GetThreadPosts(boardID string, threadID string) []Post {
+	db := client.Database(boardID)
+	ctx := context.Background()
+
+	// Find all documents except the earliest one
+	cursor, err := db.Collection(threadID).Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{"timestamp", 1}}).SetSkip(1))
+	if err != nil {
+		logs.Error("Error finding posts: %v", err)
 		return nil
 	}
-	defer file.Close()
+	defer cursor.Close(ctx)
+
 	var posts []Post
-	gob.NewDecoder(file).Decode(&posts)
-
-	// Sanitize the Content field of each Post
-	for i := range posts {
-		posts[i].Content = template.HTMLEscapeString(posts[i].Content)
+	for cursor.Next(ctx) {
+		var post Post
+		if err := cursor.Decode(&post); err != nil {
+			logs.Error("Error decoding post: %v", err)
+			return nil
+		}
+		posts = append(posts, post)
 	}
 
-	// Assuming you still want to ignore the first post if there are more than one
-	if len(posts) > 1 {
-		posts = posts[1:]
-	} else {
-		return []Post{}
-	}
+	// Sort the posts by timestamp in ascending order
+	sort.SliceStable(posts, func(i, j int) bool {
+		return posts[i].Timestamp < posts[j].Timestamp
+	})
 
 	return posts
 }
+func AddRecentPost(post Post, threadpost ThreadPost) {
+	db := database.DB_Main.Collection("recent_posts")
+	ctx := context.Background()
 
-func GetThread(boardID string, threadID int) Post {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
-	file, err := os.Open(filepath)
+	if post != (Post{}) {
+		_, err := db.InsertOne(ctx, post)
+		if err != nil {
+			logs.Error("Error inserting recent post: %v", err)
+		}
+	} else {
+		_, err := db.InsertOne(ctx, threadpost)
+		if err != nil {
+			logs.Error("Error inserting recent thread post: %v", err)
+		}
+	}
+}
+
+func CheckIfLocked(boardID string) (bool, error) {
+	if database.Client == nil {
+		return false, errors.New("MongoDB client is not initialized")
+	}
+
+	db := database.DB_Main
+	collection := db.Collection("boards")
+
+	var board struct {
+		Locked bool `bson:"locked"`
+	}
+
+	err := collection.FindOne(context.Background(), bson.M{"boardid": boardID}).Decode(&board)
 	if err != nil {
-		return Post{}
+		if err == mongo.ErrNoDocuments {
+			return false, nil // Board not found, assume not locked
+		}
+		logs.Error("Error finding board: %v", err)
+		return false, err
 	}
-	defer file.Close()
-	var posts []Post
-	err = gob.NewDecoder(file).Decode(&posts)
-	if err != nil || len(posts) == 0 {
-		logs.Error("Error decoding GOB: %v", err)
-		return Post{} // Return an empty Post if there's an error or the array is empty
+
+	return board.Locked, nil
+}
+func CheckIfArchived(boardID string) (bool, error) {
+	if database.Client == nil {
+		return false, errors.New("MongoDB client is not initialized")
 	}
-	logs.Debug("GetThread: %v", posts[0])
-	return posts[0] // Return the first post
+
+	db := database.DB_Main
+	collection := db.Collection("boards")
+
+	var board struct {
+		Archived bool `bson:"archived"`
+	}
+
+	err := collection.FindOne(context.Background(), bson.M{"boardid": boardID}).Decode(&board)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, nil // Board not found, assume not archived
+		}
+		logs.Error("Error finding board: %v", err)
+		return false, err
+	}
+
+	return board.Archived, nil
 }
 
-func AddRecentPost(post Post) {
-	db := database.DB
-
-	var count int64
-	db.Model(&RecentPosts{}).Count(&count)
-	if count >= 10 {
-		var oldestPost RecentPosts
-		db.Order("timestamp ASC").First(&oldestPost)
-		// Assuming RecentPosts has an ID field that serves as the primary key
-		db.Where("id = ?", oldestPost.ID).Delete(&RecentPosts{})
+func CheckIfImageOnly(boardID string) (bool, error) {
+	if database.Client == nil {
+		return false, errors.New("MongoDB client is not initialized")
 	}
 
-	if len(post.Subject) > 30 {
-		post.Subject = post.Subject[:30]
+	db := database.DB_Main
+	collection := db.Collection("boards")
+
+	var board struct {
+		ImageOnly bool `bson:"image_only"`
 	}
-	recentPost := RecentPosts{
-		BoardID:        post.BoardID,
-		ThreadID:       post.ThreadID,
-		PostID:         post.PostID,
-		Content:        post.Content,
-		PartialContent: post.PartialContent,
-		ImageURL:       post.ImageURL,
-		ThumbURL:       post.ThumbURL,
-		Subject:        post.Subject,
-		Timestamp:      post.Timestamp,
+
+	err := collection.FindOne(context.Background(), bson.M{"boardid": boardID}).Decode(&board)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, nil // Board not found, assume not image only
+		}
+		logs.Error("Error finding board: %v", err)
+		return false, err
 	}
-	db.Create(&recentPost)
-}
 
-func CheckIfLocked(boardID string) bool {
-	db := database.DB
-
-	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
-	// Ensure the database is closed after all operations are done
-	return board.Locked
-}
-
-func CheckIfArchived(boardID string) bool {
-	db := database.DB
-
-	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
-	// Ensure the database is closed after all operations are done
-	return board.Archived
-}
-
-func CheckIfImageOnly(boardID string) bool {
-	db := database.DB
-
-	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
-	// Ensure the database is closed after all operations are done
-	return board.ImageOnly
+	return board.ImageOnly, nil
 }
 
 func ThreadCheckLocked(c echo.Context, boardid string, threadid string) bool {
-	filepath := "boards/" + boardid + "/" + threadid + ".gob"
-	file, err := os.Open(filepath)
-	if err != nil {
-		logs.Error("Error opening file: %v", err)
-		return false
-	}
-	defer file.Close()
-	var posts []Post
-	gob.NewDecoder(file).Decode(&posts)
-	return posts[0].Locked
+	db := client.Database(boardid)
+	ctx := context.Background()
+	var threadpost ThreadPost
+	db.Collection(threadid).FindOne(ctx, bson.M{"thread_id": threadid}).Decode(&threadpost)
+	return threadpost.Locked
 }
 
 func AddGlobalPostCount() int64 {
-	db := database.DB
-
-	var postCounter PostCounter
-	db.First(&postCounter)
-	postCounter.PostCount++
-	db.Save(&postCounter)
-	return postCounter.PostCount
+	db := database.DB_Main.Collection("data")
+	var counter PostCounter
+	db.FindOne(context.Background(), bson.M{}).Decode(&counter)
+	_, err := db.UpdateOne(context.Background(), bson.M{}, bson.M{"$inc": bson.M{"post_count": 1}})
+	if err != nil {
+		logs.Error("Error incrementing post count: %v", err)
+	}
+	return counter.PostCount
 }
 func GetGlobalPostCount() int64 {
-	db := database.DB
+	db := database.DB_Main.Collection("data")
+	var counter PostCounter
+	db.FindOne(context.Background(), bson.M{}).Decode(&counter)
+	return counter.PostCount
 
-	var postCounter PostCounter
-	db.First(&postCounter)
-	return postCounter.PostCount
 }
 
 func AddBoardPostCount(boardID string) {
-	db := database.DB
-
-	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
-	board.PostCount++
-	db.Where("board_id = ?", boardID).Save(&board)
-}
-
-func GetBoardPostCount(boardID string) int64 {
-	db := database.DB
-
-	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
-	return board.PostCount
-}
-
-func GetPartialPosts(boardID string, threadID int, postid int) []Post {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
-	file, err := os.Open(filepath)
+	db := database.DB_Boards.Collection(boardID)
+	_, err := db.UpdateOne(context.Background(), bson.M{"boardid": boardID}, bson.M{"$inc": bson.M{"post_count": 1}})
 	if err != nil {
-		logs.Error("Error opening file: %v", err)
-		return nil
+		logs.Error("Error incrementing post count: %v", err)
 	}
-	defer file.Close()
-	var posts []Post
-	gob.NewDecoder(file).Decode(&posts)
-
-	// get partial post
-	var partialPosts []Post
-	for i := range posts {
-		if posts[i].PostID > string(postid) {
-			// Check if the post content is longer than 20 characters
-			if len(posts[i].Content) > 20 {
-				// Truncate the content to the first 20 characters
-				posts[i].Content = posts[i].Content[:20]
-			}
-			partialPosts = append(partialPosts, posts[i])
-		}
-	}
-	return partialPosts
+	return
 }
 
-func GetBoardDescription(boardID string) string {
-	db := database.DB
+func GetBoardPostCount(boardID string) (int, error) {
+	if database.Client == nil {
+		return 0, errors.New("MongoDB client is not initialized")
+	}
 
-	var board Board
-	db.Where("board_id = ?", boardID).First(&board)
-	return board.Description
+	db := database.DB_Main
+	collection := db.Collection("boards")
+
+	var board struct {
+		PostCount int `bson:"post_count"`
+	}
+
+	err := collection.FindOne(context.Background(), bson.M{"boardid": boardID}).Decode(&board)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return 0, nil // Board not found, assume no posts
+		}
+		logs.Error("Error finding board: %v", err)
+		return 0, err
+	}
+
+	return board.PostCount, nil
+}
+
+func GetBoardDescription(boardID string) (string, error) {
+	if database.Client == nil {
+		return "", errors.New("MongoDB client is not initialized")
+	}
+
+	db := database.DB_Main
+	collection := db.Collection("boards")
+
+	var board struct {
+		Description string `bson:"description"`
+	}
+
+	err := collection.FindOne(context.Background(), bson.M{"boardid": boardID}).Decode(&board)
+	if err != nil {
+		logs.Error("Error finding board description: %v", err)
+		return "", err
+	}
+
+	return board.Description, nil
 }
 
 func GetTotalPostCount() int64 {
-	db := database.DB
-
-	var PostCount PostCounter
-	db.First(&PostCount)
-	return PostCount.PostCount
-}
-
-func ReportThread(c echo.Context) error {
-	db := database.DB
-
-	threadID := c.Param("t")
-	boardID := c.Param("b")
-	filepath := "boards/" + boardID + "/" + threadID + ".gob"
-	file, err := os.Open(filepath)
-	if err != nil {
-		logs.Error("Error opening file: %v", err)
-		return err
-	}
-	defer file.Close()
-	var posts []Post
-	gob.NewDecoder(file).Decode(&posts)
-	posts[0].ReportCount++
-	db.Save(&posts[0])
-
-	return nil
+	db := database.DB_Main.Collection("data")
+	var counter PostCounter
+	db.FindOne(context.Background(), bson.M{}).Decode(&counter)
+	return counter.PostCount
 }
 
 func ReportPost(c echo.Context) error {
-	db := database.DB
-
-	postID := c.Param("p")
-	var post Post
-	db.Where("post_id = ?", postID).First(&post)
-	post.ReportCount++
-	db.Save(&post)
-
+	boardid := c.Param("b")
+	threadid := c.FormValue("threadid")
+	postid := c.FormValue("postid")
+	db := client.Database(boardid)
+	ctx := context.Background()
+	_, err := db.Collection(threadid).UpdateOne(ctx, bson.M{"post_id": postid}, bson.M{"$inc": bson.M{"report_count": 1}})
+	if err != nil {
+		logs.Error("Error incrementing report count: %v", err)
+	}
 	return nil
 }
 
-func DeleteThread(c echo.Context) error {
-	threadID := c.Param("t")
-	board := c.Param("b")
-
-	// Delete RecentPosts entries
-	RemoveFromRecentPosts("", threadID, board)
-
-	// Construct the path to the thread's JSON file
-	threadFilePath := filepath.Join("boards/" + board + "/" + threadID + ".gob")
-
-	// Open and decode the thread's JSON file
-	gobFile, err := os.Open(threadFilePath)
+func DeleteThread(c echo.Context, boardID string, threadID string) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	_, err := db.Collection(threadID).DeleteMany(ctx, bson.M{})
 	if err != nil {
-		logs.Error("Failed to open thread file: %v", err)
-		return c.JSON(http.StatusInternalServerError, "Internal server error: unable to open thread file")
+		logs.Error("Error deleting thread: %v", err)
+		return
 	}
-	defer gobFile.Close()
+	RemoveFromRecentPosts("", threadID, boardID)
 
-	var posts []Post
-	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
-		logs.Error("Failed to decode thread file: %v", err)
-		return c.JSON(http.StatusInternalServerError, "Internal server error: unable to decode thread file: "+err.Error())
-	}
-
-	// Delete images associated with the thread
-	for _, post := range posts {
-		if post.ImageURL != "" {
-			if err := os.Remove("boards/" + board + "/" + post.ImageURL); err != nil {
-				logs.Error("Failed to delete image: %v", err)
-			}
-			if err := os.Remove("thumbs/" + post.ThumbURL); err != nil {
-				logs.Error("Failed to delete thumbnail: %v", err)
-			}
-		}
-	}
-
-	// Delete the thread's JSON file
-	if err := os.Remove(threadFilePath); err != nil {
-		logs.Error("Failed to delete thread file: %v", err)
-		return c.JSON(http.StatusInternalServerError, "Internal server error: failed to delete thread file")
-	}
-
-	return c.JSON(http.StatusOK, "Thread deleted")
 }
-func DeletePost(c echo.Context) error {
-	postid := c.Param("p")
-	threadid := c.Param("t")
-	board := c.Param("b")
-
-	// Construct the file path
-	filePath := "boards/" + board + "/" + threadid + ".gob"
-	// Open the JSON file
-	gobFile, err := os.Open(filePath)
+func DeletePost(c echo.Context, boardID string, threadID string, postID string) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	_, err := db.Collection(threadID).DeleteOne(ctx, bson.M{"post_id": postID})
 	if err != nil {
-		logs.Error("Failed to open file: %s, error: %v", filePath, err)
-		return c.JSON(http.StatusInternalServerError, "Internal server error")
+		logs.Error("Error deleting post: %v", err)
+		return
 	}
-	defer gobFile.Close()
+	RemoveFromRecentPosts(postID, threadID, boardID)
 
-	// Decode the JSON file into posts
-	var posts []Post
-	if err := gob.NewDecoder(gobFile).Decode(&posts); err != nil {
-		logs.Error("Failed to decode JSON: %v", err)
-		return c.JSON(http.StatusInternalServerError, "Error decoding JSON")
-	}
-
-	// Find and delete the post
-	for i, post := range posts {
-		if post.PostID == postid {
-			posts = append(posts[:i], posts[i+1:]...)
-			break
-		}
-	}
-
-	// delete image if exists
-	var imageURL string
-	var thumbURL string
-	for _, post := range posts {
-		if post.PostID == postid {
-			imageURL = post.ImageURL
-			thumbURL = post.ThumbURL
-			break
-		}
-	}
-	if imageURL != "" {
-		// skip if null
-		if err := os.Remove("boards/" + board + "/" + imageURL); err != nil {
-			logs.Error("Failed to delete image: %v", err)
-			return c.JSON(http.StatusInternalServerError, "Failed to delete image")
-		}
-
-		if err := os.Remove("thumbs/" + thumbURL); err != nil {
-			logs.Error("Failed to delete thumbnail: %v", err)
-			return c.JSON(http.StatusInternalServerError, "Failed to delete thumbnail")
-		}
-	}
-
-	// Database operations (omitted for brevity)
-	RemoveFromRecentPosts(postid, "", "")
-	// Recreate the JSON file to update it
-	gobFile, err = os.Create(filePath)
-	if err != nil {
-		logs.Error("Failed to create file: %s, error: %v", filePath, err)
-		return c.JSON(http.StatusInternalServerError, "Internal server error")
-	}
-	defer gobFile.Close()
-
-	// Encode the updated posts back into the JSON file
-	if err := gob.NewEncoder(gobFile).Encode(posts); err != nil {
-		logs.Error("Failed to encode JSON: %v", err)
-		return c.JSON(http.StatusInternalServerError, "Error encoding JSON")
-	}
-
-	logs.Debug("Post deleted: %s", postid)
-	return c.JSON(http.StatusOK, "Post deleted")
 }
 
 func RemoveFromRecentPosts(postID string, threadID string, board string) {
-	// Check if both postID and threadID are zero, return early if true
-	if postID == "" && threadID == "" && board == "" {
-		logs.Warn("No postID, threadID, or boardID provided")
-		return
+	db := database.DB_Main.Collection("recent_posts")
+	ctx := context.Background()
+	_, err := db.DeleteOne(ctx, bson.M{"post_id": postID, "thread_id": threadID, "boardid": board})
+	if err != nil {
+		logs.Error("Error deleting recent post: %v", err)
 	}
 
-	// Open database connection
-	db := database.DB
-
-	// Construct the query
-	if postID != "" {
-		db.Where("post_id = ?", postID).Delete(&RecentPosts{})
-	} else {
-		db.Where("thread_id = ? AND board_id = ?", threadID, board).Delete(&RecentPosts{})
-	}
-
-	logs.Debug("Removed from RecentPosts: %s, %s, %s", postID, threadID, board)
-
+	return
 }
 
 // Helper function to remove a recent post by a specific field (e.g., post_id or thread_id)
 
-func AddThreadPostCount(boardID string, threadID int) {
-	filepath := "boards/" + boardID + "/" + strconv.Itoa(threadID) + ".gob"
-	file, err := os.OpenFile(filepath, os.O_RDWR, 0644)
+func AddThreadPostCount(boardID string, threadID string) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	_, err := db.Collection(threadID).UpdateOne(ctx, bson.M{"thread_id": threadID}, bson.M{"$inc": bson.M{"post_count": 1}})
 	if err != nil {
-		logs.Error("Error opening file: %v", err)
-		return
+		logs.Error("Error incrementing post count: %v", err)
 	}
-	defer file.Close()
-
-	var thread []Post
-	if err := gob.NewDecoder(file).Decode(&thread); err != nil {
-		logs.Error("Error decoding GOB: %v", err)
-		return
-	}
-
-	if len(thread) > 0 {
-		thread[0].PostCount++
-	}
-
-	// Move the file pointer to the beginning of the file
-	if _, err := file.Seek(0, 0); err != nil {
-		logs.Error("Error seeking file: %v", err)
-		return
-	}
-
-	if err := gob.NewEncoder(file).Encode(&thread); err != nil {
-		logs.Error("Error encoding JSON: %v", err)
-		return
-	}
-
-	logs.Debug("Post count incremented: %v", boardID, threadID)
+	return
 }
 
 func sanitize(content string, subject string, author string) (string, string, string) {
-	replacements := map[string]string{
-		"'":  "&#39;",
-		"\"": "&#34;",
-		">":  "&#62;",
-		"<":  "&#60;",
-		"(":  "&#40;",
-		")":  "&#41;",
-		";":  "&#59;",
-		"/*": "&#47;&#42;",
-		"*/": "&#42;&#47;",
-		"--": "&#45;&#45;",
-	}
-
-	escapeAndReplace := func(input string) string {
-		input = template.HTMLEscapeString(input)
-		for old, new := range replacements {
-			input = strings.ReplaceAll(input, old, new)
-		}
-		return input
-	}
-
-	content = escapeAndReplace(content)
-	if len(subject) > 30 {
-		subject = subject[:30]
-	}
-	author = escapeAndReplace(author)
-	subject = escapeAndReplace(subject)
-	logs.Debug("Sanitized content")
+	content = template.HTMLEscapeString(content)
+	subject = template.HTMLEscapeString(subject)
+	author = template.HTMLEscapeString(author)
 	return content, subject, author
+}
+
+func CreateThread(c echo.Context) error {
+	boardID := c.Param("b")
+	locked, err := CheckIfLocked(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error checking if board is locked")
+	}
+	if locked {
+		return c.String(http.StatusForbidden, "Board is locked")
+	}
+	archived, err := CheckIfArchived(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error checking if board is archived")
+	}
+	if archived {
+		return c.String(http.StatusForbidden, "Board is archived")
+	}
+
+	imageOnly, err := CheckIfImageOnly(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error checking if board is image only")
+	}
+	if imageOnly {
+		return c.String(http.StatusForbidden, "Board is image only")
+	}
+	if LatestPostsCheck(c, boardID) {
+		DeleteLastThread(c, boardID)
+	}
+	if GetTotalPostCount() >= 5000000 {
+		return c.String(http.StatusForbidden, "Post limit reached")
+	}
+	boardPostCount, err := GetBoardPostCount(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error getting board post count")
+	}
+	if boardPostCount >= 500000 {
+		return c.String(http.StatusForbidden, "Post limit reached")
+	}
+	author := c.FormValue("author")
+	subject := c.FormValue("subject")
+	content := c.FormValue("content")
+	imageFile, err := c.FormFile("image")
+	if err != nil {
+		logs.Error("Error getting image file: %v", err)
+		return c.String(http.StatusBadRequest, "Error getting image file")
+	}
+	if imageFile != nil {
+		ext := filepath.Ext(imageFile.Filename)
+		if !isValidImageExtension(ext) {
+			return c.String(http.StatusBadRequest, "Invalid image extension")
+		}
+	}
+	sticky := false
+	if c.FormValue("isSticky") == "on" {
+		sticky = true
+	}
+	locked = false
+	if c.FormValue("isLocked") == "on" {
+		locked = true
+	}
+	content, subject, author = sanitize(content, subject, author)
+
+	uuid := GenUUID(boardID)
+	threadID := uuid
+	postID := uuid
+	timestampStr := strconv.FormatInt(time.Now().Unix(), 10)
+	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error parsing timestamp")
+	}
+	Thumbnail := ""
+	Image := ""
+	if imageFile != nil {
+		thumb, err := saveThumb(boardID, imageFile)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Error saving thumbnail")
+		}
+		Thumbnail = thumb
+		image, err := saveImage(boardID, imageFile)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Error saving image")
+		}
+		Image = image
+	}
+
+	partialContent := content
+	if len(content) > 100 {
+		partialContent = content[:100]
+	}
+
+	threadpost := ThreadPost{
+		BoardID:        boardID,
+		ThreadID:       threadID,
+		PostID:         postID,
+		Content:        content,
+		PartialContent: partialContent,
+		Image:          Image,
+		Thumbnail:      Thumbnail,
+		Subject:        subject,
+		Timestamp:      timestamp,
+		Sticky:         sticky,
+		Locked:         locked,
+		PostCount:      1,
+		ReportCount:    0,
+	}
+
+	q.Enqueue(func() {
+		processThreadPost(threadpost, c)
+	})
+
+	return c.JSON(http.StatusOK, "Thread created")
+}
+
+func processThreadPost(threadpost ThreadPost, c echo.Context) {
+	db := client.Database(threadpost.BoardID)
+	ctx := context.Background()
+	db.CreateCollection(ctx, threadpost.ThreadID)
+	_, err := db.Collection(threadpost.ThreadID).InsertOne(ctx, threadpost)
+	if err != nil {
+		logs.Error("Error inserting post: %v", err)
+		return
+	}
+	AddGlobalPostCount()
+	AddBoardPostCount(threadpost.BoardID)
+
+	AddThreadPostCount(threadpost.BoardID, threadpost.ThreadID)
+	AddRecentPost(Post{}, threadpost)
+	SetSessionSelfPostID(c, threadpost.PostID)
+	c.Redirect(http.StatusFound, "/board/"+threadpost.BoardID+"/thread/"+threadpost.ThreadID)
+}
+
+func CreatePost(c echo.Context) error {
+	boardID := c.Param("b")
+	if boardID == "" {
+		return c.String(http.StatusBadRequest, "Board ID cannot be empty")
+	}
+	locked, err := CheckIfLocked(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error checking if board is locked")
+	}
+	if locked {
+		return c.String(http.StatusForbidden, "Board is locked")
+	}
+	archived, err := CheckIfArchived(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error checking if board is archived")
+	}
+	if archived {
+		return c.String(http.StatusForbidden, "Board is archived")
+	}
+
+	imageOnly, err := CheckIfImageOnly(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error checking if board is image only")
+	}
+	if imageOnly {
+		return c.String(http.StatusForbidden, "Board is image only")
+	}
+	if LatestPostsCheck(c, boardID) {
+		DeleteLastThread(c, boardID)
+	}
+	if GetTotalPostCount() >= 5000000 {
+		return c.String(http.StatusForbidden, "Post limit reached")
+	}
+	boardPostCount, err := GetBoardPostCount(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error getting board post count")
+	}
+	if boardPostCount >= 500000 {
+		return c.String(http.StatusForbidden, "Post limit reached")
+	}
+
+	author := c.FormValue("author")
+	subject := c.FormValue("subject")
+	content := c.FormValue("content")
+	imageFile, err := c.FormFile("image")
+	if err != nil {
+		imageFile = nil
+	} else {
+		ext := filepath.Ext(imageFile.Filename)
+		if !isValidImageExtension(ext) {
+			return c.String(http.StatusBadRequest, "Invalid image extension")
+		}
+	}
+	content, subject, author = sanitize(content, subject, author)
+
+	threadID := c.Param("t")
+	if threadID == "" {
+		return c.String(http.StatusBadRequest, "Thread ID cannot be empty")
+	}
+	postID := GenUUID(boardID)
+	timestampStr := strconv.FormatInt(time.Now().Unix(), 10)
+	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error parsing timestamp")
+	}
+	Thumbnail := ""
+	Image := ""
+	if imageFile != nil {
+		thumb, err := saveThumb(boardID, imageFile)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Error saving thumbnail")
+		}
+		Thumbnail = thumb
+		image, err := saveImage(boardID, imageFile)
+		if err != nil {
+			return c.String(http.StatusInternalServerError, "Error saving image")
+		}
+		Image = image
+	}
+
+	partialContent := content
+	if len(content) > 100 {
+		partialContent = content[:100]
+	}
+
+	post := Post{
+		BoardID:        boardID,
+		ParentID:       threadID,
+		PostID:         postID,
+		Content:        content,
+		PartialContent: partialContent,
+		Image:          Image,
+		Thumbnail:      Thumbnail,
+		Subject:        subject,
+		Timestamp:      timestamp,
+	}
+
+	q.Enqueue(func() {
+		processPost(post, c)
+	})
+
+	return c.JSON(http.StatusOK, "Post created")
+}
+
+func processPost(post Post, c echo.Context) {
+	db := client.Database(post.BoardID)
+	ctx := context.Background()
+	_, err := db.Collection(post.ParentID).InsertOne(ctx, post)
+	if err != nil {
+		logs.Error("Error inserting post: %v", err)
+		return
+	}
+	AddGlobalPostCount()
+	AddBoardPostCount(post.BoardID)
+	AddThreadPostCount(post.BoardID, post.ParentID)
+	AddRecentPost(post, ThreadPost{})
+	SetSessionSelfPostID(c, post.PostID)
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
 
 	"html/template"
 	"net/http"
@@ -87,7 +86,11 @@ func BoardHandler(c echo.Context) error {
 	data["Pagename"] = boardname
 	data["Board"] = board.GetBoard(c.Param("b"))
 	data["BoardID"] = board.GetBoardID(c.Param("b"))
-	data["BoardDesc"] = board.GetBoardDescription(c.Param("b"))
+	description, err := board.GetBoardDescription(c.Param("b"))
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "Error getting board description")
+	}
+	data["BoardDesc"] = description
 	boardid := board.GetBoardID(c.Param("b"))
 	data["Threads"] = board.GetThreads(boardid)
 	data["IsJanny"] = auth.JannyCheck(c, boardid)
@@ -125,13 +128,6 @@ func ThreadHandler(c echo.Context) error {
 	t := c.Param("t") // Get the parameter as string
 	b := c.Param("b") // Get the parameter as string
 
-	// Convert t from string to int
-	tInt, err := strconv.Atoi(t)
-	if err != nil {
-		// Handle the error, maybe return or log it
-		return c.String(http.StatusBadRequest, "Invalid thread ID")
-	}
-
 	session, err := session.Get("session", c)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
@@ -140,11 +136,15 @@ func ThreadHandler(c echo.Context) error {
 	selfposts := session.Values["self_post_id"]
 
 	// Assuming you want to display posts in the thread, and each post has a Title field
-	data["Thread"] = board.GetThread(b, tInt)
-	data["ThreadID"] = tInt
+	data["Thread"] = board.GetThread(b, t)
+	data["ThreadID"] = t
 	data["BoardID"] = board.GetBoardID(b)
-	data["BoardDesc"] = board.GetBoardDescription(b)
-	posts := board.GetPosts(b, tInt)
+	description, err := board.GetBoardDescription(c.Param("b"))
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, "Error getting board description")
+	}
+	data["BoardDesc"] = description
+	posts := board.GetThreadPosts(b, t)
 	data["Posts"] = posts
 	data["IsJanny"] = auth.JannyCheck(c, b)
 	boardid := board.GetBoardID(c.Param("b"))

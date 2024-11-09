@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"achan.moe/utils/queue"
-	gomail "gopkg.in/mail.v2"
+	mail "github.com/wneessen/go-mail" // Ensure the correct version and alias
 )
 
 var manager = queue.NewQueueManager()
@@ -38,15 +38,23 @@ func (m *Mail) Send() error {
 		return fmt.Errorf("Invalid SMTP port: %v", err)
 	}
 
-	msg := gomail.NewMessage()
-	msg.SetHeader("From", smtpUser)
-	msg.SetHeader("To", m.To)
-	msg.SetHeader("Subject", m.Subject)
-	msg.SetBody("text/plain", m.Body)
+	msg := mail.NewMsg()
+	if err := msg.From(smtpUser); err != nil {
+		return fmt.Errorf("failed to set From address: %v", err)
+	}
+	if err := msg.To(m.To); err != nil {
+		return fmt.Errorf("failed to set To address: %v", err)
+	}
+	msg.Subject(m.Subject)
+	msg.SetBodyString(mail.TypeTextPlain, m.Body)
 
-	d := gomail.NewDialer(smtpHost, port, smtpUser, smtpPass)
+	client, err := mail.NewClient(smtpHost, mail.WithPort(port), mail.WithSMTPAuth(mail.SMTPAuthPlain),
+		mail.WithUsername(smtpUser), mail.WithPassword(smtpPass))
+	if err != nil {
+		return fmt.Errorf("failed to create mail client: %v", err)
+	}
 
-	if err := d.DialAndSend(msg); err != nil {
+	if err := client.DialAndSend(msg); err != nil {
 		log.Printf("Failed to send email to %s: %v", m.To, err)
 		return err
 	}

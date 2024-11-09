@@ -1,6 +1,7 @@
 package news
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -18,10 +19,6 @@ type News struct {
 }
 
 // init function creates the file if it doesn't exist and adds dummy news if needed.
-func init() {
-	db := database.DB
-	db.AutoMigrate(&News{})
-}
 func NewNews(c echo.Context) error {
 	if !auth.AdminCheck(c) {
 		return c.String(http.StatusForbidden, "You are not authorized to add news")
@@ -45,8 +42,8 @@ func NewNews(c echo.Context) error {
 
 // AddNews adds a news article to the file.
 func AddNews(news News) {
-	db := database.DB
-	db.Create(&news)
+	db := database.DB_Main
+	db.Collection("news").InsertOne(context.Background(), news)
 }
 
 // GetNews retrieves the last 10 news articles from the file.
@@ -67,16 +64,29 @@ func GetNews() []News {
 
 // ClearNews clears all news articles from the file.
 func ClearNews() {
-	db := database.DB
-	db.Exec("DELETE FROM news")
+	db := database.DB_Main
+	db.Collection("news").Drop(context.Background())
 }
 
 // GetAllNews retrieves all news articles from the file.
 func GetAllNews() []News {
-	db := database.DB
-	var news []News
-	db.Find(&news)
-	return news
+	db := database.DB_Main
+	cursor, err := db.Collection("news").Find(context.Background(), nil)
+	if err != nil {
+		return nil
+	}
+	defer cursor.Close(context.Background())
+
+	var allNews []News
+	for cursor.Next(context.Background()) {
+		var news News
+		if err := cursor.Decode(&news); err != nil {
+			continue
+		}
+		allNews = append(allNews, news)
+	}
+
+	return allNews
 }
 
 func DummyData() {

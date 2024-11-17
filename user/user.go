@@ -8,13 +8,14 @@ import (
 	"achan.moe/auth"
 	"achan.moe/database"
 	"achan.moe/home"
+	"achan.moe/models"
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var user auth.User
+var user models.User
 
 type RecentReputation struct {
 	PlusReputation  int
@@ -145,7 +146,7 @@ type JannyBoards struct {
 	Boards []string `json:"boards"`
 }
 
-func convertAuthGroupToGroups(authGroup auth.Group) Groups {
+func convertAuthGroupToGroups(authGroup models.Group) Groups {
 	return Groups{
 		Admin:     authGroup.Admin,
 		Moderator: authGroup.Moderator,
@@ -210,7 +211,7 @@ func ListUsers(c echo.Context) error {
 
 	var users []UserResponse
 	for cursor.Next(context.Background()) {
-		var user auth.User
+		var user models.User
 		if err := cursor.Decode(&user); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user"})
 		}
@@ -245,7 +246,7 @@ func ListUsersByReputation(c echo.Context) error {
 
 	var users []UserResponse
 	for cursor.Next(context.Background()) {
-		var user auth.User
+		var user models.User
 		if err := cursor.Decode(&user); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user"})
 		}
@@ -279,7 +280,7 @@ func ListUsersByJoinDate(c echo.Context) error {
 
 	var users []UserResponse
 	for cursor.Next(context.Background()) {
-		var user auth.User
+		var user models.User
 		if err := cursor.Decode(&user); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user"})
 		}
@@ -314,7 +315,7 @@ func ListUsersByLastLogin(c echo.Context) error {
 
 	var users []UserResponse
 	for cursor.Next(context.Background()) {
-		var user auth.User
+		var user models.User
 		if err := cursor.Decode(&user); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user"})
 		}
@@ -338,7 +339,7 @@ func ListAdmins(c echo.Context) error {
 	}
 
 	db := database.DB_Users
-	var users []auth.User
+	var users []models.User
 	cursor, err := db.Collection("users").Find(context.Background(), bson.M{"groups.admin": true})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list admins"})
@@ -358,7 +359,7 @@ func ListModerators(c echo.Context) error {
 	}
 
 	db := database.DB_Users
-	var users []auth.User
+	var users []models.User
 	cursor, err := db.Collection("users").Find(context.Background(), bson.M{"groups.moderator": true})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list moderators"})
@@ -378,7 +379,7 @@ func ListJannies(c echo.Context) error {
 	}
 
 	db := database.DB_Users
-	var users []auth.User
+	var users []models.User
 	cursor, err := db.Collection("users").Find(context.Background(), bson.M{"groups.janny.boards": bson.M{"$ne": nil}})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to list jannies"})
@@ -405,7 +406,7 @@ func UpdateUserGroups(c echo.Context) error {
 	if userID == "1337" {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "You cannot change the groups of the root user"})
 	}
-	var user auth.User
+	var user models.User
 
 	// Find the user by ID
 	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {

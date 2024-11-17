@@ -20,8 +20,8 @@ type HitCounter struct {
 var db = database.DB_Main
 
 func init() {
+	db.CreateCollection(context.Background(), "hits")
 	initialdocument()
-
 }
 func initialdocument() {
 	_, err := db.Collection("hits").InsertOne(context.Background(), bson.M{"hits": 0})

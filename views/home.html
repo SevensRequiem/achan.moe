@@ -131,8 +131,8 @@
     <fieldset id="stats">
         <legend>Stats</legend>
         <p>Posts: <span class="data">{{.PostCount}}</span></p>
-        <p>Users: <span class="data">{{.UserCount}}</span></p>
-        <p>Total Content: <span class="data">{{.TotalSize}} MB</span></p>
+        <p>Users: <span class="data">{{.TotalUsers}}</span></p>
+        <p>Total Content: <span class="data"><span class="totalsize"></span> MB</span></p>
         <p>Visits: <span class="data">{{.Hits}}</span></p>
     </fieldset>
     <br><br>
@@ -143,11 +143,13 @@
             {{if .Subject}}
             <li>
                 <span class="recent-board">/{{.BoardID}}/</span>
-                <a href="/board/{{.BoardID}}/{{.ThreadID}}" >
-                {{if .ThumbURL}}
-                    <img src="/thumb/{{.ThumbURL}}" alt="Image" class="postfile">
-                {{else if .ImageURL}}
-                <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image" class="postfile">
+                {{if .ThreadID}}
+                <a href="/board/{{.BoardID}}/{{.ThreadID}}">
+                {{else if .ParentID}}
+                <a href="/board/{{.BoardID}}/{{.ParentID}}#{{.PostID}}">
+                {{end}}
+                {{if .Thumbnail}}
+                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
                 {{end}}
                 <span class="subject">{{.Subject}}</span>
                 <p>{{.PartialContent}}</p>
@@ -156,11 +158,13 @@
             {{else}}
             <li>
                 <span class="recent-board">/{{.BoardID}}/</span>
-                <a href="/board/{{.BoardID}}/{{.ThreadID}}" >
-                {{if .ThumbURL}}
-                    <img src="/thumb/{{.ThumbURL}}" alt="Image" class="postfile">
-                {{else if .ImageURL}}
-                    <img src="/file/{{.BoardID}}/{{.ImageURL}}" alt="Image" class="postfile">
+                {{if .ThreadID}}
+                <a href="/board/{{.BoardID}}/{{.ThreadID}}">
+                {{else if .ParentID}}
+                <a href="/board/{{.BoardID}}/{{.ParentID}}#{{.PostID}}">
+                {{end}}
+                {{if .Thumbnail}}
+                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
                 {{end}}
                 <p>{{.PartialContent}}</p>
                 <span class="timestamp">{{.Timestamp}}</span></a>
@@ -169,6 +173,12 @@
         {{end}}
     </ul>
     <script>
+        document.querySelectorAll(".timestamp").forEach(timestamp => {
+            const date = new Date(timestamp.innerText * 1000);
+            timestamp.innerText = date.toLocaleString();
+        });
+        
+
         document.querySelectorAll(".postfile").forEach(postfile => {
             const postsrc = postfile.src;
             if (/\.(png|jpg|jpeg|gif)$/i.test(postsrc)) {
@@ -179,15 +189,6 @@
                 postfile.outerHTML = `<audio controls><source src="${postsrc}" type="audio/${postsrc.split('.').pop()}"></audio>`;
             } else {
                 postfile.outerHTML = `<a href="${postsrc}">Download File</a>`;
-            }
-        });
-
-        // if thumb url = /thumb/thumbs replace with /thumb
-
-        document.querySelectorAll(".postfile").forEach(postfile => {
-            const postsrc = postfile.src;
-            if (postsrc.includes("/thumb/thumbs")) {
-                postfile.src = postsrc.replace("/thumb/thumbs", "/thumb");
             }
         });
     </script>

@@ -4,7 +4,9 @@ import (
 	"encoding/gob"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -17,24 +19,29 @@ import (
 
 	"achan.moe/auth"
 	"achan.moe/bans"
+	"achan.moe/board"
 	"achan.moe/database"
 	"achan.moe/home"
 	"achan.moe/logs"
 	"achan.moe/routes"
+	"achan.moe/utils/blocker"
+	"achan.moe/utils/cache"
 	"achan.moe/utils/minecraft"
-	"achan.moe/utils/queue"
+	"achan.moe/utils/news"
 	"achan.moe/utils/schedule"
 )
 
 func init() {
-
 	gob.Register(map[string]interface{}{})
-
 }
 
 func main() {
-
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	cache.On = true
 	e := echo.New()
+	b := blocker.NewBlocker()
+	e.Use(b.Middleware)
+
 	e.Use(bans.BanMiddleware)
 	err := godotenv.Load() // Load .env file from the current directory
 	if err != nil {
@@ -58,7 +65,7 @@ func main() {
 		Format: "${id} ${time_rfc3339} ${remote_ip} > ${method} > ${uri} > ${status} ${latency_human}\n",
 	}))
 	e.Use(middleware.Recover())
-	e.Use(middleware.BodyLimit("11M"))
+	e.Use(middleware.BodyLimit("10M"))
 	e.Use(middleware.RequestID())
 	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20)))
 
@@ -96,17 +103,14 @@ func main() {
 	if err != nil {
 		logs.Fatal("Failed to open access.log")
 	}
-	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{
-		Level: 5,
-	}))
+
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "${remote_ip} - ${id} [${time_rfc3339}] \"${method} ${uri} HTTP/1.1\" ${status} ${bytes_sent}\n",
-		Output: accesslog, // Set the Output to the log file
+		Output: accesslog,
 	}))
 	e.Renderer = home.NewTemplateRenderer("views/*.html")
 	routes.Routes(e)
 	e.HTTPErrorHandler = home.ErrorHandler
-
 	// schedules
 	s5 := schedule.NewScheduler()
 	s5.ScheduleTask(schedule.Task{
@@ -136,7 +140,6 @@ func main() {
 	//go env.RegenEncryptedKey()
 	//go env.RegenSecretKey()
 	//go plugins.LoadPlugins(e)
-	queue.NewQueueManager().ProcessAll()
 	logs.Info("Server started on port " + portStr)
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
 		fmt.Println("Dropping collections")
@@ -145,6 +148,12 @@ func main() {
 		database.Migratebansfromsql()
 		fmt.Println("Migrating boards")
 		database.Migrateboardsfromsql()
+		fmt.Println("Migrating threads")
+		board.MigrateToMongoFromGob()
+		fmt.Println("Migrating misc")
+		database.Migratemisc()
+		fmt.Println("Migrating news")
+		news.Migratenewsfromsql()
 		fmt.Println("finish")
 	}
 	if len(os.Args) > 1 && os.Args[1] == "reset" {

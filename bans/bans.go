@@ -41,8 +41,17 @@ func BanIP(c echo.Context) Bans {
 	timestamp := time.Now().Format(time.RFC3339)
 	expires := c.FormValue("expires")
 
+	// Parse the expires date to ensure it's in the correct format
+	expiresTime, err := time.Parse("2006-01-02", expires)
+	if err != nil {
+		logs.Error("Error parsing expires date: %v", err)
+		expiresTime = time.Now().Add(24 * time.Hour) // Default to 24 hours if parsing fails
+	}
+	expires = expiresTime.Format(time.RFC3339)
+
 	bannedIP := Bans{
 		IP:        ip,
+		Status:    "active",
 		Reason:    reason,
 		Username:  username,
 		Timestamp: timestamp,
@@ -225,9 +234,9 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		db := database.DB_Main.Collection("bans")
 		var bans []Bans
-		cur, err := db.Find(context.Background(), bson.M{})
+		cur, err := db.Find(context.Background(), bson.M{"status": "active"})
 		if err != nil {
-			logs.Error("Error getting bans: %v", err)
+			logs.Error("Error getting active bans: %v", err)
 			return c.String(http.StatusInternalServerError, err.Error())
 		}
 		defer cur.Close(context.Background())
@@ -242,17 +251,21 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		currentTime := time.Now()
+		clientIP := c.RealIP()
+		cfConnectingIP := c.Request().Header.Get("CF-Connecting-IP")
+		logs.Info("Client IP: %s, CF-Connecting-IP: %s", clientIP, cfConnectingIP)
+
 		for _, ban := range bans {
-			if ban.IP == c.RealIP() {
-				expiresTime, err := time.Parse("2006-01-02", ban.Expires)
+			if ban.IP == clientIP || ban.IP == cfConnectingIP {
+				expiresTime, err := time.Parse(time.RFC3339, ban.Expires)
 				if err != nil {
-					logs.Error("Error parsing time:", err)
+					logs.Error("Error parsing time: %v", err)
 					continue
 				}
 				if expiresTime.After(currentTime) {
 					tmpl, err := template.ParseFiles("views/util/banned.html")
 					if err != nil {
-						logs.Error("Error parsing template:", err)
+						logs.Error("Error parsing template: %v", err)
 						return c.String(http.StatusInternalServerError, err.Error())
 					}
 					data := map[string]interface{}{
@@ -262,7 +275,7 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 					}
 					err = tmpl.Execute(c.Response().Writer, data)
 					if err != nil {
-						logs.Error("Error executing template:", err)
+						logs.Error("Error executing template: %v", err)
 						return c.String(http.StatusInternalServerError, err.Error())
 					}
 					return nil
@@ -272,7 +285,6 @@ func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		return next(c)
 	}
 }
-
 func ExpireCheck() {
 	fmt.Println("Checking for expired bans...")
 	db := database.DB_Main.Collection("bans")

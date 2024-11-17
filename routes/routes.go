@@ -2,7 +2,6 @@ package routes
 
 import (
 	"net/http"
-	"time"
 
 	"achan.moe/admin"
 	"achan.moe/auth"
@@ -11,6 +10,7 @@ import (
 	"achan.moe/board"
 	"achan.moe/home"
 	"achan.moe/user"
+	"achan.moe/utils/cache"
 	captcha "achan.moe/utils/captcha"
 	"achan.moe/utils/config"
 	"achan.moe/utils/hitcounter"
@@ -19,7 +19,6 @@ import (
 	"achan.moe/utils/stats"
 	"achan.moe/utils/websocket"
 	"github.com/labstack/echo/v4"
-	"golang.org/x/exp/rand"
 )
 
 func Routes(e *echo.Echo) {
@@ -169,27 +168,18 @@ func Routes(e *echo.Echo) {
 		boardID := c.Param("b")
 		return board.ReturnThumb(c, boardID, thumbID)
 	})
-	e.GET("/banner/:b", func(c echo.Context) error {
-		boardid := c.Param("b")
-		rand.Seed(uint64(time.Now().UnixNano()))
-		var banner string
-		var err error
-
-		if rand.Intn(2) == 1 {
-			banner, err = banners.GetRandomGlobalBanner()
-		} else {
-			banner, err = banners.GetRandomLocalBanner(boardid)
-		}
-
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-
-		c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-
-		return c.File(banner)
+	e.GET("/banner/:b/global", func(c echo.Context) error {
+		return banners.GetRandomGlobalBanner(c)
 	})
 
+	e.GET("/banner/:b/local", func(c echo.Context) error {
+		boardID := c.Param("b")
+		return banners.GetRandomLocalBanner(c, boardID)
+	})
+	e.GET("/banner/:b", func(c echo.Context) error {
+		boardID := c.Param("b")
+		return banners.GetRandomBanner(c, boardID)
+	})
 	//auth
 	e.GET("/login", func(c echo.Context) error {
 		return auth.LoginHandler(c)
@@ -241,6 +231,9 @@ func Routes(e *echo.Echo) {
 	})
 
 	// statistics
+	e.GET("/api/contentsize", func(c echo.Context) error {
+		return stats.ReturnContentSizeFromDB(c)
+	})
 	e.GET("/api/admin/stats", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
 			return c.JSON(401, "Unauthorized")
@@ -286,14 +279,22 @@ func Routes(e *echo.Echo) {
 		return nil
 	})
 
-	e.POST("/board/:b/:t", func(c echo.Context) error {
-		board.CreateThread(c)
-		return nil
-	})
-
 	e.POST("/post/:b/:t", func(c echo.Context) error {
 		board.CreatePost(c)
 		return nil
+	})
+
+	e.GET("/board/:b/threads", func(c echo.Context) error {
+		return cache.GetThreadsHandler(c)
+	})
+
+	e.GET("/board/:b/threads/:t", func(c echo.Context) error {
+		return cache.GetThreadHandler(c)
+	})
+
+	e.GET("/test/thumb/:t", func(c echo.Context) error {
+		thumbnail := cache.GetThumbnail(c.Param("t"))
+		return c.JSON(http.StatusOK, thumbnail)
 	})
 
 	e.DELETE("/board/:b/:t", func(c echo.Context) error {
@@ -321,6 +322,19 @@ func Routes(e *echo.Echo) {
 	e.POST("/board/:b/report", func(c echo.Context) error {
 		board.ReportPost(c)
 		return nil
+	})
+
+	e.POST("/admin/banners", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return banners.UploadBanner(c)
+	})
+	e.GET("/admin/banners", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return home.AdminBannersHandler(c)
 	})
 	user.Routes(e)
 }

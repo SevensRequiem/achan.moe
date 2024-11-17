@@ -67,6 +67,9 @@ func init() {
 		DB_Main.CreateCollection(context.Background(), "boards")
 		DB_Main.CreateCollection(context.Background(), "recent_posts")
 		DB_Main.CreateCollection(context.Background(), "data")
+
+		DB_Main.Collection("data").InsertOne(context.Background(), bson.M{"post_count": 0})
+
 		DB_Main.CreateCollection(context.Background(), "news")
 		DB_Main.CreateCollection(context.Background(), "hits")
 	} else {
@@ -251,6 +254,45 @@ func Migratebansfromsql() {
 	}
 }
 
+func Migratemisc() {
+	if MySQL == nil {
+		logs.Error("MySQL connection is not initialized")
+		return
+	}
+
+	var visits []struct {
+		ID   string `gorm:"column:id"`
+		Hits int    `gorm:"column:hits"`
+	}
+	hits := MySQL.Table("hit_counters").Find(&visits)
+	if hits.Error != nil {
+		logs.Error("Error querying MySQL: %v", hits.Error)
+		return
+	}
+
+	var pcount []struct {
+		ID        string `gorm:"column:id"`
+		PostCount int    `gorm:"column:post_count"`
+	}
+	postcount := MySQL.Table("post_counters").Find(&pcount)
+	if postcount.Error != nil {
+		logs.Error("Error querying MySQL: %v", postcount.Error)
+		return
+	}
+
+	DB_Main.Collection("hits").Drop(context.Background())
+	DB_Main.CreateCollection(context.Background(), "hits")
+	if len(visits) > 0 {
+		DB_Main.Collection("hits").InsertOne(context.Background(), bson.M{"hits": visits[0].Hits})
+	}
+
+	DB_Main.Collection("data").Drop(context.Background())
+	DB_Main.CreateCollection(context.Background(), "data")
+	if len(pcount) > 0 {
+		DB_Main.Collection("data").InsertOne(context.Background(), bson.M{"post_count": pcount[0].PostCount})
+	}
+}
+
 func Drops() {
 	// get all boards
 	cursor, err := DB_Main.Collection("boards").Find(context.Background(), bson.M{})
@@ -273,4 +315,15 @@ func Drops() {
 	}
 
 	Client.Database("achan").Collection("boards").Drop(context.Background())
+	DB_Main.Collection("users").Drop(context.Background())
+	DB_Main.Collection("reports").Drop(context.Background())
+	DB_Main.Collection("sessions").Drop(context.Background())
+	DB_Main.Collection("settings").Drop(context.Background())
+	DB_Main.Collection("bans").Drop(context.Background())
+	DB_Main.Collection("old_bans").Drop(context.Background())
+	DB_Main.Collection("boards").Drop(context.Background())
+	DB_Main.Collection("recent_posts").Drop(context.Background())
+	DB_Main.Collection("data").Drop(context.Background())
+	DB_Main.Collection("news").Drop(context.Background())
+	DB_Main.Collection("hits").Drop(context.Background())
 }

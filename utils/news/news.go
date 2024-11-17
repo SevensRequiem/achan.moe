@@ -7,16 +7,11 @@ import (
 
 	"achan.moe/auth"
 	"achan.moe/database"
+	"achan.moe/models"
 	"github.com/labstack/echo/v4"
 )
 
 // News represents a news article with a title, content, and date.
-type News struct {
-	Title   string `json:"title"`
-	Content string `json:"content"`
-	Date    string `json:"date"`
-	Author  string `json:"author"`
-}
 
 // init function creates the file if it doesn't exist and adds dummy news if needed.
 func NewNews(c echo.Context) error {
@@ -27,7 +22,7 @@ func NewNews(c echo.Context) error {
 	content := c.FormValue("content")
 	date := time.Now().Format("2006-01-02")
 
-	news := News{
+	news := models.News{
 		Title:   title,
 		Content: content,
 		Date:    date,
@@ -41,15 +36,15 @@ func NewNews(c echo.Context) error {
 }
 
 // AddNews adds a news article to the file.
-func AddNews(news News) {
+func AddNews(news models.News) {
 	db := database.DB_Main
 	db.Collection("news").InsertOne(context.Background(), news)
 }
 
 // GetNews retrieves the last 10 news articles from the file.
-func GetNews() []News {
+func GetNews() []models.News {
 	allNews := GetAllNews()
-	var recentNews []News
+	var recentNews []models.News
 
 	if len(allNews) > 10 {
 		allNews = allNews[len(allNews)-10:]
@@ -69,7 +64,7 @@ func ClearNews() {
 }
 
 // GetAllNews retrieves all news articles from the file.
-func GetAllNews() []News {
+func GetAllNews() []models.News {
 	db := database.DB_Main
 	cursor, err := db.Collection("news").Find(context.Background(), nil)
 	if err != nil {
@@ -77,9 +72,9 @@ func GetAllNews() []News {
 	}
 	defer cursor.Close(context.Background())
 
-	var allNews []News
+	var allNews []models.News
 	for cursor.Next(context.Background()) {
-		var news News
+		var news models.News
 		if err := cursor.Decode(&news); err != nil {
 			continue
 		}
@@ -91,29 +86,45 @@ func GetAllNews() []News {
 
 func DummyData() {
 	ClearNews()
-	AddNews(News{
+	AddNews(models.News{
 		Title:   "Welcome to the News Page",
 		Content: "This is the first news article. It will be displayed on the news page.",
 		Date:    "2021-01-01",
 	})
-	AddNews(News{
+	AddNews(models.News{
 		Title:   "New Feature Added",
 		Content: "We have added a new feature to the website. Check it out now!",
 		Date:    "2021-01-02",
 	})
-	AddNews(News{
+	AddNews(models.News{
 		Title:   "Important Announcement",
 		Content: "There will be a scheduled maintenance on the website. Please bear with us.",
 		Date:    "2021-01-03",
 	})
-	AddNews(News{
+	AddNews(models.News{
 		Title:   "Holiday Closure",
 		Content: "The website will be closed for the holidays. We will be back soon!",
 		Date:    "2021-01-04",
 	})
-	AddNews(News{
+	AddNews(models.News{
 		Title:   "Thank You for Your Support",
 		Content: "We appreciate all the support from our users. Thank you!",
 		Date:    "2021-01-05",
 	})
+}
+
+func Migratenewsfromsql() {
+	if database.MySQL == nil {
+		return
+	}
+
+	var news []models.News
+	result := database.MySQL.Table("news").Find(&news)
+	if result.Error != nil {
+		return
+	}
+
+	for _, n := range news {
+		AddNews(n)
+	}
 }

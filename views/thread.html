@@ -85,7 +85,9 @@
                 {{if .Thread.Image}}
                 <img src="/image/{{.BoardID}}/{{.Thread.Image}}" alt="Post Image" class="postfile" loading="lazy">
                 {{end}}
+                {{if .Thread.Content}}
                 <p class="postcontent">{{.Thread.Content}}</p>
+                {{end}}
             </fieldset>
             {{end}}
             {{range .Posts}}
@@ -101,7 +103,9 @@
                 {{if .Image}}
                 <img src="/image/{{.BoardID}}/{{.Image}}" alt="Post Image" class="postfile" loading="lazy">
                 {{end}}
+                {{if .Content}}
                 <p class="postcontent">{{.Content}}</p>
+                {{end}}
             
             </fieldset>
             {{end}}
@@ -463,7 +467,7 @@ const showPost = (postId) => {
     };
     
 </script>
-
+<!--
 <script>
 document.querySelectorAll('.author').forEach(author => {
     if (author.title !== '') {
@@ -484,4 +488,5 @@ document.querySelectorAll('.author').forEach(author => {
     }
 });
 </script>
+-->
 {{end}}

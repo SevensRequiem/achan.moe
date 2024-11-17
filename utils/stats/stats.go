@@ -1,28 +1,33 @@
 package stats
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	"achan.moe/bans"
 	"achan.moe/board"
+	"achan.moe/database"
+	"achan.moe/models"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/mem"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 var startTime = time.Now()
 
 func init() {
 	startTime = time.Now()
+	SetContentSizetoDB()
 }
 
 type Stats struct {
@@ -40,6 +45,7 @@ type Stats struct {
 	AllTimeThreadCount string  `json:"all_time_thread_count"`
 	LiveBanCount       string  `json:"live_ban_count"`
 	TotalBanCount      string  `json:"total_ban_count"`
+	TotalSize          string  `json:"total_size"`
 }
 
 func GetStats(c echo.Context) error {
@@ -137,29 +143,82 @@ func GetBinarySum(c echo.Context) error {
 	return c.JSON(http.StatusOK, hex.EncodeToString(hash[:]))
 }
 
-func GetContentSize() float64 {
-	wd, err := os.Getwd()
+func ReturnContentSizeFromDB(c echo.Context) error {
+	db := database.DB_Main.Collection("stats")
+	cursor, err := db.Find(context.Background(), bson.M{})
 	if err != nil {
-		return 0
+		log.Fatal(err)
 	}
+	defer cursor.Close(context.Background())
 
-	dir := filepath.Join(wd, "boards")
-	var size int64
-	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	var totalSize float64
+	for cursor.Next(context.Background()) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			log.Fatal(err)
 		}
-		size += info.Size()
-		return nil
-	})
-	if err != nil {
-		return 0
+		totalSize = doc["total_size"].(float64)
 	}
+	return c.JSON(http.StatusOK, totalSize)
+}
 
-	sizemb := float64(size) / (1024 * 1024)
-	// round to 2 decimal places
-	sizemb = math.Round(sizemb*100) / 100
-	return sizemb
+func SetContentSizetoDB() {
+	db := database.DB_Main.Collection("stats")
+	_, err := db.InsertOne(context.Background(), bson.M{"total_size": GetContentSize()})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func GetContentSize() float64 {
+	boardsdb := database.DB_Main.Collection("boards")
+	cursor, err := boardsdb.Find(context.Background(), bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(context.Background())
+
+	var totalSize float64
+	for cursor.Next(context.Background()) {
+		var board models.Board
+		if err := cursor.Decode(&board); err != nil {
+			log.Fatal(err)
+		}
+
+		boardDB := database.Client.Database(board.BoardID)
+		collections, err := boardDB.ListCollectionNames(context.Background(), bson.M{})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, collection := range collections {
+			if collection == "banners" || collection == "thumbs" || collection == "images" {
+				continue
+			}
+			col := boardDB.Collection(collection)
+			docsCursor, err := col.Find(context.Background(), bson.M{})
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer docsCursor.Close(context.Background())
+
+			for docsCursor.Next(context.Background()) {
+				var doc bson.M
+				if err := docsCursor.Decode(&doc); err != nil {
+					log.Fatal(err)
+				}
+				docBytes, err := bson.Marshal(doc)
+				if err != nil {
+					log.Fatal(err)
+				}
+				docSize := len(docBytes)
+				totalSize += float64(docSize)
+			}
+		}
+	}
+	totalSize = totalSize / 1024 / 1024         // Convert to MB
+	totalSize = math.Round(totalSize*100) / 100 // Round to 2 decimal places
+	return totalSize
 }
 
 func ServerStatus(c echo.Context) error {

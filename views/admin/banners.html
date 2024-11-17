@@ -1,0 +1,66 @@
+{{define "page"}}
+
+<div id="admin-content">
+    <form id="bannerForm" action="/admin/banners" method="post" enctype="multipart/form-data">
+        <div id="banner">
+            <div>
+                <label for="image">Banner:</label>
+                <input type="file" id="image" name="image" required><br><br>
+            </div>
+            <div>
+                <label for="boardid">Board ID:</label>
+                <select id="boardid" name="boardid" required>
+                    <option value="global">Global</option>
+                    {{range .Boards}}
+                    <option value="{{.BoardID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+        
+        <a href="#" onclick="uploadBanner(); return false;" class="button">Upload Banner</a>
+    </form>
+    <script>
+        // Define uploadBanner as an async function to handle banner upload
+        const uploadBanner = async () => {
+            // Retrieve input values
+            const image = document.getElementById("image").files[0];
+            const boardid = document.getElementById("boardid").value;
+            const filename = image.name;
+
+            // Display a confirmation dialog
+            const isConfirmed = confirm(`Are you sure you want to upload the banner to ${boardid}?`);
+
+            // Proceed only if the user confirmed
+            if (isConfirmed) {
+                // Prepare form data
+                const formData = new FormData();
+                formData.append('image', image);
+                formData.append('boardid', boardid);
+                formData.append('filename', filename);
+
+                // Send a POST request to the server
+                const response = await fetch("/admin/banners", {
+                    method: "POST",
+                    body: formData
+                });
+
+                // Display an alert based on the response
+                if (response.ok) {
+                    alert("Banner uploaded successfully");
+                } else {
+                    const errorText = await response.text();
+                    alert(`Failed to upload banner: ${errorText}`);
+                }
+            }
+        };
+    </script>
+    <div class="dashboard-row">
+        <div class="dashboard-column">
+            <div class="dashboard-box">
+                <h2>Banners</h2>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

@@ -3,158 +3,120 @@ package queue
 import (
 	"fmt"
 	"sync"
-
-	"achan.moe/logs"
 )
 
-// Queue represents a thread-safe FIFO queue to process functions.
+// Queue represents a FIFO queue system that holds functions to be executed.
 type Queue struct {
-	Name  string
-	mu    sync.Mutex
-	cond  *sync.Cond
-	queue chan func()
-	stop  chan struct{}
-	wg    sync.WaitGroup
+	queues map[string]chan func() // A map of named queues, each holding functions.
+	wg     sync.WaitGroup         // To wait for all functions to be executed.
+	mu     sync.Mutex             // Mutex to protect the queues.
+	closed bool                   // Flag to indicate whether the queue system is closed.
 }
 
-// New creates a new Queue with a given name and buffer size.
-func New(name string, bufferSize int) *Queue {
-	q := &Queue{
-		Name:  name,
-		queue: make(chan func(), bufferSize),
-		stop:  make(chan struct{}),
-	}
-	q.cond = sync.NewCond(&q.mu)
-	return q
+var Q *Queue
+
+// init initializes the global Q variable and creates the queues.
+func init() {
+	fmt.Println("Creating Queues...")
+	Q = NewQueue() // Initialize the global Q variable
+	Q.CreateQueue("thread:post", 500)
+	Q.CreateQueue("thread:delete", 10)
+
+	Q.CreateQueue("post:create", 1000)
+	Q.CreateQueue("post:delete", 100)
+
+	Q.CreateQueue("mail:send", 100)
+	Q.CreateQueue("mail:remind", 100)
+	fmt.Println("Queues Created")
 }
 
-// Enqueue adds a function to the queue. Returns error if the queue is full.
-func (q *Queue) Enqueue(f func()) error {
-	select {
-	case q.queue <- f:
-		fmt.Printf("Function added to queue %s\n", q.Name)
-		return nil
-	default:
-		return fmt.Errorf("queue %s is full", q.Name)
-	}
-}
-
-// Dequeue removes and returns the next function from the queue with error handling.
-func (q *Queue) Dequeue() (func(), error) {
-	select {
-	case f := <-q.queue:
-		fmt.Printf("Function dequeued from queue %s\n", q.Name)
-		return f, nil
-	case <-q.stop:
-		return nil, fmt.Errorf("queue %s is stopped", q.Name)
+// NewQueue creates and returns a new FIFO Queue system.
+func NewQueue() *Queue {
+	return &Queue{
+		queues: make(map[string]chan func()),
 	}
 }
 
-// IsEmpty checks if the queue is empty.
-func (q *Queue) IsEmpty() bool {
+// CreateQueue creates a new named queue with a specified size.
+func (q *Queue) CreateQueue(name string, size int) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.queue) == 0
+
+	if q.closed {
+		return fmt.Errorf("queue system is closed")
+	}
+
+	// If the queue already exists, return an error.
+	if _, exists := q.queues[name]; exists {
+		return fmt.Errorf("queue with name %s already exists", name)
+	}
+
+	// Create a new channel for the named queue.
+	q.queues[name] = make(chan func(), size)
+	fmt.Printf("Created queue: %s with size: %d\n", name, size)
+
+	// Start a goroutine to process functions from the queue.
+	go q.processQueue(name)
+
+	return nil
 }
 
-// Stop signals the queue to stop processing.
-func (q *Queue) Stop() {
-	close(q.stop)
+// processQueue continuously processes functions from the specified queue.
+func (q *Queue) processQueue(name string) {
+	for fn := range q.queues[name] {
+		q.wg.Add(1)
+		fmt.Printf("Dequeued function from queue: %s\n", name)
+
+		// Run the function in a separate goroutine.
+		go func(fn func()) {
+			defer q.wg.Done()
+			fmt.Printf("Executing function from queue: %s\n", name)
+			fn()
+			fmt.Printf("Executed function from queue: %s\n", name)
+		}(fn)
+	}
+}
+
+// Enqueue adds a function to a specific named queue.
+func (q *Queue) Enqueue(name string, fn func()) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.closed {
+		return fmt.Errorf("queue system is closed, cannot enqueue to %s", name)
+	}
+
+	// Find the named queue and enqueue the function.
+	queue, exists := q.queues[name]
+	if !exists {
+		return fmt.Errorf("queue with name %s does not exist", name)
+	}
+
+	// Add the function to the queue.
+	queue <- fn
+	fmt.Printf("Enqueued function to queue: %s\n", name)
+	return nil
+}
+
+// Close gracefully shuts down the entire queue system, closing all channels.
+func (q *Queue) Close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.closed {
+		return
+	}
+	q.closed = true
+
+	// Close all queues' channels.
+	for name, queue := range q.queues {
+		close(queue)
+		fmt.Printf("Closed queue: %s\n", name)
+	}
+}
+
+// Wait blocks until all enqueued functions are executed.
+func (q *Queue) Wait() {
 	q.wg.Wait()
-	fmt.Printf("Queue %s stop signal received\n", q.Name)
-}
-
-// Size returns the current size of the queue.
-func (q *Queue) Size() int {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	return len(q.queue)
-}
-
-// Process starts processing the queue in a separate goroutine.
-func (q *Queue) Process() {
-	q.wg.Add(1)
-	go func() {
-		defer q.wg.Done()
-		for {
-			select {
-			case f, ok := <-q.queue:
-				if !ok {
-					logs.Debug("Queue %s is closed", q.Name)
-					return
-				}
-				fmt.Printf("Function executing from queue %s\n", q.Name)
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							logs.Warn("Recovered from panic in queue %s: %v", q)
-						}
-					}()
-					f() // Execute the function
-				}()
-				logs.Debug("Function executed from queue %s", q.Name)
-			case <-q.stop:
-				logs.Debug("Queue %s is stopped", q.Name)
-				return
-			}
-		}
-	}()
-}
-
-// QueueManager manages multiple named queues.
-type QueueManager struct {
-	queues map[string]*Queue
-	mu     sync.Mutex
-}
-
-// NewQueueManager creates a new QueueManager.
-func NewQueueManager() *QueueManager {
-	return &QueueManager{
-		queues: make(map[string]*Queue),
-	}
-}
-
-// GetQueue retrieves a queue by name, creating it if it doesn't exist.
-func (qm *QueueManager) GetQueue(name string, bufferSize int) *Queue {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	if q, exists := qm.queues[name]; exists {
-		return q
-	}
-	q := New(name, bufferSize)
-	qm.queues[name] = q
-	logs.Debug("Queue %s created", name)
-	return q
-}
-
-// StopAll stops all queues managed by the QueueManager.
-func (qm *QueueManager) StopAll() {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	for name, q := range qm.queues {
-		logs.Debug("Stopping queue %s", name)
-		q.Stop()
-	}
-}
-
-// ProcessQueuesWithPrefix starts processing queues with the specified prefix.
-func (qm *QueueManager) ProcessQueuesWithPrefix(prefix string) {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	for name, q := range qm.queues {
-		if len(name) >= len(prefix) && name[:len(prefix)] == prefix {
-			logs.Debug("Starting processing for queue %s", name)
-			q.Process()
-		}
-	}
-}
-
-// ProcessAll starts processing all queues managed by the QueueManager.
-func (qm *QueueManager) ProcessAll() {
-	qm.mu.Lock()
-	defer qm.mu.Unlock()
-	for name, q := range qm.queues {
-		logs.Debug("Starting processing for queue %s", name)
-		q.Process()
-	}
+	fmt.Println("All functions have been executed.")
 }

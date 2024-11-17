@@ -32,23 +32,23 @@ func init() {
 	FatalLogger = log.New(logFile, "FATAL: ", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
-func Info(v ...interface{}) {
-	InfoLogger.Output(2, fmt.Sprintln(v...))
+func Info(format string, v ...interface{}) {
+	InfoLogger.Output(2, fmt.Sprintf(format, v...))
 }
 
-func Warn(v ...interface{}) {
-	WarnLogger.Output(2, fmt.Sprintln(v...))
+func Warn(format string, v ...interface{}) {
+	WarnLogger.Output(2, fmt.Sprintf(format, v...))
 }
 
-func Debug(v ...interface{}) {
-	DebugLogger.Output(2, fmt.Sprintln(v...))
+func Debug(format string, v ...interface{}) {
+	DebugLogger.Output(2, fmt.Sprintf(format, v...))
 }
 
-func Error(v ...interface{}) {
-	ErrorLogger.Output(2, fmt.Sprintln(v...))
+func Error(format string, v ...interface{}) {
+	ErrorLogger.Output(2, fmt.Sprintf(format, v...))
 }
 
-func Fatal(v ...interface{}) {
-	FatalLogger.Output(2, fmt.Sprintln(v...))
+func Fatal(format string, v ...interface{}) {
+	FatalLogger.Output(2, fmt.Sprintf(format, v...))
 	os.Exit(1)
 }

@@ -3,6 +3,7 @@ package board
 import (
 	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,8 +12,8 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"time"
 
@@ -21,9 +22,9 @@ import (
 	"image/png"
 	_ "image/png"
 
-	"achan.moe/auth"
 	"achan.moe/database"
 	"achan.moe/logs"
+	"achan.moe/models"
 	"achan.moe/utils/queue"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
@@ -35,98 +36,8 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-type Board struct {
-	BoardID     string `bson:"boardid"`
-	Name        string `bson:"name"`
-	Description string `bson:"description"`
-	PostCount   int64  `bson:"post_count"`
-	ImageOnly   bool   `bson:"image_only"`
-	Locked      bool   `bson:"locked"`
-	Archived    bool   `bson:"archived"`
-	LatestPosts bool   `bson:"latest_posts"`
-	Pages       int    `bson:"pages"`
-}
-
-type ThreadPost struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty"`
-	BoardID        string             `bson:"boardid"`
-	ThreadID       string             `bson:"thread_id"`
-	PostID         string             `bson:"post_id"`
-	Content        string             `bson:"content"`
-	PartialContent string             `bson:"partial_content"`
-	Image          string             `bson:"image"`
-	Thumbnail      string             `bson:"thumb"`
-	Subject        string             `bson:"subject"`
-	Author         string             `bson:"author"`
-	TrueUser       string             `bson:"true_user"`
-	Timestamp      int64              `bson:"timestamp"`
-	IP             string             `bson:"ip"`
-	Sticky         bool               `bson:"sticky"`
-	Locked         bool               `bson:"locked"`
-	PostCount      int                `bson:"post_count"`
-	ReportCount    int                `bson:"report_count"`
-}
-
-type Post struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty"`
-	BoardID        string             `bson:"boardid"`
-	ParentID       string             `bson:"parent_id"`
-	PostID         string             `bson:"post_id"`
-	Content        string             `bson:"content"`
-	PartialContent string             `bson:"partial_content"`
-	Image          string             `bson:"image"`
-	Thumbnail      string             `bson:"thumb"`
-	Subject        string             `bson:"subject"`
-	Author         string             `bson:"author"`
-	TrueUser       string             `bson:"true_user"`
-	Timestamp      int64              `bson:"timestamp"`
-	IP             string             `bson:"ip"`
-	ReportCount    int                `bson:"report_count"`
-}
-
-type RecentPosts struct {
-	ID             int64  `bson:"_id,omitempty"`
-	BoardID        string `bson:"boardid"`
-	ThreadID       string `bson:"thread_id"`
-	PostID         string `bson:"post_id"`
-	Content        string `bson:"content"`
-	PartialContent string `bson:"partial_content"`
-	Image          string `bson:"image_url"`
-	Thumbnail      string `bson:"thumb_url"`
-	Subject        string `bson:"subject"`
-	Author         string `bson:"author"`
-	TrueUser       string `bson:"true_user"`
-	ParentID       string `bson:"parent_id"`
-	Timestamp      int64  `bson:"timestamp"`
-}
-
-type Image struct {
-	ID       primitive.ObjectID `bson:"_id,omitempty"`
-	Image    []byte             `bson:"image"`
-	Filetype string             `bson:"filetype"`
-	Size     int64              `bson:"size"`
-	Height   int                `bson:"height"`
-	Width    int                `bson:"width"`
-}
-
-type Recents struct {
-	ID     int64  `bson:"_id,omitempty"`
-	PostID string `bson:"post_id"`
-}
-
-type PostCounter struct {
-	ID        int   `bson:"_id,omitempty"`
-	PostCount int64 `bson:"post_count"`
-}
-
-var User = auth.User{}
-var manager = queue.NewQueueManager()
-var q = manager.GetQueue("thread", 10)
+var User = models.User{}
 var client = database.Client
-
-func init() {
-	manager.ProcessQueuesWithPrefix("thread")
-}
 
 func saveThumb(boardID string, imageFile *multipart.FileHeader) (string, error) {
 	db := client.Database(boardID)
@@ -150,7 +61,7 @@ func saveThumb(boardID string, imageFile *multipart.FileHeader) (string, error) 
 		return "", err
 	}
 
-	imageDoc := Image{
+	imageDoc := models.Image{
 		Image:    thumbBuffer.Bytes(),
 		Filetype: "image/png",
 		Size:     int64(thumbBuffer.Len()),
@@ -182,7 +93,7 @@ func saveImage(boardID string, imageFile *multipart.FileHeader) (string, error) 
 		return "", err
 	}
 
-	imageDoc := Image{
+	imageDoc := models.Image{
 		Image:    imageData,
 		Filetype: imageFile.Header.Get("Content-Type"),
 		Size:     imageFile.Size,
@@ -208,7 +119,7 @@ func ReturnThumb(c echo.Context, boardID string, thumbID string) error {
 		return c.String(http.StatusBadRequest, "Invalid thumbnail ID")
 	}
 
-	var image Image
+	var image models.Image
 	err = db.Collection("thumbs").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
 	if err != nil {
 		logs.Error("Error finding thumbnail: %v", err)
@@ -223,6 +134,46 @@ func ReturnThumb(c echo.Context, boardID string, thumbID string) error {
 	return nil
 }
 
+func GetImage(boardID string, imageID string) (models.Image, error) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+
+	objectID, err := primitive.ObjectIDFromHex(imageID)
+	if err != nil {
+		logs.Error("Invalid image ID '%s': %v", imageID, err)
+		return models.Image{}, errors.New("Invalid image ID")
+	}
+
+	var image models.Image
+	err = db.Collection("images").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
+	if err != nil {
+		logs.Error("Error finding image: %v", err)
+		return models.Image{}, errors.New("Image not found")
+	}
+
+	return image, nil
+}
+
+func GetThumb(boardID string, thumbID string) (models.Image, error) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+
+	objectID, err := primitive.ObjectIDFromHex(thumbID)
+	if err != nil {
+		logs.Error("Invalid thumbnail ID '%s': %v", thumbID, err)
+		return models.Image{}, errors.New("Invalid thumbnail ID")
+	}
+
+	var image models.Image
+	err = db.Collection("thumbs").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
+	if err != nil {
+		logs.Error("Error finding thumbnail: %v", err)
+		return models.Image{}, errors.New("Thumbnail not found")
+	}
+
+	return image, nil
+}
+
 func ReturnImage(c echo.Context, boardID string, imageID string) error {
 	db := client.Database(boardID)
 	ctx := context.Background()
@@ -233,7 +184,7 @@ func ReturnImage(c echo.Context, boardID string, imageID string) error {
 		return c.String(http.StatusBadRequest, "Invalid image ID")
 	}
 
-	var image Image
+	var image models.Image
 	err = db.Collection("images").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
 	if err != nil {
 		logs.Error("Error finding image: %v", err)
@@ -254,7 +205,7 @@ func addToRecents(postID string) {
 
 func checkReplyID(replyID string) bool {
 	db := database.DB_Main
-	var post Post
+	var post models.Posts
 	db.Collection("posts").FindOne(context.Background(), bson.M{"post_id": replyID}).Decode(&post)
 	return post.ParentID == replyID
 }
@@ -275,26 +226,42 @@ func GenUUID(boardid string) string {
 	}
 
 	db := database.Client.Database(boardid)
-	for {
-		b := make([]byte, 4)
-		_, err := rand.Read(b)
-		if err != nil {
-			logs.Fatal("Error generating UUID: %v", err)
-		}
-		id := hex.EncodeToString(b)
+	ctx := context.Background()
+	cursor, err := db.ListCollections(ctx, bson.M{})
+	if err != nil {
+		logs.Error("Error finding collections: %v", err)
+		return ""
+	}
+	defer cursor.Close(ctx)
+	id := genrandid()
 
-		// Check for UUID collision
-		var result bson.M
-		err = db.Collection("posts").FindOne(context.Background(), bson.M{"post_id": id}).Decode(&result)
-		if err == mongo.ErrNoDocuments {
-			// No collision, return the generated UUID
-			return id
-		} else if err != nil {
-			logs.Error("Error checking UUID: %v", err)
-		} else {
-			logs.Debug("UUID collision, retrying")
+	for cursor.Next(ctx) {
+		var collection struct {
+			Name string `bson:"name"`
+		}
+		if err := cursor.Decode(&collection); err != nil {
+			logs.Error("Error decoding collection: %v", err)
+			return ""
+		}
+		if collection.Name == id {
+			id = genrandid()
+			cursor.Close(ctx)
+			cursor, err = db.ListCollections(ctx, bson.M{})
+			if err != nil {
+				logs.Error("Error finding collections: %v", err)
+				return ""
+			}
+			continue
 		}
 	}
+
+	return id
+}
+
+func genrandid() string {
+	var b [4]byte
+	rand.Read(b[:])
+	return hex.EncodeToString(b[:])
 }
 
 func LatestPostsCheck(c echo.Context, boardID string) bool {
@@ -309,14 +276,14 @@ func LatestPostsCheck(c echo.Context, boardID string) bool {
 
 func CheckIfThreadLocked(c echo.Context, boardID string, threadID string) bool {
 	db := database.DB_Boards.Collection(boardID)
-	var threadpost ThreadPost
+	var threadpost models.ThreadPost
 	db.FindOne(context.Background(), bson.M{"boardid": boardID, "thread_id": threadID, "locked": true}).Decode(&threadpost)
 	return threadpost.Locked
 }
 
 func CheckLatestPosts(boardID string) bool {
 	db := database.DB_Main.Collection("recent_posts")
-	var board Board
+	var board models.Board
 	db.FindOne(context.Background(), bson.M{"boardid": boardID}).Decode(&board)
 	return board.LatestPosts
 }
@@ -330,9 +297,9 @@ func threadIsFull(boardID string, threadID int) bool {
 		return false
 	}
 	defer cursor.Close(ctx)
-	var posts []Post
+	var posts []models.Posts
 	for cursor.Next(ctx) {
-		var post Post
+		var post models.Posts
 		if err := cursor.Decode(&post); err != nil {
 			logs.Error("Error decoding post: %v", err)
 			return false
@@ -346,114 +313,16 @@ func threadIsFull(boardID string, threadID int) bool {
 }
 
 func DeleteLastThread(c echo.Context, boardID string) {
-	db := client.Database(boardID)
-	ctx := context.Background()
-	cursor, err := db.Collection("threads").Find(ctx, bson.M{})
-	if err != nil {
-		logs.Error("Error finding threads: %v", err)
-		return
-	}
-	defer cursor.Close(ctx)
-	var threads []ThreadPost
-	for cursor.Next(ctx) {
-		var thread ThreadPost
-		if err := cursor.Decode(&thread); err != nil {
-			logs.Error("Error decoding thread: %v", err)
-			return
-		}
-		threads = append(threads, thread)
-	}
-	if len(threads) == 0 {
-		return
-	}
-	latestThread := threads[len(threads)-1]
-	DeleteThread(c, boardID, latestThread.ThreadID)
-}
-func PurgeBoard(boardID string) {
-	db := client.Database(boardID)
-	ctx := context.Background()
-	db.Drop(ctx)
-}
-func GetBoards() []Board {
-	db := database.DB_Main.Collection("boards")
-	ctx := context.Background()
-	cursor, err := db.Find(ctx, bson.M{})
-	if err != nil {
-		logs.Error("Error finding boards: %v", err)
-		return nil
-	}
-	defer cursor.Close(ctx)
-	var boards []Board
-	for cursor.Next(ctx) {
-		var board Board
-		if err := cursor.Decode(&board); err != nil {
-			logs.Error("Error decoding board: %v", err)
-			return nil
-		}
-		boards = append(boards, board)
-	}
-	return boards
-}
-
-func GetLatestPosts(n int) ([]RecentPosts, error) {
-	db := database.DB_Main.Collection("recent_posts")
-	ctx := context.Background()
-	cursor, err := db.Find(ctx, bson.M{})
-	if err != nil {
-		logs.Error("Error finding recent posts: %v", err)
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-	var recentPosts []RecentPosts
-	for cursor.Next(ctx) {
-		var post RecentPosts
-		if err := cursor.Decode(&post); err != nil {
-			logs.Error("Error decoding post: %v", err)
-			return nil, err
-		}
-		recentPosts = append(recentPosts, post)
-	}
-	return recentPosts, nil
-}
-
-func GetBoardName(boardID string) string {
-	db := database.DB_Main.Collection("boards")
-	ctx := context.Background()
-	var board Board
-	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
-	return board.Name
-
-}
-
-func GetBoard(boardID string) Board {
-	db := database.DB_Main.Collection("boards")
-	ctx := context.Background()
-	var board Board
-	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
-	return board
-
-}
-
-func GetBoardID(boardID string) string {
-	db := database.DB_Main.Collection("boards")
-	ctx := context.Background()
-	var board Board
-	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
-	fmt.Println(board.BoardID)
-	return board.BoardID
-}
-
-func GetThreads(boardID string) []ThreadPost {
-	db := client.Database(boardID)
+	db := database.Client.Database(boardID)
 	ctx := context.Background()
 	cursor, err := db.ListCollections(ctx, bson.M{})
 	if err != nil {
 		logs.Error("Error finding collections: %v", err)
-		return nil
+		return
 	}
 	defer cursor.Close(ctx)
 	var threads []struct {
-		ThreadPost        ThreadPost
+		ThreadPost        models.ThreadPost
 		LastPostTimestamp int64
 	}
 	for cursor.Next(ctx) {
@@ -462,51 +331,83 @@ func GetThreads(boardID string) []ThreadPost {
 		}
 		if err := cursor.Decode(&collection); err != nil {
 			logs.Error("Error decoding collection: %v", err)
-			return nil
+			return
 		}
-		if collection.Name == "thumbs" || collection.Name == "images" {
+		if collection.Name == "thumbs" || collection.Name == "images" || collection.Name == "banners" {
 			continue
 		}
-		var threadPost ThreadPost
+		var threadPost models.ThreadPost
 		err := db.Collection(collection.Name).FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.D{{"timestamp", 1}})).Decode(&threadPost)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				continue
 			}
 			logs.Error("Error finding first document in collection %s: %v", collection.Name, err)
-			return nil
+			return
 		}
-		var lastPost ThreadPost
+		var lastPost models.ThreadPost
 		err = db.Collection(collection.Name).FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.D{{"timestamp", -1}})).Decode(&lastPost)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				continue
 			}
 			logs.Error("Error finding last document in collection %s: %v", collection.Name, err)
-			return nil
+			return
 		}
 		threads = append(threads, struct {
-			ThreadPost        ThreadPost
+			ThreadPost        models.ThreadPost
 			LastPostTimestamp int64
 		}{
 			ThreadPost:        threadPost,
 			LastPostTimestamp: lastPost.Timestamp,
 		})
-	}
 
-	sort.SliceStable(threads, func(i, j int) bool {
-		if threads[i].ThreadPost.Sticky != threads[j].ThreadPost.Sticky {
-			return threads[i].ThreadPost.Sticky
+		// Delete associated images and thumbnails
+		if threadPost.Image != "" {
+			_, err := db.Collection("images").DeleteOne(ctx, bson.M{"_id": threadPost.Image})
+			if err != nil {
+				logs.Error("Error deleting image: %v", err)
+			}
 		}
-		return threads[i].LastPostTimestamp > threads[j].LastPostTimestamp
-	})
-
-	var sortedThreads []ThreadPost
-	for _, thread := range threads {
-		sortedThreads = append(sortedThreads, thread.ThreadPost)
+		if threadPost.Thumbnail != "" {
+			_, err := db.Collection("thumbs").DeleteOne(ctx, bson.M{"_id": threadPost.Thumbnail})
+			if err != nil {
+				logs.Error("Error deleting thumbnail: %v", err)
+			}
+		}
 	}
+}
+func PurgeBoard(boardID string) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	db.Drop(ctx)
+}
 
-	return sortedThreads
+func GetBoardName(boardID string) string {
+	db := database.DB_Main.Collection("boards")
+	ctx := context.Background()
+	var board models.Board
+	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
+	return board.Name
+
+}
+
+func GetBoard(boardID string) models.Board {
+	db := database.DB_Main.Collection("boards")
+	ctx := context.Background()
+	var board models.Board
+	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
+	return board
+
+}
+
+func GetBoardID(boardID string) string {
+	db := database.DB_Main.Collection("boards")
+	ctx := context.Background()
+	var board models.Board
+	db.FindOne(ctx, bson.M{"boardid": boardID}).Decode(&board)
+	fmt.Println(board.BoardID)
+	return board.BoardID
 }
 func SetSessionSelfPostID(c echo.Context, postID string) ([]string, error) {
 	sess, err := session.Get("session", c)
@@ -525,10 +426,10 @@ func SetSessionSelfPostID(c echo.Context, postID string) ([]string, error) {
 	return updatedIDs, nil
 }
 
-func GetThread(boardID string, threadID string) ThreadPost {
+func GetThread(boardID string, threadID string) models.ThreadPost {
 	db := client.Database(boardID)
 	ctx := context.Background()
-	var threadpost ThreadPost
+	var threadpost models.ThreadPost
 	err := db.Collection(threadID).FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.D{{"timestamp", 1}})).Decode(&threadpost)
 	if err != nil {
 		logs.Error("Error finding first document in collection %s: %v", threadID, err)
@@ -536,40 +437,11 @@ func GetThread(boardID string, threadID string) ThreadPost {
 	return threadpost
 }
 
-func GetThreadPosts(boardID string, threadID string) []Post {
-	db := client.Database(boardID)
-	ctx := context.Background()
-
-	// Find all documents except the earliest one
-	cursor, err := db.Collection(threadID).Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{"timestamp", 1}}).SetSkip(1))
-	if err != nil {
-		logs.Error("Error finding posts: %v", err)
-		return nil
-	}
-	defer cursor.Close(ctx)
-
-	var posts []Post
-	for cursor.Next(ctx) {
-		var post Post
-		if err := cursor.Decode(&post); err != nil {
-			logs.Error("Error decoding post: %v", err)
-			return nil
-		}
-		posts = append(posts, post)
-	}
-
-	// Sort the posts by timestamp in ascending order
-	sort.SliceStable(posts, func(i, j int) bool {
-		return posts[i].Timestamp < posts[j].Timestamp
-	})
-
-	return posts
-}
-func AddRecentPost(post Post, threadpost ThreadPost) {
+func AddRecentPost(post models.Posts, threadpost models.ThreadPost) {
 	db := database.DB_Main.Collection("recent_posts")
 	ctx := context.Background()
 
-	if post != (Post{}) {
+	if post != (models.Posts{}) {
 		_, err := db.InsertOne(ctx, post)
 		if err != nil {
 			logs.Error("Error inserting recent post: %v", err)
@@ -656,14 +528,14 @@ func CheckIfImageOnly(boardID string) (bool, error) {
 func ThreadCheckLocked(c echo.Context, boardid string, threadid string) bool {
 	db := client.Database(boardid)
 	ctx := context.Background()
-	var threadpost ThreadPost
+	var threadpost models.ThreadPost
 	db.Collection(threadid).FindOne(ctx, bson.M{"thread_id": threadid}).Decode(&threadpost)
 	return threadpost.Locked
 }
 
 func AddGlobalPostCount() int64 {
 	db := database.DB_Main.Collection("data")
-	var counter PostCounter
+	var counter models.PostCounter
 	db.FindOne(context.Background(), bson.M{}).Decode(&counter)
 	_, err := db.UpdateOne(context.Background(), bson.M{}, bson.M{"$inc": bson.M{"post_count": 1}})
 	if err != nil {
@@ -673,14 +545,14 @@ func AddGlobalPostCount() int64 {
 }
 func GetGlobalPostCount() int64 {
 	db := database.DB_Main.Collection("data")
-	var counter PostCounter
+	var counter models.PostCounter
 	db.FindOne(context.Background(), bson.M{}).Decode(&counter)
 	return counter.PostCount
 
 }
 
 func AddBoardPostCount(boardID string) {
-	db := database.DB_Boards.Collection(boardID)
+	db := database.DB_Main.Collection("boards")
 	_, err := db.UpdateOne(context.Background(), bson.M{"boardid": boardID}, bson.M{"$inc": bson.M{"post_count": 1}})
 	if err != nil {
 		logs.Error("Error incrementing post count: %v", err)
@@ -734,10 +606,37 @@ func GetBoardDescription(boardID string) (string, error) {
 }
 
 func GetTotalPostCount() int64 {
-	db := database.DB_Main.Collection("data")
-	var counter PostCounter
-	db.FindOne(context.Background(), bson.M{}).Decode(&counter)
-	return counter.PostCount
+	boards := models.GetBoards()
+	var total int64
+	for _, board := range boards {
+		db := client.Database(board.BoardID)
+		ctx := context.Background()
+		cursor, err := db.ListCollections(ctx, bson.M{})
+		if err != nil {
+			logs.Error("Error finding collections: %v", err)
+			return 0
+		}
+		defer cursor.Close(ctx)
+		for cursor.Next(ctx) {
+			var collection struct {
+				Name string `bson:"name"`
+			}
+			if err := cursor.Decode(&collection); err != nil {
+				logs.Error("Error decoding collection: %v", err)
+				return 0
+			}
+			if collection.Name == "thumbs" || collection.Name == "images" || collection.Name == "banners" {
+				continue
+			}
+			count, err := db.Collection(collection.Name).CountDocuments(ctx, bson.M{})
+			if err != nil {
+				logs.Error("Error counting documents: %v", err)
+				return 0
+			}
+			total += count
+		}
+	}
+	return total
 }
 
 func ReportPost(c echo.Context) error {
@@ -792,11 +691,59 @@ func RemoveFromRecentPosts(postID string, threadID string, board string) {
 func AddThreadPostCount(boardID string, threadID string) {
 	db := client.Database(boardID)
 	ctx := context.Background()
-	_, err := db.Collection(threadID).UpdateOne(ctx, bson.M{"thread_id": threadID}, bson.M{"$inc": bson.M{"post_count": 1}})
+	filter := bson.M{} // Matches the first document in the collection
+	update := bson.M{"$inc": bson.M{"post_count": 1}}
+	_, err := db.Collection(threadID).UpdateOne(ctx, filter, update)
 	if err != nil {
 		logs.Error("Error incrementing post count: %v", err)
 	}
 	return
+}
+
+func GetTotalThreadPostCount(boardID string, threadID string) (int, error) {
+	if database.Client == nil {
+		return 0, errors.New("MongoDB client is not initialized")
+	}
+
+	db := database.Client.Database(boardID)
+	collection := db.Collection(threadID)
+
+	filter := bson.M{
+		"$nor": []bson.M{
+			{"collection": "banners"},
+			{"collection": "thumbs"},
+			{"collection": "images"},
+		},
+	}
+
+	count, err := collection.CountDocuments(context.Background(), filter)
+	if err != nil {
+		logs.Error("Error counting documents: %v", err)
+		return 0, err
+	}
+
+	return int(count), nil
+}
+
+func GetTotalThreadCount(boardID string) (int, error) {
+	if database.Client == nil {
+		return 0, errors.New("MongoDB client is not initialized")
+	}
+
+	db := database.Client.Database(boardID)
+	cursor, err := db.ListCollections(context.Background(), bson.M{})
+	if err != nil {
+		logs.Error("Error finding collections: %v", err)
+		return 0, err
+	}
+	defer cursor.Close(context.Background())
+
+	var count int
+	for cursor.Next(context.Background()) {
+		count++
+	}
+
+	return count, nil
 }
 
 func sanitize(content string, subject string, author string) (string, string, string) {
@@ -830,11 +777,12 @@ func CreateThread(c echo.Context) error {
 	if imageOnly {
 		return c.String(http.StatusForbidden, "Board is image only")
 	}
-	if LatestPostsCheck(c, boardID) {
-		DeleteLastThread(c, boardID)
+	count, err := GetTotalThreadCount(boardID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error getting thread count")
 	}
-	if GetTotalPostCount() >= 5000000 {
-		return c.String(http.StatusForbidden, "Post limit reached")
+	if count >= 5 {
+		DeleteLastThread(c, boardID)
 	}
 	boardPostCount, err := GetBoardPostCount(boardID)
 	if err != nil {
@@ -895,7 +843,7 @@ func CreateThread(c echo.Context) error {
 		partialContent = content[:100]
 	}
 
-	threadpost := ThreadPost{
+	threadpost := models.ThreadPost{
 		BoardID:        boardID,
 		ThreadID:       threadID,
 		PostID:         postID,
@@ -911,29 +859,25 @@ func CreateThread(c echo.Context) error {
 		ReportCount:    0,
 	}
 
-	q.Enqueue(func() {
-		processThreadPost(threadpost, c)
-	})
+	queue.Q.Enqueue("thread:create", processThreadPost(threadpost, c))
 
 	return c.JSON(http.StatusOK, "Thread created")
 }
 
-func processThreadPost(threadpost ThreadPost, c echo.Context) {
+func processThreadPost(threadpost models.ThreadPost, c echo.Context) func() {
 	db := client.Database(threadpost.BoardID)
 	ctx := context.Background()
 	db.CreateCollection(ctx, threadpost.ThreadID)
 	_, err := db.Collection(threadpost.ThreadID).InsertOne(ctx, threadpost)
 	if err != nil {
 		logs.Error("Error inserting post: %v", err)
-		return
+		return nil
 	}
 	AddGlobalPostCount()
 	AddBoardPostCount(threadpost.BoardID)
-
-	AddThreadPostCount(threadpost.BoardID, threadpost.ThreadID)
-	AddRecentPost(Post{}, threadpost)
+	AddRecentPost(models.Posts{}, threadpost)
 	SetSessionSelfPostID(c, threadpost.PostID)
-	c.Redirect(http.StatusFound, "/board/"+threadpost.BoardID+"/thread/"+threadpost.ThreadID)
+	return nil
 }
 
 func CreatePost(c echo.Context) error {
@@ -963,11 +907,13 @@ func CreatePost(c echo.Context) error {
 	if imageOnly {
 		return c.String(http.StatusForbidden, "Board is image only")
 	}
-	if LatestPostsCheck(c, boardID) {
-		DeleteLastThread(c, boardID)
+
+	count, err := GetTotalThreadPostCount(boardID, c.Param("t"))
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error getting thread post count")
 	}
-	if GetTotalPostCount() >= 5000000 {
-		return c.String(http.StatusForbidden, "Post limit reached")
+	if count >= 300 {
+		return c.String(http.StatusForbidden, "Thread post limit reached")
 	}
 	boardPostCount, err := GetBoardPostCount(boardID)
 	if err != nil {
@@ -1021,7 +967,7 @@ func CreatePost(c echo.Context) error {
 		partialContent = content[:100]
 	}
 
-	post := Post{
+	post := models.Posts{
 		BoardID:        boardID,
 		ParentID:       threadID,
 		PostID:         postID,
@@ -1033,24 +979,207 @@ func CreatePost(c echo.Context) error {
 		Timestamp:      timestamp,
 	}
 
-	q.Enqueue(func() {
-		processPost(post, c)
-	})
-
+	queue.Q.Enqueue("post:create", processPost(post, c))
 	return c.JSON(http.StatusOK, "Post created")
 }
 
-func processPost(post Post, c echo.Context) {
+func processPost(post models.Posts, c echo.Context) func() {
 	db := client.Database(post.BoardID)
 	ctx := context.Background()
 	_, err := db.Collection(post.ParentID).InsertOne(ctx, post)
 	if err != nil {
 		logs.Error("Error inserting post: %v", err)
-		return
+		return nil
 	}
 	AddGlobalPostCount()
 	AddBoardPostCount(post.BoardID)
 	AddThreadPostCount(post.BoardID, post.ParentID)
-	AddRecentPost(post, ThreadPost{})
+	AddRecentPost(post, models.ThreadPost{})
 	SetSessionSelfPostID(c, post.PostID)
+	return nil
+}
+
+type OldPost struct {
+	BoardID        string `bson:"boardid"`
+	ParentID       string `bson:"parent_id"`
+	ThreadID       string `bson:"thread_id"`
+	PostID         string `bson:"post_id"`
+	Content        string `bson:"content"`
+	PartialContent string `bson:"partial_content"`
+	Image          string `bson:"image"`
+	ImageURL       string `bson:"image_url"`
+	Thumbnail      string `bson:"thumb"`
+	Subject        string `bson:"subject"`
+	Author         string `bson:"author"`
+	Timestamp      string `bson:"timestamp"`
+	TrueUser       string `bson:"true_user"`
+	IP             string `bson:"ip"`
+	Sticky         bool   `bson:"sticky"`
+	Locked         bool   `bson:"locked"`
+}
+
+func MigrateToMongoFromGob() {
+	dirPath := "boards"
+	// find all board directories
+	boards, err := os.ReadDir(dirPath)
+	if err != nil {
+		logs.Error("Error reading directory: %v", err)
+		return
+	}
+	for _, board := range boards {
+		if !board.IsDir() {
+			continue
+		}
+		boardID := board.Name()
+		boardPath := filepath.Join(dirPath, boardID)
+		db := client.Database(boardID)
+		ctx := context.Background()
+		db.CreateCollection(ctx, "thumbs")
+		db.CreateCollection(ctx, "images")
+		db.CreateCollection(ctx, "banners")
+		// find all .gob files in the board directory
+		threadFiles, err := os.ReadDir(boardPath)
+		if err != nil {
+			logs.Error("Error reading board directory: %v", err)
+			return
+		}
+		for _, threadFile := range threadFiles {
+			genuuid := GenUUID(boardID)
+			if threadFile.IsDir() || filepath.Ext(threadFile.Name()) != ".gob" {
+				continue
+			}
+			// read the .gob file
+			file, err := os.Open(filepath.Join(boardPath, threadFile.Name()))
+			if err != nil {
+				logs.Error("Error opening file: %v", err)
+				return
+			}
+			defer file.Close()
+			// decode the .gob file
+			dec := gob.NewDecoder(file)
+			var oldPosts []OldPost
+			err = dec.Decode(&oldPosts)
+			if err != nil {
+				logs.Error("Error decoding file: %v", err)
+				return
+			}
+			if len(oldPosts) == 0 {
+				logs.Error("No posts found in file: %v", threadFile.Name())
+				continue
+			}
+			// create a unique collection for the thread
+			collectionName := genuuid
+			err = db.CreateCollection(ctx, collectionName)
+			if err != nil {
+				logs.Error("Error creating collection: %v", err)
+				return
+			}
+			// convert and insert the thread post
+			oldThreadPost := oldPosts[0]
+			threadPost := models.ThreadPost{
+				ID:             primitive.NewObjectID(),
+				BoardID:        oldThreadPost.BoardID,
+				ThreadID:       genuuid,
+				PostID:         genuuid,
+				Content:        oldThreadPost.Content,
+				PartialContent: oldThreadPost.PartialContent,
+				Image:          insertImage(ctx, db, boardPath, boardID, oldThreadPost.ImageURL),
+				Thumbnail:      insertThumbnail(ctx, db, boardPath, boardID, oldThreadPost.ImageURL),
+				Subject:        oldThreadPost.Subject,
+				Author:         oldThreadPost.Author,
+				TrueUser:       oldThreadPost.TrueUser,
+				Timestamp:      parseTimestamp(oldThreadPost.Timestamp),
+				IP:             oldThreadPost.IP,
+				Sticky:         oldThreadPost.Sticky,
+				Locked:         oldThreadPost.Locked,
+				PostCount:      countPosts(oldPosts),
+				ReportCount:    0,
+			}
+			_, err = db.Collection(collectionName).InsertOne(ctx, threadPost)
+			if err != nil {
+				logs.Error("Error inserting thread post: %v", err)
+				return
+			}
+			// convert and insert the replies
+			for _, oldReply := range oldPosts[1:] {
+				logs.Debug("timestamp: %v", oldReply.Timestamp)
+				reply := models.Posts{
+					ID:             primitive.NewObjectID(),
+					BoardID:        oldReply.BoardID,
+					ParentID:       genuuid,
+					PostID:         oldReply.PostID,
+					Content:        oldReply.Content,
+					PartialContent: oldReply.PartialContent,
+					Image:          insertImage(ctx, db, boardPath, boardID, oldReply.ImageURL),
+					Thumbnail:      insertThumbnail(ctx, db, boardPath, boardID, oldReply.ImageURL),
+					Subject:        oldReply.Subject,
+					Author:         oldReply.Author,
+					TrueUser:       oldReply.TrueUser,
+					Timestamp:      parseTimestamp(oldReply.Timestamp),
+					IP:             oldReply.IP,
+					ReportCount:    0,
+				}
+				_, err := db.Collection(collectionName).InsertOne(ctx, reply)
+				if err != nil {
+					logs.Error("Error inserting reply: %v", err)
+					return
+				}
+			}
+		}
+	}
+}
+
+func parseTimestamp(timestamp string) int64 {
+	// Assuming the timestamp is in the format "09-18-2024 05:14:11"
+	layout := "01-02-2006 15:04:05"
+	t, err := time.Parse(layout, timestamp)
+	if err != nil {
+		logs.Error("Error parsing timestamp: %v", err)
+		return 0
+	}
+	return t.Unix()
+}
+
+func countPosts(posts []OldPost) int {
+	return len(posts)
+}
+
+func insertImage(ctx context.Context, db *mongo.Database, boardPath, boardid, imageURL string) string {
+	imagePath := filepath.Join(boardPath, imageURL)
+	imageID := primitive.NewObjectID()
+
+	// Read the image file
+	imageData, err := os.ReadFile(imagePath)
+	if err != nil {
+		logs.Error("Error reading image file: %v", err)
+		return ""
+	}
+
+	imageDoc := bson.M{"_id": imageID, "image": imageData}
+	_, err = db.Collection("images").InsertOne(ctx, imageDoc)
+	if err != nil {
+		logs.Error("Error inserting image: %v", err)
+		return ""
+	}
+	return imageID.Hex()
+}
+
+func insertThumbnail(ctx context.Context, db *mongo.Database, boardPath, boardid, imageURL string) string {
+	thumbPath := filepath.Join(boardPath, imageURL)
+	thumbID := primitive.NewObjectID()
+
+	// Read the thumbnail file
+	thumbData, err := os.ReadFile(thumbPath)
+	if err != nil {
+		logs.Error("Error reading thumbnail file: %v", err)
+		return ""
+	}
+
+	thumbDoc := bson.M{"_id": thumbID, "image": thumbData}
+	_, err = db.Collection("thumbs").InsertOne(ctx, thumbDoc)
+	if err != nil {
+		logs.Error("Error inserting thumbnail: %v", err)
+		return ""
+	}
+	return thumbID.Hex()
 }

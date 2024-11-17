@@ -10,17 +10,10 @@ import (
 	mail "github.com/wneessen/go-mail" // Ensure the correct version and alias
 )
 
-var manager = queue.NewQueueManager()
-var q = manager.GetQueue("mail", 1000)
-
 type Mail struct {
 	To      string
 	Subject string
 	Body    string
-}
-
-func init() {
-	manager.ProcessQueuesWithPrefix("mail")
 }
 
 func (m *Mail) Send() error {
@@ -80,7 +73,7 @@ func TestMail() {
 }
 
 func AddMailToQueue(to, subject, body string) {
-	q.Enqueue(func() {
+	queue.NewQueue().Enqueue("mail:send", func() {
 		SendEmail(to, subject, body)
 	})
 }

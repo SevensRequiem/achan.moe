@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,51 +26,32 @@ import (
 
 	"achan.moe/database"
 	"achan.moe/logs"
+	"achan.moe/models"
 	"achan.moe/utils/mail"
 )
 
 func init() {
-	gob.Register(User{})
+	gob.Register(models.User{})
 	DefaultAdmin()
 }
 
 func DefaultAdmin() {
 	db := database.DB_Main
-	var user User
+	var user models.User
 	db.Collection("users").FindOne(context.TODO(), bson.M{"uuid": "1337"}).Decode(&user)
 	if user.Username == "" {
 		NewManualUser("1337", "admin", "admin")
 		logs.Info("Default Admin Created")
+		ChangeUserGroups(models.Group{Admin: true, Moderator: false, Janny: models.JannyBoards{Boards: []string{}}}, "1337")
 	}
 }
 
-type User struct {
-	ID              uint `gorm:"primaryKey"`
-	UUID            string
-	Username        string
-	Password        string
-	Groups          Group
-	DateCreated     string
-	LastLogin       string
-	DoesExist       bool
-	Premium         bool
-	Permanent       bool
-	Banned          bool
-	Email           string
-	TransactionID   string
-	PlusReputation  int
-	MinusReputation int
-	Posts           int
-	Threads         int
-}
-
 type Group struct {
-	Admin     bool        `json:"admin"`
-	Moderator bool        `json:"moderator"`
-	Janny     JannyBoards `json:"janny"`
+	models.Group
 }
 
 type JannyBoards struct {
+	models.JannyBoards
 	Boards []string `json:"boards"`
 }
 
@@ -116,7 +98,7 @@ func (jb JannyBoards) Value() (driver.Value, error) {
 func Getrandid() string {
 	// Generate a random ID
 	id := fmt.Sprintf("%d", rand.Intn(1000000000))
-	var user User
+	var user models.User
 
 	// Check if the ID already exists in the database
 	err := database.DB_Main.Collection("users").FindOne(context.TODO(), bson.M{"UUID": id}).Decode(&user)
@@ -139,7 +121,7 @@ func getrandusername() string {
 	for i := range username {
 		username[i] = chars[rand.Intn(len(chars))]
 	}
-	var user User
+	var user models.User
 
 	// Check if the username already exists in the database
 	err := database.DB_Main.Collection("users").FindOne(context.TODO(), bson.M{"username": string(username)}).Decode(&user)
@@ -188,6 +170,14 @@ func ManualGenPassword(password string) string {
 	return encodedPass
 }
 
+func ChangeUserGroups(groups models.Group, uuid string) {
+	db := database.DB_Main
+	_, err := db.Collection("users").UpdateOne(context.TODO(), bson.M{"UUID": uuid}, bson.M{"$set": bson.M{"groups": groups}})
+	if err != nil {
+		logs.Error("Failed to update user groups")
+	}
+}
+
 var limiter = rate.NewLimiter(1/60.0, 1)
 
 func NewUser(c echo.Context) error {
@@ -201,11 +191,11 @@ func NewUser(c echo.Context) error {
 	var newpassword = getrandpassword()
 	var encpass = encryptPassword(newpassword)
 	db := database.DB_Main
-	user := User{
+	user := models.User{
 		UUID:          newid,
 		Username:      newusername,
 		Password:      encpass,
-		Groups:        Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}},
+		Groups:        models.Group{Admin: false, Moderator: false, Janny: models.JannyBoards{Boards: []string{}}},
 		DateCreated:   time.Now().Format("2006-01-02 15:04:05"),
 		LastLogin:     time.Now().Format("2006-01-02 15:04:05"),
 		DoesExist:     true,
@@ -221,11 +211,11 @@ func NewUser(c echo.Context) error {
 }
 func NewManualUser(userID string, username string, password string) {
 	db := database.DB_Main
-	user := User{
+	user := models.User{
 		UUID:          userID,
 		Username:      username,
 		Password:      ManualGenPassword(password),
-		Groups:        Group{Admin: false, Moderator: false, Janny: JannyBoards{Boards: []string{}}},
+		Groups:        models.Group{Admin: false, Moderator: false, Janny: models.JannyBoards{Boards: []string{}}},
 		DateCreated:   time.Now().Format("2006-01-02 15:04:05"),
 		LastLogin:     time.Now().Format("2006-01-02 15:04:05"),
 		DoesExist:     true,
@@ -286,7 +276,7 @@ func LoginHandler(c echo.Context) error {
 	// Redirect the user to the home page
 	return c.JSON(http.StatusOK, map[string]string{"success": "Logged in"})
 }
-func checkPassword(password string, user User) bool {
+func checkPassword(password string, user models.User) bool {
 	enc := os.Getenv("ENCRYPT_KEY")
 	h := hmac.New(sha256.New, []byte(enc))
 	h.Write([]byte(password))
@@ -322,13 +312,13 @@ func AdminCheck(c echo.Context) bool {
 	sess, _ := session.Get("session", c)
 
 	// Check if the user is in the session and not nil
-	user, ok := sess.Values["user"].(User)
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
 		return false
 	}
 
 	// Check if the user is an admin
-	logs.Debug("Admin Check")
+	logs.Debug("Admin Check " + user.Username + " " + user.UUID + " " + strconv.FormatBool(user.Groups.Admin))
 	return user.Groups.Admin
 }
 
@@ -337,7 +327,7 @@ func ModeratorCheck(c echo.Context) bool {
 	sess, _ := session.Get("session", c)
 
 	// Check if the user is in the session and not nil
-	user, ok := sess.Values["user"].(User)
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
 		return false
 	}
@@ -359,7 +349,7 @@ func JannyCheck(c echo.Context, board string) bool {
 	sess, _ := session.Get("session", c)
 
 	// Check if the user is in the session and not nil
-	user, ok := sess.Values["user"].(User)
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
 		return false
 	}
@@ -373,7 +363,7 @@ func ModCheck(c echo.Context) bool {
 	sess, _ := session.Get("session", c)
 
 	// Check if the user is in the session and not nil
-	user, ok := sess.Values["user"].(User)
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
 		return false
 	}
@@ -387,17 +377,17 @@ func AuthCheck(c echo.Context) bool {
 	sess, _ := session.Get("session", c)
 
 	// Check if the user is in the session and not nil
-	_, ok := sess.Values["user"].(User)
+	_, ok := sess.Values["user"].(models.User)
 	logs.Debug("Auth Check", ok)
 	return ok
 }
 
-func LoggedInUser(c echo.Context) User {
+func LoggedInUser(c echo.Context) models.User {
 	// Retrieve the session
 	sess, _ := session.Get("session", c)
 
 	// Retrieve the user from the session
-	user, _ := sess.Values["user"].(User)
+	user, _ := sess.Values["user"].(models.User)
 	logs.Debug("Logged In User", user.Username)
 	return user
 }
@@ -406,7 +396,7 @@ func BannedCheck(c echo.Context) bool {
 	sess, _ := session.Get("session", c)
 
 	// Check if the user is in the session and not nil
-	user, ok := sess.Values["user"].(User)
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
 		return false
 	}
@@ -421,7 +411,7 @@ func PremiumCheck(c echo.Context) bool {
 	sess, _ := session.Get("session", c)
 
 	// Check if the user is in the session and not nil
-	user, ok := sess.Values["user"].(User)
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
 		return false
 	}
@@ -436,7 +426,7 @@ func PremiumCheck(c echo.Context) bool {
 
 func EditUser(c echo.Context) error {
 	db := database.DB_Main
-	var user User
+	var user models.User
 	username := c.FormValue("username")
 	password := c.FormValue("password")
 
@@ -477,23 +467,26 @@ func UpdateUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get session"})
 	}
 
-	user, ok := sess.Values["user"].(User)
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
 		logs.Error("User not found in session")
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "User not found in session"})
 	}
 
-	// update user fields
-	if username := c.FormValue("username"); username != "" {
-		user.Username = username
+	password := c.FormValue("password")
+
+	// validate input parameters
+	if password == "" {
+		logs.Error("Password is required")
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Password is required"})
 	}
-	if password := c.FormValue("password"); password != "" {
-		user.Password = ManualGenPassword(password)
-	}
+
+	// update user password
+	user.Password = ManualGenPassword(password)
 
 	// save user to database
 	db := database.DB_Main
-	if err := db.Collection("users").FindOneAndUpdate(context.TODO(), bson.M{"UUID": user.UUID}, bson.M{"$set": user}).Err(); err != nil {
+	if _, err := db.Collection("users").UpdateOne(context.TODO(), bson.M{"UUID": user.UUID}, bson.M{"$set": user}); err != nil {
 		logs.Error("Failed to update user")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -520,12 +513,12 @@ func GetTotalUsers() int64 {
 	return count
 }
 
-func GetUserByID(uuid uint) User {
+func GetUserByID(uuid uint) models.User {
 	// Obtain the database connection from the `database` package
 	db := database.DB_Main
 
 	// Retrieve the user from the database based on the ID
-	var user User
+	var user models.User
 	db.Collection("users").FindOne(context.TODO(), bson.M{"UUID": uuid}).Decode(&user)
 
 	// Return the user
@@ -533,12 +526,12 @@ func GetUserByID(uuid uint) User {
 	return user
 }
 
-func GetUserByUsername(username string) User {
+func GetUserByUsername(username string) models.User {
 	// Obtain the database connection from the `database` package
 	db := database.DB_Main
 
 	// Retrieve the user from the database based on the username
-	var user User
+	var user models.User
 	db.Collection("users").FindOne(context.TODO(), bson.M{"username": username}).Decode(&user)
 
 	// Return the user
@@ -546,12 +539,12 @@ func GetUserByUsername(username string) User {
 	return user
 }
 
-func ListAdmins() []User {
+func ListAdmins() []models.User {
 	// Obtain the database connection from the `database` package
 	db := database.DB_Main
 
 	// Retrieve the admins from the database
-	var admins []User
+	var admins []models.User
 	collection := db.Collection("users")
 	cursor, err := collection.Find(context.Background(), bson.M{"groups.admin": true})
 	if err != nil {
@@ -568,12 +561,12 @@ func ListAdmins() []User {
 	return admins
 }
 
-func ListModerators() []User {
+func ListModerators() []models.User {
 	// Obtain the database connection from the `database` package
 	db := database.DB_Main
 
 	// Retrieve the moderators from the database
-	var moderators []User
+	var moderators []models.User
 	collection := db.Collection("users")
 	cursor, err := collection.Find(context.Background(), bson.M{"groups.moderator": true})
 	if err != nil {
@@ -590,12 +583,12 @@ func ListModerators() []User {
 	return moderators
 }
 
-func ListJannies() []User {
+func ListJannies() []models.User {
 	// Obtain the database connection from the `database` package
 	db := database.DB_Main
 
 	// Retrieve the jannies from the database
-	var jannies []User
+	var jannies []models.User
 	collection := db.Collection("users")
 	cursor, err := collection.Find(context.Background(), bson.M{"groups.janny": bson.M{"$ne": nil}})
 	if err != nil {
@@ -615,7 +608,7 @@ func ExpireUsers() {
 	fmt.Println("Checking user login expirations....")
 	db := database.DB_Main
 
-	var users []User
+	var users []models.User
 	collection := db.Collection("users")
 	cursor, err := collection.Find(context.Background(), bson.M{})
 	if err != nil {
@@ -649,14 +642,14 @@ func ExpireUsers() {
 func NewPremiumUser(c echo.Context, email string, transactionid string) {
 	userID := Getrandid()
 	db := database.DB_Main
-	user := User{
+	user := models.User{
 		UUID:     userID,
 		Username: strings.Split(email, "@")[0],
 		Password: ManualGenPassword("password"), // Set a default password or generate one
-		Groups: Group{
+		Groups: models.Group{
 			Admin:     false,
 			Moderator: false,
-			Janny:     JannyBoards{Boards: []string{}},
+			Janny:     models.JannyBoards{Boards: []string{}},
 		},
 		DateCreated:   time.Now().Format("2006-01-02 15:04:05"),
 		LastLogin:     time.Now().Format("2006-01-02 15:04:05"),
@@ -680,7 +673,7 @@ func DeleteUser(c echo.Context) error {
 	sess, _ := session.Get("session", c)
 
 	// Retrieve the user from the session
-	user, ok := sess.Values["user"].(User)
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
 		logs.Error("User not found in session")
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "User not found in session"})
@@ -688,7 +681,7 @@ func DeleteUser(c echo.Context) error {
 
 	// Retrieve the user from the database
 	db := database.DB_Main
-	var u User
+	var u models.User
 	db.Collection("users").FindOne(context.TODO(), bson.M{"UUID": user.UUID}).Decode(&u)
 
 	// Delete the user from the database

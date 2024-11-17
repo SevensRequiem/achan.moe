@@ -3,18 +3,17 @@ package home
 import (
 	"fmt"
 	"io"
-	"log"
 
 	"html/template"
 	"net/http"
 
 	"achan.moe/auth"
-	"achan.moe/banners"
 	"achan.moe/board"
+	"achan.moe/models"
+	"achan.moe/utils/cache"
 	config "achan.moe/utils/config"
 	"achan.moe/utils/hitcounter"
 	"achan.moe/utils/news"
-	"achan.moe/utils/stats"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 )
@@ -33,6 +32,7 @@ func NewTemplateRenderer(glob string) *TemplateRenderer {
 		templates: tmpl,
 	}
 }
+
 func HomeHandler(c echo.Context) error {
 	tmpl, err := template.ParseFiles("views/base.html", "views/home.html")
 	if err != nil {
@@ -42,29 +42,8 @@ func HomeHandler(c echo.Context) error {
 	data = globaldata(c)
 	data["Pagename"] = "Home"
 	data["Hits"] = hitcounter.NewHitCounter().GetHits()
-
-	data["PostCount"] = board.GetGlobalPostCount()
-	data["UserCount"] = auth.GetTotalUsers()
-	newsItems := news.GetNews()
-
-	// Convert news articles to a slice of maps
-	News := make([]map[string]interface{}, len(newsItems))
-	for i, n := range newsItems {
-		News[i] = map[string]interface{}{
-			"Title":   n.Title,
-			"Content": n.Content,
-			"Date":    n.Date,
-		}
-	}
-
-	// Prepare the data to send
-	data["News"] = News
-	latestPosts, err := board.GetLatestPosts(10)
-	if err != nil {
-		// Handle the error, for example, log it or return it
-		log.Fatalf("Error fetching latest posts: %v", err)
-	}
-	data["LatestPosts"] = latestPosts
+	data["News"] = cache.GetAllNews()
+	data["LatestPosts"] = cache.GetAllLatestPosts()
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -92,21 +71,8 @@ func BoardHandler(c echo.Context) error {
 	}
 	data["BoardDesc"] = description
 	boardid := board.GetBoardID(c.Param("b"))
-	data["Threads"] = board.GetThreads(boardid)
+	data["Threads"] = models.GetThreads(boardid)
 	data["IsJanny"] = auth.JannyCheck(c, boardid)
-	banner, err := banners.GetRandomBanner(boardid)
-	if err != nil {
-		log.Printf("Failed to get random banner: %v", err)
-		globalBanner, globalErr := banners.GetRandomGlobalBanner()
-		if globalErr != nil {
-			log.Printf("Failed to get global banner: %v", globalErr)
-			data["Banner"] = globalBanner
-		} else {
-			data["Banner"] = globalBanner
-		}
-	} else {
-		data["Banner"] = banner
-	}
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -144,23 +110,9 @@ func ThreadHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "Error getting board description")
 	}
 	data["BoardDesc"] = description
-	posts := board.GetThreadPosts(b, t)
+	posts := models.GetThreadPosts(b, t)
 	data["Posts"] = posts
 	data["IsJanny"] = auth.JannyCheck(c, b)
-	boardid := board.GetBoardID(c.Param("b"))
-	banner, err := banners.GetRandomBanner(boardid)
-	if err != nil {
-		log.Printf("Failed to get random banner: %v", err)
-		globalBanner, globalErr := banners.GetRandomGlobalBanner()
-		if globalErr != nil {
-			log.Printf("Failed to get global banner: %v", globalErr)
-			data["Banner"] = globalBanner
-		} else {
-			data["Banner"] = globalBanner
-		}
-	} else {
-		data["Banner"] = banner
-	}
 	data["SelfPosts"] = selfposts
 
 	// Execute the template once with all the data prepared
@@ -214,27 +166,22 @@ func globaldata(c echo.Context) map[string]interface{} {
 		data["User"] = ""
 	}
 
-	user, ok := userSessionValue.(auth.User)
+	user, ok := userSessionValue.(models.User)
 	if !ok {
 		data["User"] = ""
 	}
+
 	data["IsAdmin"] = auth.AdminCheck(c)
 	data["IsModerator"] = auth.ModeratorCheck(c)
 	data["User"] = user
-	data["Boards"] = board.GetBoards()
+	boards := cache.GetBoards()
+	data["Boards"] = boards
 	data["IP"] = c.RealIP()
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	data["user"] = "Anonymous"
-	data["TotalSize"] = stats.GetContentSize()
-	data["TotalPosts"] = board.GetGlobalPostCount()
+	data["PostCount"] = board.GetTotalPostCount()
 	data["TotalUsers"] = auth.GetTotalUsers()
 	data["GlobalConfig"] = config.ReadGlobalConfig()
-	latestPosts, err := board.GetLatestPosts(1)
-	if err != nil {
-		// Handle the error, for example, log it or return it
-		log.Fatalf("Error fetching latest posts: %v", err)
-	}
-	data["LatestPosts"] = latestPosts
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	return data
 }
@@ -265,7 +212,7 @@ func AdminHandler(c echo.Context) error {
 	data := map[string]interface{}{}
 	data = globaldata(c)
 	data["Pagename"] = "Admin"
-	data["Boards"] = board.GetBoards()
+	data["Boards"] = models.GetBoards()
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -288,7 +235,9 @@ func AdminDashboardHandler(c echo.Context) error {
 
 	data := globaldata(c)
 	data["Pagename"] = "Admin Dashboard"
-	data["Boards"] = board.GetBoards()
+	boards := models.GetBoards()
+
+	data["Boards"] = boards
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
 		fmt.Println("Error executing template:", err)
@@ -310,7 +259,7 @@ func AdminBoardsHandler(c echo.Context) error {
 
 	data := globaldata(c)
 	data["Pagename"] = "Admin Boards"
-	data["Boards"] = board.GetBoards()
+	data["Boards"] = models.GetBoards()
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
 		fmt.Println("Error executing template:", err)
@@ -421,6 +370,27 @@ func AdminNewsHandler(c echo.Context) error {
 	data := globaldata(c)
 	data["Pagename"] = "Admin News"
 	data["News"] = news.GetNews()
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+	return nil
+}
+
+func AdminBannersHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/banners.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Banners"
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {

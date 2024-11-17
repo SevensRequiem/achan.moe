@@ -109,6 +109,7 @@ func CreateBoard(c echo.Context) error {
 	boardsclient.Database(boardID)
 	boardsclient.Database(boardID).CreateCollection(context.Background(), "images")
 	boardsclient.Database(boardID).CreateCollection(context.Background(), "thumbs")
+	boardsclient.Database(boardID).CreateCollection(context.Background(), "banners")
 	return c.JSON(http.StatusOK, "Board created")
 }
 

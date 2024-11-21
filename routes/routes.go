@@ -8,6 +8,7 @@ import (
 	"achan.moe/banners"
 	"achan.moe/bans"
 	"achan.moe/board"
+	"achan.moe/boardimages"
 	"achan.moe/home"
 	"achan.moe/user"
 	"achan.moe/utils/cache"
@@ -160,13 +161,13 @@ func Routes(e *echo.Echo) {
 	e.GET("/image/:b/:i", func(c echo.Context) error {
 		imageID := c.Param("i")
 		boardID := c.Param("b")
-		return board.ReturnImage(c, boardID, imageID)
+		return boardimages.ReturnImage(c, boardID, imageID)
 	})
 
 	e.GET("/thumb/:b/:i", func(c echo.Context) error {
 		thumbID := c.Param("i")
 		boardID := c.Param("b")
-		return board.ReturnThumb(c, boardID, thumbID)
+		return boardimages.ReturnThumb(c, boardID, thumbID)
 	})
 	e.GET("/banner/:b/global", func(c echo.Context) error {
 		return banners.GetRandomGlobalBanner(c)
@@ -244,6 +245,17 @@ func Routes(e *echo.Echo) {
 		return minecraft.JSONStatus(c)
 	})
 
+	// latest
+	e.GET("/api/latest", func(c echo.Context) error {
+		threads := cache.GetLatestThreadsHandler()
+		return c.JSON(http.StatusOK, threads)
+	})
+
+	// news
+	e.GET("/api/news", func(c echo.Context) error {
+		news := cache.GetAllNewsHandler()
+		return c.JSON(http.StatusOK, news)
+	})
 	// captcha
 	e.GET("/api/gencaptcha", func(c echo.Context) error {
 		return captcha.GenerateCaptchaHandler(c)
@@ -284,16 +296,28 @@ func Routes(e *echo.Echo) {
 		return nil
 	})
 
-	e.GET("/board/:b/threads", func(c echo.Context) error {
-		return cache.GetThreadsHandler(c)
+	e.GET("/api/boards", func(c echo.Context) error {
+		boards := cache.GetBoardsHandler()
+		return c.JSON(http.StatusOK, boards)
 	})
 
-	e.GET("/board/:b/threads/:t", func(c echo.Context) error {
-		return cache.GetThreadHandler(c)
+	e.GET("/api/board/:b", func(c echo.Context) error {
+		board := cache.GetBoardHandler(c.Param("b"))
+		return c.JSON(http.StatusOK, board)
 	})
 
-	e.GET("/test/thumb/:t", func(c echo.Context) error {
-		thumbnail := cache.GetThumbnail(c.Param("t"))
+	e.GET("/api/board/:b/threads", func(c echo.Context) error {
+		threads := cache.GetThreadsHandler(c.Param("b"))
+		return c.JSON(http.StatusOK, threads)
+	})
+
+	e.GET("/api/board/:b/thread/:t", func(c echo.Context) error {
+		thread := cache.GetThreadHandler(c.Param("b"), c.Param("t"))
+		return c.JSON(http.StatusOK, thread)
+	})
+
+	e.GET("/test/thumb/:b/:t", func(c echo.Context) error {
+		thumbnail := cache.GetThumbnail(c.Param("b"), c.Param("t"))
 		return c.JSON(http.StatusOK, thumbnail)
 	})
 

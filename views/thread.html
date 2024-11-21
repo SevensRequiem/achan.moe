@@ -12,128 +12,60 @@
     <hr>
      <div class="container">
         <meta charset="UTF-8" id="selfposts" content="{{.SelfPosts}}">
-        <script>
-            document.addEventListener("DOMContentLoaded", () => {
-                const selfpostsContent = document.getElementById("selfposts").content;
-                const selfpostsArray = selfpostsContent.slice(1, -1).split(" ");
-                const selfpostsSet = new Set(selfpostsArray);
-        
-                const postids = document.querySelectorAll(".postid");
-                const thread = document.getElementById("thread");
-                postids.forEach(postid => {
-                    const postIdWithoutHash = postid.dataset.id.replace("#", "");
-                    if (selfpostsSet.has(postIdWithoutHash)) {
-                        const postElement = postid.closest(".post");
-                        if (postElement) {
-                            postElement.style.setProperty("border-top", "5px solid #AAF", "important");
-                            postElement.style.setProperty("border-left", "1px solid #AAF", "important");
-                            postElement.style.setProperty("border-right", "1px solid #AAF", "important");
-                            postElement.style.setProperty("border-bottom", "1px solid #AAF", "important");
-                        }
-                    }
-                });
-            });
-        </script>
-        
-        </script>
-        {{if or .IsAdmin (or .IsModerator .IsJanny)}}
-        <script>
-            const url = "/board/{{.BoardID}}/{{.ThreadID}}";
-            const threadid = {{.ThreadID }};
-            const boardid = {{.BoardID }};
-            const deleteThread = async () => {
-                const response = await fetch(url, {
-                    method: "DELETE",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ threadid, boardid })
-                });
-                if (response.ok) {
-                    window.location.href = "/board/{{.BoardID}}";
-                }
-            }
-        </script>
-        {{end}}
-        <div id="posts">
-            {{if or .IsAdmin (or .IsModerator .IsJanny)}}
-            <script>
-                async function deletePost(postid) {
-                    const url = `/board/{{.Thread.BoardID}}/{{.Thread.ThreadID}}/${postid}`;
-                    const response = await fetch(url, {
-                        method: "DELETE",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({ postid })
-                    });
-                    if (response.ok) {
-                        window.location.reload();
-                    }
-                }
-            </script>
-            {{end}}
-            {{if .Thread}}
-            <fieldset class="post" id="thread">
-                <legend><span class="author" title="{{.Thread.TrueUser}}">{{.Thread.Author}}</span> 
-                    <span id="unixtime">{{.Thread.Timestamp}}</span>
-                    {{if .Thread.Image}}<span>File: {{.Thread.Image}}</span>
-                    <a href="/image/{{.BoardID}}/{{.Thread.Image}}" class="file">Download</a>
-                    {{end}}
-                    {{if or .IsAdmin (or .IsModerator .IsJanny)}}<a class="mod" href="#" onclick="deleteThread()">Delete Thread</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.Thread.IP}}" target="_blank">{{.Thread.IP}}</a>{{end}}
-                </legend>
-                {{if .Thread.Image}}
-                <img src="/image/{{.BoardID}}/{{.Thread.Image}}" alt="Post Image" class="postfile" loading="lazy">
-                {{end}}
-                {{if .Thread.Content}}
-                <p class="postcontent">{{.Thread.Content}}</p>
-                {{end}}
-            </fieldset>
-            {{end}}
-            {{range .Posts}}
-            <fieldset class="post">
-                <legend><a href="#" class="postid" data-id="{{.PostID}}">#{{.PostID}}</a> 
-                    <span class="author" title="{{.TrueUser}}">{{.Author}}</span> 
-                    <span id="unixtime">{{.Timestamp}}</span>
-                    {{if .Image}}<span>File: {{.Image}}</span>
-                    <a href="/image/{{.BoardID}}/{{.Image}}" class="file">Download</a>
-                    {{end}}
-                    {{if or $.IsAdmin (or $.IsModerator $.IsJanny)}}<a class="mod" href="#" onclick="deletePost('{{.PostID}}')">Delete Post</a> | <a class="mod" href="https://whatismyipaddress.com/ip/{{.IP}}" target="_blank">{{.IP}}</a>{{end}}
-                </legend>
-                {{if .Image}}
-                <img src="/image/{{.BoardID}}/{{.Image}}" alt="Post Image" class="postfile" loading="lazy">
-                {{end}}
-                {{if .Content}}
-                <p class="postcontent">{{.Content}}</p>
-                {{end}}
-            
-            </fieldset>
-            {{end}}
+        <div id="threadcontainer">
         </div>
-    </div>
-            <script>
-            document.querySelectorAll(".postfile").forEach(postfile => {
-                const postsrc = postfile.src;
-            
-                fetch(postsrc)
-                    .then(response => {
-                        const contentType = response.headers.get("content-type");
-                        if (contentType.startsWith("image/")) {
-                            // Do nothing, as it's already an image
-                        } else if (contentType.startsWith("video/")) {
-                            postfile.outerHTML = `<video controls><source src="${postsrc}" type="${contentType}"></video>`;
-                        } else if (contentType.startsWith("audio/")) {
-                            postfile.outerHTML = `<audio controls><source src="${postsrc}" type="${contentType}"></audio>`;
-                        } else {
-                            postfile.outerHTML = `<a href="${postsrc}">Download File</a>`;
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching file:', error);
-                        postfile.outerHTML = `<a href="${postsrc}">Download File</a>`;
-                    });
-            });
+        <div id="posts">
+        </div>
+        </div>
+        <script>
+            const threadid = "{{.ThreadID}}";
+            const boardid = "{{.BoardID}}";
+            const threadapi = `/api/board/${boardid}/thread/${threadid}`;
+            axios.get(threadapi)
+                .then(response => {
+                    const thread = response.data;
+                    const threadcontainer = document.getElementById('threadcontainer');
+                    const post = document.createElement('div');
+                    content = marked.parse(thread.Content);
+                    post.innerHTML = `
+                        <fieldset id="thread">
+                            <legend>
+                                <span class="author">${thread.Author}</span>
+                                <span class="subject">${thread.Subject}</span>
+                                <a href="#${thread.ThreadID}" class="postid">#${thread.ThreadID}</a>
+                                <span class="timestamp">${thread.Timestamp}</span>
+                            </legend>
+                            <img class="postfile" src="/image/${thread.BoardID}/${thread.Image}" alt="File">
+                            <p class="content">${content}</p>
+                        </fieldset>
+                    `;
+                    threadcontainer.appendChild(post);
+                    // for thread.posts
+                    const posts = document.getElementById('posts');
+                    thread.Posts.slice(1).forEach(post => {
+                        const postElement = document.createElement('div');
+                        content = marked.parse(post.Content);
+                        postElement.innerHTML = `
+                            <fieldset class="post">
+                                <legend>
+                                    <span class="author">${post.Author}</span>
+                                    <span>No. ${post.PostNumber}</span>
+                                    <span class="postid">${post.PostID}</span> 
+                                    <a href="#${post.PostID}" class="replyquote">#${post.PostID}</a>
+                                    <span class="timestamp">${post.Timestamp}</span>
+                                </legend>
+                                ${post.Image ? `<img class="postfile" src="/image/${post.BoardID}/${post.Image}" alt="File">` : ''}
+                                <p class="content">${content}</p>
+                            </fieldset>
+                        `;
 
+                        posts.appendChild(postElement);
+                    });
+                })
+
+
+        </script>
+            <script>
             document.querySelectorAll("#unixtime").forEach(unixtime => {
                 const date = new Date(parseInt(unixtime.innerText) * 1000);
                 unixtime.innerText = date.toLocaleString();
@@ -193,18 +125,13 @@
                 <img src="https://placehold.co/728x90">
             </div>
     </div>
-    <script>
 
-          document.addEventListener("DOMContentLoaded", function() {
-            const postContents = document.getElementsByClassName('postcontent');
-            for (let i = 0; i < postContents.length; i++) {
-              postContents[i].innerHTML = marked.parse(postContents[i].innerHTML);
-            }
-          });
-          
- </script>
-
-
+<script>
+    function loadForm() {
+        const form = document.querySelector('.reply');
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+</script>
 </div>
 <div id="cirno">
     <img src="/assets/cirno.png" alt="Cirno">
@@ -362,131 +289,4 @@
         max-height: 400px;
     }
 </style>
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const form = document.querySelector('.reply');
-        const postContents = document.querySelectorAll('.postcontent');
-
-        const loadForm = () => {
-            form.style.display = form.style.display === 'flex' ? 'none' : 'flex';
-        };
-
-        const openForm = () => {
-            form.style.display = 'flex';
-        };
-
-        const decodeHtmlEntities = (html) => {
-            const textarea = document.createElement('textarea');
-            textarea.innerHTML = html;
-            return textarea.value;
-        };
-const showPost = (postId) => {
-        const post = document.querySelector(`.postid[data-id='${postId}']`);
-        if (post) {
-            post.scrollIntoView({ behavior: 'smooth' });
-        }
-    };
-
-    window.showPost = showPost;
-
-    const greenText = () => {
-        const gtext = document.querySelectorAll('.postcontent p');
-        gtext.forEach(post => {
-            let lines = post.innerHTML.split('\n');
-            lines = lines.map(line => {
-                if (line.startsWith('&gt;&gt;')) {
-                    const postId = line.slice(4).trim();
-                    return `<span class="replyquote"><a href="#" onclick="showPost('${postId}');">${postId}</a></span>`;
-                } else if (line.startsWith('&gt;')) {
-                    return `<span style="color: green;">${line}</span>`;
-                } else {
-                    return line;
-                }
-            });
-            post.innerHTML = lines.join('\n');
-        });
-    };
-        const applyMarkdown = () => {
-            postContents.forEach(post => {
-                post.innerHTML = marked.parse(decodeHtmlEntities(post.innerHTML));
-            });
-        };
-
-        const updatePosts = () => {
-            postContents.forEach(post => {
-                post.innerHTML = decodeHtmlEntities(post.innerHTML);
-            });
-        };
-
-        const replyTo = (postid) => {
-            openForm();
-            const content = document.getElementById('formcontent');
-            content.value += `\n>>${postid}\n`;
-            content.focus();
-        };
-
-        let isDragging = false;
-        let offset = [0, 0];
-
-        const startDragging = (e) => {
-            if (e.target.tagName.toLowerCase() !== 'input' && e.target.tagName.toLowerCase() !== 'textarea') {
-                isDragging = true;
-                offset = [form.offsetLeft - e.clientX, form.offsetTop - e.clientY];
-            }
-        };
-
-        const stopDragging = () => {
-            isDragging = false;
-        };
-
-        const drag = (e) => {
-            if (isDragging) {
-                form.style.left = `${e.clientX + offset[0]}px`;
-                form.style.top = `${e.clientY + offset[1]}px`;
-            }
-        };
-
-        form.addEventListener('mousedown', startDragging, true);
-        document.addEventListener('mouseup', stopDragging, true);
-        document.addEventListener('mousemove', drag, true);
-
-        updatePosts();
-        greenText();
-        applyMarkdown();
-    });
-
-    const loadForm = () => {
-        const form = document.querySelector('.reply');
-        form.style.display = form.style.display === 'flex' ? 'none' : 'flex';
-    };
-
-    const replyTo = (postid) => {
-        const content = document.getElementById('formcontent');
-        content.value += `\n>>${postid}\n`;
-        content.focus();
-    };
-    
-</script>
-<!--
-<script>
-document.querySelectorAll('.author').forEach(author => {
-    if (author.title !== '') {
-        const userid = author.title;
-        const compare = `/user/${userid}`;
-        fetch(compare)
-            .then(response => response.json())
-            .then(data => {
-                if (data.groups) {
-                    if (data.groups.admin) {
-                        author.style.color = '#FF0000';
-                    } else if (data.groups.moderator) {
-                        author.style.color = '#FFA500';
-                    }
-                }
-            })
-            .catch(error => console.error('Error fetching user data:', error));
-    }
-});
-</script>
--->
 {{end}}

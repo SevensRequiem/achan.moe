@@ -138,62 +138,41 @@
     <br><br>
 <fieldset id="latest">
     <legend>Latest Threads</legend>
-    <ul>
-        {{range .LatestPosts}}
-            {{if .Subject}}
-            <li>
-                <span class="recent-board">/{{.BoardID}}/</span>
-                {{if .ThreadID}}
-                <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                {{else if .ParentID}}
-                <a href="/board/{{.BoardID}}/{{.ParentID}}#{{.PostID}}">
-                {{end}}
-                {{if .Thumbnail}}
-                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
-                {{end}}
-                <span class="subject">{{.Subject}}</span>
-                <p>{{.PartialContent}}</p>
-                <span class="timestamp">{{.Timestamp}}</span></a>
-            </li>
-            {{else}}
-            <li>
-                <span class="recent-board">/{{.BoardID}}/</span>
-                {{if .ThreadID}}
-                <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                {{else if .ParentID}}
-                <a href="/board/{{.BoardID}}/{{.ParentID}}#{{.PostID}}">
-                {{end}}
-                {{if .Thumbnail}}
-                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
-                {{end}}
-                <p>{{.PartialContent}}</p>
-                <span class="timestamp">{{.Timestamp}}</span></a>
-            </li>
-            {{end}}
-        {{end}}
-    </ul>
-    <script>
-        document.querySelectorAll(".timestamp").forEach(timestamp => {
-            const date = new Date(timestamp.innerText * 1000);
-            timestamp.innerText = date.toLocaleString();
-        });
-        
-
-        document.querySelectorAll(".postfile").forEach(postfile => {
-            const postsrc = postfile.src;
-            if (/\.(png|jpg|jpeg|gif)$/i.test(postsrc)) {
-                // Image handling logic here, if necessary
-            } else if (/\.(webm|mp4)$/i.test(postsrc)) {
-                postfile.outerHTML = `<video controls><source src="${postsrc}" type="video/${postsrc.split('.').pop()}"></video>`;
-            } else if (/\.(mp3|wav)$/i.test(postsrc)) {
-                postfile.outerHTML = `<audio controls><source src="${postsrc}" type="audio/${postsrc.split('.').pop()}"></audio>`;
-            } else {
-                postfile.outerHTML = `<a href="${postsrc}">Download File</a>`;
-            }
-        });
-    </script>
-    
 </fieldset>
+<script>
+    const latesturl = "/api/latest";
+    fetch(latesturl)
+        .then(response => response.json())
+        .then(data => {
+            const latest = document.getElementById("latest");
+            const ul = document.createElement("ul");
+            data.forEach(post => {
+                const li = document.createElement("li");
+                const a = document.createElement("a");
+                a.href = "/thread/" + post.ThreadID;
+                const img = document.createElement("img");
+                img.src = post.FilePath;
+                img.alt = post.FileName;
+                a.appendChild(img);
+                const subject = document.createElement("span");
+                subject.className = "subject";
+                subject.innerText = post.Subject;
+                a.appendChild(subject);
+                const p = document.createElement("p");
+                p.innerText = post.Content;
+                const timestamp = document.createElement("span");
+                timestamp.className = "timestamp";
+                timestamp.innerText = post.Timestamp;
+                a.appendChild(p);
+                a.appendChild(timestamp);
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+            latest.appendChild(ul);
+        });
+</script>
+
+    
     <br>
     <br>
 <div id="banners">

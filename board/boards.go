@@ -1,16 +1,12 @@
 package board
 
 import (
-	"bytes"
 	"context"
 	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
-	"image"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,16 +15,16 @@ import (
 
 	_ "image/gif"
 	_ "image/jpeg"
-	"image/png"
 	_ "image/png"
 
+	"achan.moe/boardimages"
 	"achan.moe/database"
 	"achan.moe/logs"
 	"achan.moe/models"
+	"achan.moe/utils/cache"
 	"achan.moe/utils/queue"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
-	"github.com/nfnt/resize"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -39,176 +35,6 @@ import (
 var User = models.User{}
 var client = database.Client
 
-func saveThumb(boardID string, imageFile *multipart.FileHeader) (string, error) {
-	db := client.Database(boardID)
-	file, err := imageFile.Open()
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	img, _, err := image.Decode(file)
-	if err != nil {
-		logs.Error("Error decoding image: %v", err)
-		return "", err
-	}
-
-	thumb := resize.Thumbnail(250, 250, img, resize.Lanczos3)
-	var thumbBuffer bytes.Buffer
-	err = png.Encode(&thumbBuffer, thumb)
-	if err != nil {
-		logs.Error("Error encoding thumbnail: %v", err)
-		return "", err
-	}
-
-	imageDoc := models.Image{
-		Image:    thumbBuffer.Bytes(),
-		Filetype: "image/png",
-		Size:     int64(thumbBuffer.Len()),
-		Height:   thumb.Bounds().Dy(),
-		Width:    thumb.Bounds().Dx(),
-	}
-
-	result, err := db.Collection("thumbs").InsertOne(context.Background(), imageDoc)
-	if err != nil {
-		logs.Error("Error inserting thumbnail: %v", err)
-		return "", err
-	}
-
-	return result.InsertedID.(primitive.ObjectID).Hex(), nil
-}
-
-func saveImage(boardID string, imageFile *multipart.FileHeader) (string, error) {
-	db := client.Database(boardID)
-	file, err := imageFile.Open()
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// Read the file into a byte slice
-	imageData, err := io.ReadAll(file)
-	if err != nil {
-		logs.Error("Error reading image file: %v", err)
-		return "", err
-	}
-
-	imageDoc := models.Image{
-		Image:    imageData,
-		Filetype: imageFile.Header.Get("Content-Type"),
-		Size:     imageFile.Size,
-		// Height and Width can be set if you decode the image
-	}
-
-	result, err := db.Collection("images").InsertOne(context.Background(), imageDoc)
-	if err != nil {
-		logs.Error("Error inserting image: %v", err)
-		return "", err
-	}
-
-	return result.InsertedID.(primitive.ObjectID).Hex(), nil
-}
-
-func ReturnThumb(c echo.Context, boardID string, thumbID string) error {
-	db := client.Database(boardID)
-	ctx := context.Background()
-
-	objectID, err := primitive.ObjectIDFromHex(thumbID)
-	if err != nil {
-		logs.Error("Invalid thumbnail ID '%s': %v", thumbID, err)
-		return c.String(http.StatusBadRequest, "Invalid thumbnail ID")
-	}
-
-	var image models.Image
-	err = db.Collection("thumbs").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
-	if err != nil {
-		logs.Error("Error finding thumbnail: %v", err)
-		return c.String(http.StatusNotFound, "Thumbnail not found")
-	}
-
-	c.Response().Header().Set("Content-Type", image.Filetype)
-	c.Response().Header().Set("Content-Length", strconv.FormatInt(image.Size, 10))
-	c.Response().WriteHeader(http.StatusOK)
-	c.Response().Write(image.Image)
-
-	return nil
-}
-
-func GetImage(boardID string, imageID string) (models.Image, error) {
-	db := client.Database(boardID)
-	ctx := context.Background()
-
-	objectID, err := primitive.ObjectIDFromHex(imageID)
-	if err != nil {
-		logs.Error("Invalid image ID '%s': %v", imageID, err)
-		return models.Image{}, errors.New("Invalid image ID")
-	}
-
-	var image models.Image
-	err = db.Collection("images").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
-	if err != nil {
-		logs.Error("Error finding image: %v", err)
-		return models.Image{}, errors.New("Image not found")
-	}
-
-	return image, nil
-}
-
-func GetThumb(boardID string, thumbID string) (models.Image, error) {
-	db := client.Database(boardID)
-	ctx := context.Background()
-
-	objectID, err := primitive.ObjectIDFromHex(thumbID)
-	if err != nil {
-		logs.Error("Invalid thumbnail ID '%s': %v", thumbID, err)
-		return models.Image{}, errors.New("Invalid thumbnail ID")
-	}
-
-	var image models.Image
-	err = db.Collection("thumbs").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
-	if err != nil {
-		logs.Error("Error finding thumbnail: %v", err)
-		return models.Image{}, errors.New("Thumbnail not found")
-	}
-
-	return image, nil
-}
-
-func ReturnImage(c echo.Context, boardID string, imageID string) error {
-	db := client.Database(boardID)
-	ctx := context.Background()
-
-	objectID, err := primitive.ObjectIDFromHex(imageID)
-	if err != nil {
-		logs.Error("Invalid image ID '%s': %v", imageID, err)
-		return c.String(http.StatusBadRequest, "Invalid image ID")
-	}
-
-	var image models.Image
-	err = db.Collection("images").FindOne(ctx, bson.M{"_id": objectID}).Decode(&image)
-	if err != nil {
-		logs.Error("Error finding image: %v", err)
-		return c.String(http.StatusNotFound, "Image not found")
-	}
-
-	c.Response().Header().Set("Content-Type", image.Filetype)
-	c.Response().Header().Set("Content-Length", strconv.FormatInt(image.Size, 10))
-	c.Response().WriteHeader(http.StatusOK)
-	c.Response().Write(image.Image)
-
-	return nil
-}
-func addToRecents(postID string) {
-	db := database.DB_Main
-	db.Collection("recents").InsertOne(context.Background(), bson.M{"post_id": postID})
-}
-
-func checkReplyID(replyID string) bool {
-	db := database.DB_Main
-	var post models.Posts
-	db.Collection("posts").FindOne(context.Background(), bson.M{"post_id": replyID}).Decode(&post)
-	return post.ParentID == replyID
-}
 func isValidImageExtension(ext string) bool {
 	validExtensions := []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".webm"}
 	for _, v := range validExtensions {
@@ -259,6 +85,7 @@ func GenUUID(boardid string) string {
 }
 
 func genrandid() string {
+	rand.Seed(uint64(time.Now().UnixNano()))
 	var b [4]byte
 	rand.Read(b[:])
 	return hex.EncodeToString(b[:])
@@ -755,41 +582,22 @@ func sanitize(content string, subject string, author string) (string, string, st
 
 func CreateThread(c echo.Context) error {
 	boardID := c.Param("b")
-	locked, err := CheckIfLocked(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error checking if board is locked")
-	}
+	locked := cache.CheckBoardLocked(boardID)
 	if locked {
 		return c.String(http.StatusForbidden, "Board is locked")
 	}
-	archived, err := CheckIfArchived(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error checking if board is archived")
-	}
+	archived := cache.CheckBoardArchived(boardID)
 	if archived {
 		return c.String(http.StatusForbidden, "Board is archived")
 	}
 
-	imageOnly, err := CheckIfImageOnly(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error checking if board is image only")
-	}
-	if imageOnly {
+	imageOnly := cache.CheckBoardImageOnly(boardID)
+	if imageOnly && c.FormValue("image") == "" || imageOnly && c.FormValue("content") != "" {
 		return c.String(http.StatusForbidden, "Board is image only")
 	}
-	count, err := GetTotalThreadCount(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error getting thread count")
-	}
-	if count >= 5 {
+	count := cache.GetTotalThreadCount(boardID)
+	if count >= 30 {
 		DeleteLastThread(c, boardID)
-	}
-	boardPostCount, err := GetBoardPostCount(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error getting board post count")
-	}
-	if boardPostCount >= 500000 {
-		return c.String(http.StatusForbidden, "Post limit reached")
 	}
 	author := c.FormValue("author")
 	subject := c.FormValue("subject")
@@ -826,12 +634,12 @@ func CreateThread(c echo.Context) error {
 	Thumbnail := ""
 	Image := ""
 	if imageFile != nil {
-		thumb, err := saveThumb(boardID, imageFile)
+		thumb, err := boardimages.SaveThumb(boardID, imageFile)
 		if err != nil {
 			return c.String(http.StatusInternalServerError, "Error saving thumbnail")
 		}
 		Thumbnail = thumb
-		image, err := saveImage(boardID, imageFile)
+		image, err := boardimages.SaveImage(boardID, imageFile)
 		if err != nil {
 			return c.String(http.StatusInternalServerError, "Error saving image")
 		}
@@ -865,6 +673,8 @@ func CreateThread(c echo.Context) error {
 }
 
 func processThreadPost(threadpost models.ThreadPost, c echo.Context) func() {
+	cache.AddThreadToCache(threadpost.BoardID, threadpost)
+	cache.AddToRecentThreadsCache(threadpost)
 	db := client.Database(threadpost.BoardID)
 	ctx := context.Background()
 	db.CreateCollection(ctx, threadpost.ThreadID)
@@ -885,44 +695,28 @@ func CreatePost(c echo.Context) error {
 	if boardID == "" {
 		return c.String(http.StatusBadRequest, "Board ID cannot be empty")
 	}
-	locked, err := CheckIfLocked(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error checking if board is locked")
-	}
+	locked := cache.CheckBoardLocked(boardID)
 	if locked {
 		return c.String(http.StatusForbidden, "Board is locked")
 	}
-	archived, err := CheckIfArchived(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error checking if board is archived")
-	}
+	archived := cache.CheckBoardArchived(boardID)
 	if archived {
 		return c.String(http.StatusForbidden, "Board is archived")
 	}
 
-	imageOnly, err := CheckIfImageOnly(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error checking if board is image only")
-	}
-	if imageOnly {
+	imageOnly := cache.CheckBoardImageOnly(boardID)
+	if imageOnly && c.FormValue("image") == "" || imageOnly && c.FormValue("content") != "" {
 		return c.String(http.StatusForbidden, "Board is image only")
 	}
 
-	count, err := GetTotalThreadPostCount(boardID, c.Param("t"))
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error getting thread post count")
-	}
+	count := cache.GetTotalThreadPostCount(boardID, c.Param("t"))
 	if count >= 300 {
 		return c.String(http.StatusForbidden, "Thread post limit reached")
 	}
-	boardPostCount, err := GetBoardPostCount(boardID)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error getting board post count")
-	}
-	if boardPostCount >= 500000 {
-		return c.String(http.StatusForbidden, "Post limit reached")
-	}
 
+	if cache.CheckDuplicatePostContent(boardID, c.Param("t"), c.FormValue("content")) {
+		return c.String(http.StatusForbidden, "Duplicate post detected")
+	}
 	author := c.FormValue("author")
 	subject := c.FormValue("subject")
 	content := c.FormValue("content")
@@ -950,12 +744,12 @@ func CreatePost(c echo.Context) error {
 	Thumbnail := ""
 	Image := ""
 	if imageFile != nil {
-		thumb, err := saveThumb(boardID, imageFile)
+		thumb, err := boardimages.SaveThumb(boardID, imageFile)
 		if err != nil {
 			return c.String(http.StatusInternalServerError, "Error saving thumbnail")
 		}
 		Thumbnail = thumb
-		image, err := saveImage(boardID, imageFile)
+		image, err := boardimages.SaveImage(boardID, imageFile)
 		if err != nil {
 			return c.String(http.StatusInternalServerError, "Error saving image")
 		}
@@ -984,6 +778,8 @@ func CreatePost(c echo.Context) error {
 }
 
 func processPost(post models.Posts, c echo.Context) func() {
+	cache.AddPostToThreadCache(post.BoardID, post.ParentID, post)
+	cache.AddThreadPostCountToCache(post.BoardID, post.ParentID)
 	db := client.Database(post.BoardID)
 	ctx := context.Background()
 	_, err := db.Collection(post.ParentID).InsertOne(ctx, post)
@@ -994,7 +790,6 @@ func processPost(post models.Posts, c echo.Context) func() {
 	AddGlobalPostCount()
 	AddBoardPostCount(post.BoardID)
 	AddThreadPostCount(post.BoardID, post.ParentID)
-	AddRecentPost(post, models.ThreadPost{})
 	SetSessionSelfPostID(c, post.PostID)
 	return nil
 }
@@ -1155,12 +950,19 @@ func insertImage(ctx context.Context, db *mongo.Database, boardPath, boardid, im
 		return ""
 	}
 
-	imageDoc := bson.M{"_id": imageID, "image": imageData}
+	imageDoc := bson.M{"_id": imageID,
+		"image":    imageData,
+		"filetype": http.DetectContentType(imageData),
+		"size":     len(imageData),
+		"height":   0,
+		"width":    0,
+	}
 	_, err = db.Collection("images").InsertOne(ctx, imageDoc)
 	if err != nil {
 		logs.Error("Error inserting image: %v", err)
 		return ""
 	}
+	logs.Info("Successfully inserted image with ID: %s", imageID.Hex())
 	return imageID.Hex()
 }
 
@@ -1175,11 +977,12 @@ func insertThumbnail(ctx context.Context, db *mongo.Database, boardPath, boardid
 		return ""
 	}
 
-	thumbDoc := bson.M{"_id": thumbID, "image": thumbData}
+	thumbDoc := bson.M{"_id": thumbID, "image": thumbData, "filetype": http.DetectContentType(thumbData), "size": len(thumbData), "height": 0, "width": 0}
 	_, err = db.Collection("thumbs").InsertOne(ctx, thumbDoc)
 	if err != nil {
 		logs.Error("Error inserting thumbnail: %v", err)
 		return ""
 	}
+	logs.Info("Successfully inserted thumbnail with ID: %s", thumbID.Hex())
 	return thumbID.Hex()
 }

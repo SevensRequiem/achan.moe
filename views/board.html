@@ -76,88 +76,62 @@
     <a href="/board/{{.BoardID}}">Refresh</a>
 </div>
 <hr>
-<fieldset id="threads">
-    <ul>
-        {{if .IsAdmin}}
-            <!-- Render sticky threads first for admin -->
-            {{range .Threads}}
-                {{if .Sticky}}
-                <li class="sticky">
-                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                    {{if .Thumbnail}}
-                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
-                {{else if .Image}}
-                    <img src="/image/{{.BoardID}}/{{.Image}}" alt="Image" class="postfile">
-                {{end}}
-                    <span class="subject">{{.Subject}}</span>
-                    <p>{{.PartialContent}}</p>
-                    <span class="postcount">{{.PostCount}} / 300</span>
-                    </a>
-                </li>
-                {{end}}
-            {{end}}
-            <!-- Render non-sticky threads -->
-            {{range .Threads}}
-                {{if not .Sticky}}
-                <li>
-                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                    {{if .Thumbnail}}
-                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
-                {{else if .Image}}
-                    <img src="/image/{{.BoardID}}/{{.Image}}" alt="Image" class="postfile">
-                {{end}}
-                        <span class="subject">{{.Subject}}</span>
-                        <p>{{.PartialContent}}</p>
-                        <span class="postcount">{{.PostCount}} / 300</span>
-                        </a>
-                </li>
-                {{end}}
-            {{end}}
-        {{else}}
-            <!-- Render sticky threads first for non-admin -->
-            {{range .Threads}}
-                {{if .Sticky}}
-                <li class="sticky">
-                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                    {{if .Thumbnail}}
-                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
-                {{else if .Image}}
-                    <img src="/image/{{.BoardID}}/{{.Image}}" alt="Image" class="postfile">
-                {{end}}
-                        <span class="subject">{{.Subject}}</span>
-                        <p>{{.PartialContent}}</p>
-                        <span class="postcount">{{.PostCount}} / 300</span>
-                        </a>
-                </li>
-                {{end}}
-            {{end}}
-            <!-- Render non-sticky threads -->
-            {{range .Threads}}
-                {{if not .Sticky}}
-                <li>
-                    <a href="/board/{{.BoardID}}/{{.ThreadID}}">
-                    {{if .Thumbnail}}
-                    <img src="/thumb/{{.BoardID}}/{{.Thumbnail}}" alt="Image" class="postfile">
-                {{else if .Image}}
-                    <img src="/image/{{.BoardID}}/{{.Image}}" alt="Image" class="postfile">
-                {{end}}
-                        <span class="subject">{{.Subject}}</span>
-                        <p>{{.PartialContent}}</p>
-                        <span class="postcount">{{.PostCount}} / 300</span>
-                        </a>
-                </li>
-                {{end}}
-            {{end}}
-        {{end}}
+<fieldset id="threads"></fieldset>
+<script>
+    const boardid = "{{.BoardID}}";
+    const threadapi = `/api/board/${boardid}/threads`;
+    axios.get(threadapi)
+        .then(response => {
+            let threads = response.data;
+            const threadlist = document.getElementById('threads');
+            const ul = document.createElement('ul');
 
+            threads = threads.sort((a, b) => b.Sticky - a.Sticky);
 
-    </ul>
-</fieldset>
+            threads.forEach(thread => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = `/board/${thread.BoardID}/${thread.ThreadID}`;
+                if (thread.Sticky) {
+                    a.classList.add('sticky');
+                }
+                const img = document.createElement('img');
+                img.src = `/thumb/${thread.BoardID}/${thread.Thumbnail}`;
+                const p = document.createElement('p');
+                p.textContent = thread.Subject;
+                const span = document.createElement('span');
+                const count = document.createElement('span');
+                span.textContent = thread.Author;
+                count.textContent = thread.PostCount;
+                count.classList.add('postcount');
+                span.classList.add('author');
+                a.appendChild(span);
+                a.appendChild(img);
+                a.appendChild(p);
+                a.appendChild(count);
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+            threadlist.appendChild(ul);
+        })
+        .catch(error => {
+            console.error(error);
+        });
+</script>
 <div id="cirno">
     <img src="/assets/cirno.png" alt="Cirno">
 </div>
 <style>
     .postcount {
+        color: #AAF;
+        font-size: 0.8rem;
+    }
+
+    .postcount::before {
+        content: "Replies: ";
+    }
+
+    .author {
         color: #AAF;
         font-size: 0.8rem;
     }
@@ -258,7 +232,7 @@
 
     }
 
-    .sticky a {
+    .sticky {
         border-top: 5px solid #ffd000 !important;
     }
     #threads a:hover {

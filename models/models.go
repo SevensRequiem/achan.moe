@@ -75,21 +75,7 @@ type PostsMin struct {
 	Timestamp      int64              `bson:"timestamp"`
 }
 
-type RecentPosts struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty"`
-	BoardID        string             `bson:"boardid"`
-	ThreadID       string             `bson:"thread_id"`
-	ParentID       string             `bson:"parent_id"`
-	PostID         string             `bson:"post_id"`
-	Content        string             `bson:"content"`
-	PartialContent string             `bson:"partial_content"`
-	Image          string             `bson:"image"`
-	Thumbnail      string             `bson:"thumb"`
-	Subject        string             `bson:"subject"`
-	Author         string             `bson:"author"`
-	TrueUser       string             `bson:"true_user"`
-	Timestamp      int64              `bson:"timestamp"`
-}
+type RecentThreads []ThreadPost
 
 type Image struct {
 	ID       primitive.ObjectID `bson:"_id,omitempty"`
@@ -161,6 +147,7 @@ func GetBoards() []Board {
 		return nil
 	}
 	defer cursor.Close(ctx)
+
 	var boards []Board
 	for cursor.Next(ctx) {
 		var board Board
@@ -170,10 +157,16 @@ func GetBoards() []Board {
 		}
 		boards = append(boards, board)
 	}
+
+	if err := cursor.Err(); err != nil {
+		logs.Error("Cursor error: %v", err)
+		return nil
+	}
+
 	return boards
 }
 
-func GetLatestPosts(n int) []RecentPosts {
+func GetLatestPosts(n int) RecentThreads {
 	db := database.DB_Main.Collection("recent_posts")
 	ctx := context.Background()
 	cursor, err := db.Find(ctx, bson.M{})
@@ -182,16 +175,16 @@ func GetLatestPosts(n int) []RecentPosts {
 		return nil
 	}
 	defer cursor.Close(ctx)
-	var recentPosts []RecentPosts
+	var recentThreads RecentThreads
 	for cursor.Next(ctx) {
-		var post RecentPosts
+		var post ThreadPost
 		if err := cursor.Decode(&post); err != nil {
 			logs.Error("Error decoding post: %v", err)
 			return nil
 		}
-		recentPosts = append(recentPosts, post)
+		recentThreads = append(recentThreads, post)
 	}
-	return recentPosts
+	return recentThreads
 }
 func GetThreads(boardID string) []ThreadPost {
 	db := database.Client.Database(boardID)
@@ -235,6 +228,25 @@ func GetThreads(boardID string) []ThreadPost {
 			logs.Error("Error finding last document in collection %s: %v", collection.Name, err)
 			return nil
 		}
+
+		// Fetch posts for the thread
+		var posts []Posts
+		cursor, err := db.Collection(collection.Name).Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{"timestamp", 1}}))
+		if err != nil {
+			logs.Error("Error finding posts in collection %s: %v", collection.Name, err)
+			return nil
+		}
+		defer cursor.Close(ctx)
+		for cursor.Next(ctx) {
+			var post Posts
+			if err := cursor.Decode(&post); err != nil {
+				logs.Error("Error decoding post: %v", err)
+				return nil
+			}
+			posts = append(posts, post)
+		}
+		threadPost.Posts = posts
+
 		threads = append(threads, struct {
 			ThreadPost        ThreadPost
 			LastPostTimestamp int64
@@ -257,30 +269,4 @@ func GetThreads(boardID string) []ThreadPost {
 	}
 
 	return sortedThreads
-}
-
-func GetThreadPosts(boardID string, threadID string) []Posts {
-	db := database.Client.Database(boardID)
-	ctx := context.Background()
-
-	// Define the sort stage
-	sortStage := bson.D{{"$sort", bson.D{{"timestamp", -1}}}}
-
-	cursor, err := db.Collection(threadID).Aggregate(ctx, mongo.Pipeline{sortStage})
-	if err != nil {
-		logs.Error("Error finding posts: %v", err)
-		return nil
-	}
-	defer cursor.Close(ctx)
-	var posts []Posts
-	for cursor.Next(ctx) {
-		var post Posts
-		if err := cursor.Decode(&post); err != nil {
-			logs.Error("Error decoding post: %v", err)
-			return nil
-		}
-		posts = append(posts, post)
-	}
-
-	return posts
 }

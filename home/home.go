@@ -42,8 +42,6 @@ func HomeHandler(c echo.Context) error {
 	data = globaldata(c)
 	data["Pagename"] = "Home"
 	data["Hits"] = hitcounter.NewHitCounter().GetHits()
-	data["News"] = cache.GetAllNews()
-	data["LatestPosts"] = cache.GetAllLatestPosts()
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -110,8 +108,6 @@ func ThreadHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, "Error getting board description")
 	}
 	data["BoardDesc"] = description
-	posts := models.GetThreadPosts(b, t)
-	data["Posts"] = posts
 	data["IsJanny"] = auth.JannyCheck(c, b)
 	data["SelfPosts"] = selfposts
 

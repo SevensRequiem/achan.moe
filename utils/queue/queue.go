@@ -19,7 +19,7 @@ var Q *Queue
 func init() {
 	fmt.Println("Creating Queues...")
 	Q = NewQueue() // Initialize the global Q variable
-	Q.CreateQueue("thread:post", 500)
+	Q.CreateQueue("thread:create", 500)
 	Q.CreateQueue("thread:delete", 10)
 
 	Q.CreateQueue("post:create", 1000)
@@ -64,6 +64,11 @@ func (q *Queue) CreateQueue(name string, size int) error {
 // processQueue continuously processes functions from the specified queue.
 func (q *Queue) processQueue(name string) {
 	for fn := range q.queues[name] {
+		if fn == nil {
+			fmt.Printf("Encountered nil function in queue: %s\n", name)
+			continue
+		}
+
 		q.wg.Add(1)
 		fmt.Printf("Dequeued function from queue: %s\n", name)
 
@@ -79,6 +84,10 @@ func (q *Queue) processQueue(name string) {
 
 // Enqueue adds a function to a specific named queue.
 func (q *Queue) Enqueue(name string, fn func()) error {
+	if fn == nil {
+		return fmt.Errorf("cannot enqueue nil function to %s", name)
+	}
+
 	q.mu.Lock()
 	defer q.mu.Unlock()
 

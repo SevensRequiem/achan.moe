@@ -6,45 +6,67 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
+	"time"
 
-	"achan.moe/auth"
-	"achan.moe/board"
+	"achan.moe/boardimages"
 	"achan.moe/logs"
 	"achan.moe/models"
 	"achan.moe/utils/blocker"
-	"achan.moe/utils/config"
 	"achan.moe/utils/news"
-	"github.com/allegro/bigcache/v3"
-	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 )
 
 var BoardModel models.Board
 var ThreadModel models.ThreadPost
 var PostModel models.Posts
 
-var Cache *bigcache.BigCache
-
 var On = true
 var b = blocker.NewBlocker()
+var ctx = context.Background()
 
-func init() {
-	InitCache()
+var Client *redis.Client
+
+func ListAllKeys() {
+	keys := Client.Keys(ctx, "*").Val()
+	for _, key := range keys {
+		fmt.Println(key)
+	}
+}
+func Connect() *redis.Client {
+	if Client == nil {
+		InitCache()
+	}
+	return Client
+}
+func InitCache() {
+	uri := os.Getenv("REDIS_URI")
+	if uri == "" {
+		logs.Fatal("REDIS_URI not set")
+	}
+	Client = redis.NewClient(&redis.Options{
+		Addr:     uri,
+		Password: "",
+		DB:       0,
+	})
+	ping, err := Client.Ping(ctx).Result()
+	if err != nil {
+		logs.Fatal("Failed to connect to Redis: %v", err)
+	}
+	logs.Info("Connected to Redis: %v", ping)
+	ClearCache()
+
 	CacheBoards()
 	boards := GetBoards()
 	for _, board := range boards {
 		CacheThreads(board.BoardID)
-		fmt.Println("Caching board: ", board)
 		threads := models.GetThreads(board.BoardID)
-		fmt.Println("Caching threads: ", len(threads))
 		for _, thread := range threads {
-			CacheImage(board.BoardID, thread.ThreadID, thread.PostID)
-			CacheThumbnail(board.BoardID, thread.ThreadID, thread.PostID)
+			CacheImage(board.BoardID, thread.Image)
+			CacheThumbnail(board.BoardID, thread.Thumbnail)
 			fmt.Println("Caching posts: ", thread.ThreadID)
-			CachePosts(board.BoardID, thread.ThreadID)
 			for _, post := range thread.Posts {
-				CacheImage(board.BoardID, thread.ThreadID, post.PostID)
-				CacheThumbnail(board.BoardID, thread.ThreadID, post.PostID)
+				CacheImage(board.BoardID, post.Image)
+				CacheThumbnail(board.BoardID, post.Thumbnail)
 			}
 		}
 	}
@@ -52,512 +74,421 @@ func init() {
 	for _, n := range news {
 		CacheNews(n)
 	}
+	ListAllKeys()
 }
 
-func InitCache() {
-	ctx := context.Background()
-	config := bigcache.DefaultConfig(0)
-	config.CleanWindow = 0
-	config.HardMaxCacheSize = 16384
-	config.MaxEntrySize = 11000000
-	config.Verbose = true
-
-	var err error
-	Cache, err = bigcache.New(ctx, config)
-	if err != nil {
-		logs.Error("Error creating cache: %v", err)
-		os.Exit(1)
-	}
-}
-
-func CacheConfig() {
-	config := config.ReadGlobalConfig()
-	data, err := json.Marshal(config)
-	if err != nil {
-		logs.Error("Error marshalling config: %v", err)
-		return
-	}
-	Cache.Set("config:", data)
-}
-func CacheImage(boardID string, threadID string, postID string) {
-	postdata := GetPost(threadID, postID)
-	if postdata.Image != "" {
-		imagedata, err := board.GetImage(boardID, postdata.Image)
-		if err != nil {
-			logs.Error("Error getting image: %v", err)
-			return
-		}
-		imageBytes, err := json.Marshal(imagedata)
-		if err != nil {
-			logs.Error("Error marshalling image: %v", err)
-			return
-		}
-		Cache.Set("image:"+postdata.Image, imageBytes)
-	}
-}
-func GetImage(imageID string) models.Image {
-	data, err := Cache.Get("image:" + imageID)
-	if err != nil {
-		logs.Error("Error getting image: %v", err)
-		return models.Image{}
-	}
-
-	var image models.Image
-	err = json.Unmarshal(data, &image)
-	if err != nil {
-		logs.Error("Error unmarshalling image: %v", err)
-		return models.Image{}
-	}
-
-	return image
-}
-
-func CacheThumbnail(boardID string, threadID string, postID string) {
-	postdata := GetPost(threadID, postID)
-	if postdata.Thumbnail != "" {
-		imagedata, err := board.GetThumb(boardID, postdata.Thumbnail)
-		if err != nil {
-			logs.Error("Error getting thumbnail: %v", err)
-			return
-		}
-		imageBytes, err := json.Marshal(imagedata)
-		if err != nil {
-			logs.Error("Error marshalling thumbnail: %v", err)
-			return
-		}
-		Cache.Set("thumbnail:"+postdata.Thumbnail, imageBytes)
-	}
-}
-
-func GetThumbnail(thumbID string) models.Image {
-	data, err := Cache.Get("thumbnail:" + thumbID)
-	if err != nil {
-		logs.Error("Error getting thumbnail: %v", err)
-		return models.Image{}
-	}
-
-	var thumb models.Image
-	err = json.Unmarshal(data, &thumb)
-	if err != nil {
-		logs.Error("Error unmarshalling thumbnail: %v", err)
-		return models.Image{}
-	}
-
-	return thumb
-}
 func CacheBoards() {
 	boards := models.GetBoards()
-
 	for _, board := range boards {
-		data, err := json.Marshal(board)
-		if err != nil {
-			logs.Error("Error marshalling board: %v", err)
-			continue
-		}
-		Cache.Set("board:"+board.BoardID, data)
+		fmt.Println("Caching board: ", board)
+		CacheBoard(board)
 	}
 }
 
-func CacheThreads(boardID string) {
-	threads := models.GetThreads(boardID)
-
-	for _, thread := range threads {
-		data, err := json.Marshal(thread)
-		if err != nil {
-			logs.Error("Error marshalling thread: %v", err)
-			continue
-		}
-		Cache.Set("thread:"+thread.ThreadID, data)
+func CacheBoard(board models.Board) {
+	data, err := json.Marshal(board)
+	if err != nil {
+		logs.Error("Failed to marshal board: ", err)
+		return
+	}
+	err = Client.Set(ctx, "board:"+board.BoardID, data, 0).Err()
+	if err != nil {
+		logs.Error("Failed to set board key: ", err)
 	}
 }
 
-func CachePosts(boardID string, threadID string) {
-	posts := models.GetThreadPosts(boardID, threadID)
-
-	for _, post := range posts {
-		data, err := json.Marshal(post)
-		if err != nil {
-			logs.Error("Error marshalling post: %v", err)
-			continue
-		}
-		Cache.Set("post:"+threadID+"#"+post.PostID, data)
-	}
-}
-
-func GetBoard(boardID string) models.Board {
-	data, err := Cache.Get("board:" + boardID)
-	if err != nil {
-		logs.Error("Error getting board: %v", err)
-		return models.Board{}
-	}
-
-	var board models.Board
-	err = json.Unmarshal(data, &board)
-	if err != nil {
-		logs.Error("Error unmarshalling board: %v", err)
-		return models.Board{}
-	}
-
-	return board
-}
-
-func GetThread(threadID string) models.ThreadPost {
-	data, err := Cache.Get("thread:" + threadID)
-	if err != nil {
-		logs.Error("Error getting thread: %v", err)
-		return models.ThreadPost{}
-	}
-
-	var thread models.ThreadPost
-	err = json.Unmarshal(data, &thread)
-	if err != nil {
-		logs.Error("Error unmarshalling thread: %v", err)
-		return models.ThreadPost{}
-	}
-
-	// Fetch all posts related to the thread
-	posts := GetPosts(thread.BoardID, thread.ThreadID)
-	thread.Posts = posts
-
-	return thread
-}
-
-func GetPost(threadID, postID string) models.Posts {
-	data, err := Cache.Get("post:" + threadID + "#" + postID)
-	if err != nil {
-		logs.Error("Error getting post: %v", err)
-		return models.Posts{}
-	}
-
-	var post models.Posts
-	err = json.Unmarshal(data, &post)
-	if err != nil {
-		logs.Error("Error unmarshalling post: %v", err)
-		return models.Posts{}
-	}
-
-	return post
-}
 func GetBoards() []models.Board {
 	boards := []models.Board{}
-
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
+	keys := Client.Keys(ctx, "board:*").Val()
+	for _, key := range keys {
+		board := models.Board{}
+		data, err := Client.Get(ctx, key).Bytes()
 		if err != nil {
+			logs.Error("Error getting board: ", err)
 			continue
 		}
-		key := string(entry.Key())
-		if len(key) > 5 && key[:5] == "board" {
-			board := GetBoard(key[6:])
-			boards = append(boards, board)
+		err = json.Unmarshal(data, &board)
+		if err != nil {
+			logs.Error("Failed to unmarshal board: ", err)
+			continue
 		}
+		boards = append(boards, board)
 	}
+
+	sort.Slice(boards, func(i, j int) bool {
+		return boards[i].Name < boards[j].Name
+	})
 
 	return boards
 }
-
-func GetThreadsHandler(c echo.Context) error {
-	boardID := c.Param("b")
-	threads := GetThreads(boardID, c)
-	if !auth.AdminCheck(c) || !auth.ModeratorCheck(c) || !auth.JannyCheck(c, boardID) {
-		for i := range threads {
-			threads[i].IP = ""
-		}
+func GetBoard(boardID string) models.Board {
+	board := models.Board{}
+	data, err := Client.Get(ctx, "board:"+boardID).Bytes()
+	if err != nil {
+		logs.Error("Error getting board: ", err)
+		return board
 	}
-	return c.JSON(200, threads)
+	err = json.Unmarshal(data, &board)
+	if err != nil {
+		logs.Error("Failed to unmarshal board: ", err)
+	}
+	return board
+}
+func CacheThreads(boardID string) {
+	threads := models.GetThreads(boardID)
+	for _, thread := range threads {
+		CacheThread(boardID, thread)
+	}
 }
 
-func GetThreadHandler(c echo.Context) error {
-	threadID := c.Param("t")
-	thread := GetThread(threadID)
-	if !auth.AdminCheck(c) || !auth.ModeratorCheck(c) || !auth.JannyCheck(c, thread.BoardID) {
-		thread.IP = ""
-		for i := range thread.Posts {
-			thread.Posts[i].IP = ""
-		}
+func CacheThread(boardID string, thread models.ThreadPost) {
+	data, err := json.Marshal(thread)
+	if err != nil {
+		logs.Error("Failed to marshal thread: ", err)
+		return
 	}
-	return c.JSON(200, thread)
+	err = Client.Set(ctx, "thread:"+boardID+":"+thread.ThreadID, data, 0).Err()
+	if err != nil {
+		logs.Error("Failed to set thread key: ", err)
+	}
 }
 
-func GetThreads(boardID string, e echo.Context) []models.ThreadPost {
+func CacheImage(boardID string, imageid string) {
+	image, err := boardimages.GetImage(boardID, imageid)
+	if err != nil {
+		logs.Error("Error getting image: ", err)
+	}
+	Client.Set(ctx, "image:"+boardID+":*:"+imageid, image, 0)
+}
+
+func CacheThumbnail(boardID string, thumbid string) {
+	thumbnail, err := boardimages.GetThumb(boardID, thumbid)
+	if err != nil {
+		logs.Error("Error getting thumbnail: ", err)
+	}
+	Client.Set(ctx, "thumbnail:"+boardID+":*:"+thumbid, thumbnail, 0)
+}
+
+func CacheNews(news models.News) {
+	Client.Set(ctx, "news:"+news.ID, news, 0)
+}
+
+func GetNews(newsID string) models.News {
+	news := models.News{}
+	Client.Get(ctx, "news:"+newsID).Scan(&news)
+	return news
+}
+
+func GetImage(boardID string, imageid string) models.Image {
+	image := models.Image{}
+	Client.Get(ctx, "image:"+boardID+":*:"+imageid).Scan(&image)
+	return image
+}
+
+func GetThumbnail(boardID string, thumbid string) models.Image {
+	thumbnail := models.Image{}
+	Client.Get(ctx, "thumbnail:"+boardID+":*:"+thumbid).Scan(&thumbnail)
+	return thumbnail
+}
+func GetThread(boardID string, threadID string) models.ThreadPost {
+	thread := models.ThreadPost{}
+	Client.Get(ctx, "thread:"+boardID+":"+threadID).Scan(&thread)
+	return thread
+}
+
+func GetPost(boardID string, threadID string, postID string) models.Posts {
+	post := models.Posts{}
+	Client.Get(ctx, "post:"+boardID+":"+threadID+":"+postID).Scan(&post)
+	return post
+}
+
+func GetLatestThreadsHandler() []models.ThreadPost {
 	threads := []models.ThreadPost{}
+	keys := Client.Keys(ctx, "recent:*").Val()
+	for _, key := range keys {
+		thread := models.ThreadPost{}
+		Client.Get(ctx, key).Scan(&thread)
+		threads = append(threads, thread)
+	}
+	return threads
+}
 
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
+func GetBoardsHandler() []models.Board {
+	boards := []models.Board{}
+	keys := Client.Keys(ctx, "board:*").Val()
+	for _, key := range keys {
+		board := models.Board{}
+		Client.Get(ctx, key).Scan(&board)
+		boards = append(boards, board)
+	}
+	return boards
+}
+
+func GetBoardHandler(boardID string) models.Board {
+	board := models.Board{}
+	Client.Get(ctx, "board:"+boardID).Scan(&board)
+	return board
+}
+
+func GetThreadsHandler(boardID string) []models.ThreadPost {
+	threads := []models.ThreadPost{}
+	keys := Client.Keys(ctx, "thread:"+boardID+":*").Val()
+	for _, key := range keys {
+		thread := models.ThreadPost{}
+		data, err := Client.Get(ctx, key).Bytes()
 		if err != nil {
+			logs.Error("Error getting thread: ", err)
 			continue
 		}
-		key := string(entry.Key())
-		if len(key) > 6 && key[:6] == "thread" {
-			thread := GetThread(key[7:])
-			if thread.BoardID == boardID {
-				for i := range thread.Posts {
-					postsmin := models.PostsMin{
-						ID:             thread.Posts[i].ID,
-						BoardID:        thread.Posts[i].BoardID,
-						ParentID:       thread.Posts[i].ParentID,
-						PostID:         thread.Posts[i].PostID,
-						PartialContent: thread.Posts[i].PartialContent,
-						Thumbnail:      thread.Posts[i].Thumbnail,
-						Timestamp:      thread.Posts[i].Timestamp,
-					}
-					thread.PostsMin = append(thread.PostsMin, postsmin)
-				}
-				thread.Posts = nil
-				threads = append(threads, thread)
-			}
+		err = json.Unmarshal(data, &thread)
+		if err != nil {
+			logs.Error("Failed to unmarshal thread: ", err)
+			continue
 		}
+		threads = append(threads, thread)
 	}
+
+	sort.Slice(threads, func(i, j int) bool {
+		if threads[i].Sticky && !threads[j].Sticky {
+			return true
+		}
+		if !threads[i].Sticky && threads[j].Sticky {
+			return false
+		}
+
+		var timeI, timeJ time.Time
+		if len(threads[i].Posts) > 0 {
+			lastPostI := threads[i].Posts[len(threads[i].Posts)-1]
+			timeI = time.Unix(lastPostI.Timestamp, 0)
+		} else {
+			timeI = time.Unix(threads[i].Timestamp, 0)
+		}
+
+		if len(threads[j].Posts) > 0 {
+			lastPostJ := threads[j].Posts[len(threads[j].Posts)-1]
+			timeJ = time.Unix(lastPostJ.Timestamp, 0)
+		} else {
+			timeJ = time.Unix(threads[j].Timestamp, 0)
+		}
+
+		return timeI.After(timeJ)
+	})
 
 	return threads
 }
 
-func GetPosts(boardID string, threadID string) []models.Posts {
-	posts := []models.Posts{}
-
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		if len(key) > 5 && key[:5] == "post:" {
-			parts := strings.Split(key[5:], "#")
-			if len(parts) == 2 && parts[0] == threadID {
-				post := GetPost(parts[0], parts[1])
-				posts = append(posts, post)
-			}
-		}
+func GetThreadHandler(boardID string, threadID string) models.ThreadPost {
+	thread := models.ThreadPost{}
+	keys := Client.Keys(ctx, "thread:"+boardID+":"+threadID).Val()
+	if len(keys) == 0 {
+		logs.Error("No keys found for thread:", boardID, threadID)
+		return thread
+	}
+	data := Client.Get(ctx, keys[0]).Val()
+	err := json.Unmarshal([]byte(data), &thread)
+	if err != nil {
+		logs.Error("Failed to unmarshal thread: ", err)
 	}
 
-	sort.Slice(posts, func(i, j int) bool {
-		return posts[i].Timestamp < posts[j].Timestamp
-	})
-
-	return posts
+	return thread
 }
-func AddThreadToCache(thread models.ThreadPost) {
+func GetThumbnailHandler(boardID string, thumbid string) models.Image {
+	thumbnail := models.Image{}
+	Client.Get(ctx, "thumbnail:"+boardID+":"+thumbid).Scan(&thumbnail)
+	return thumbnail
+}
+
+func GetImageHandler(boardID string, imageid string) models.Image {
+	image := models.Image{}
+	Client.Get(ctx, "image:"+boardID+":*:"+imageid).Scan(&image)
+	return image
+}
+
+func GetNewsHandler(newsID string) models.News {
+	news := models.News{}
+	Client.Get(ctx, "news:"+newsID).Scan(&news)
+	return news
+}
+
+func GetAllNewsHandler() []models.News {
+	news := []models.News{}
+	keys := Client.Keys(ctx, "news:*").Val()
+	for _, key := range keys {
+		n := models.News{}
+		Client.Get(ctx, key).Scan(&n)
+		news = append(news, n)
+	}
+	return news
+}
+
+func AddPostToThreadCache(boardID string, threadID string, post models.Posts) {
+	key := "thread:" + boardID + ":" + threadID
+	logs.Info("Fetching thread with key: ", key)
+	data, err := Client.Get(ctx, key).Bytes()
+	if err != nil {
+		logs.Error("Error getting thread: ", err)
+		return
+	}
+
+	logs.Info("Successfully fetched thread data: ", string(data))
+
+	thread := models.ThreadPost{}
+	err = json.Unmarshal(data, &thread)
+	if err != nil {
+		logs.Error("Failed to unmarshal thread: ", err)
+		return
+	}
+
+	logs.Info("Successfully unmarshalled thread: ", thread)
+
+	thread.Posts = append(thread.Posts, post)
+	logs.Info("Appended post to thread: ", thread)
+
+	updatedData, err := json.Marshal(thread)
+	if err != nil {
+		logs.Error("Failed to marshal updated thread: ", err)
+		return
+	}
+
+	logs.Info("Successfully marshalled updated thread: ", string(updatedData))
+
+	err = Client.Set(ctx, key, updatedData, 0).Err()
+	if err != nil {
+		logs.Error("Failed to update thread in cache: ", err)
+		return
+	}
+
+	logs.Info("Successfully updated thread in cache")
+}
+
+func AddThreadToCache(boardID string, thread models.ThreadPost) {
+	key := "thread:" + boardID + ":" + thread.ThreadID
 	data, err := json.Marshal(thread)
 	if err != nil {
-		logs.Error("Error marshalling thread: %v", err)
+		logs.Error("Failed to marshal thread: ", err)
 		return
 	}
-	Cache.Set("thread:"+thread.ThreadID, data)
+	err = Client.Set(ctx, key, data, 0).Err()
+	if err != nil {
+		logs.Error("Failed to set thread key: ", err)
+	}
 }
 
-func AddPostToCache(post models.Posts) {
-	data, err := json.Marshal(post)
+func AddThreadPostCountToCache(boardID string, threadID string) {
+	key := "thread:" + boardID + ":" + threadID
+	data, err := Client.Get(ctx, key).Bytes()
 	if err != nil {
-		logs.Error("Error marshalling post: %v", err)
+		logs.Error("Error getting thread: ", err)
 		return
 	}
-	Cache.Set("post:"+post.ParentID, data)
-}
 
-func AddBoardToCache(board models.Board) {
-	data, err := json.Marshal(board)
+	thread := models.ThreadPost{}
+	err = json.Unmarshal(data, &thread)
 	if err != nil {
-		logs.Error("Error marshalling board: %v", err)
+		logs.Error("Failed to unmarshal thread: ", err)
 		return
 	}
-	Cache.Set("board:"+board.BoardID, data)
-}
 
-func CacheNews(news models.News) {
-	data, err := json.Marshal(news)
+	thread.PostCount = thread.PostCount + 1
+	updatedData, err := json.Marshal(thread)
 	if err != nil {
-		logs.Error("Error marshalling news: %v", err)
+		logs.Error("Failed to marshal updated thread: ", err)
 		return
 	}
-	Cache.Set("news:"+news.ID, data)
-}
 
-func GetNews(id string) models.News {
-	data, err := Cache.Get("news:" + id)
+	err = Client.Set(ctx, key, updatedData, 0).Err()
 	if err != nil {
-		logs.Error("Error getting news: %v", err)
-		return models.News{}
+		logs.Error("Failed to update thread in cache: ", err)
+		return
 	}
-
-	var news models.News
-	err = json.Unmarshal(data, &news)
+}
+func AddToRecentThreadsCache(thread models.ThreadPost) {
+	key := "recent:" + thread.ThreadID
+	data, err := json.Marshal(thread)
 	if err != nil {
-		logs.Error("Error unmarshalling news: %v", err)
-		return models.News{}
+		logs.Error("Failed to marshal thread: ", err)
+		return
 	}
-
-	return news
-}
-
-func GetAllNews() []models.News {
-	news := []models.News{}
-
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		if len(key) > 5 && key[:5] == "news:" {
-			n := GetNews(key[6:])
-			news = append(news, n)
-		}
-	}
-
-	return news
-}
-
-func GetNewsHandler(c echo.Context) error {
-	news := GetAllNews()
-	return c.JSON(200, news)
-}
-
-func CacheLatestPosts(posts []models.RecentPosts) {
-	recents := models.GetLatestPosts(10)
-	for _, post := range recents {
-		data, err := json.Marshal(post)
-		if err != nil {
-			logs.Error("Error marshalling post: %v", err)
-			continue
-		}
-		Cache.Set("recent:"+post.PostID, data)
-	}
-}
-func GetLatestPost(id string) models.RecentPosts {
-	data, err := Cache.Get("recent:" + id)
+	err = Client.Set(ctx, key, data, 0).Err()
 	if err != nil {
-		logs.Error("Error getting recent post: %v", err)
-		return models.RecentPosts{}
+		logs.Error("Failed to set recent thread key: ", err)
 	}
 
-	var post models.RecentPosts
-	err = json.Unmarshal(data, &post)
+}
+func GetTotalThreadPostCount(boardID string, threadID string) int {
+	key := "thread:" + boardID + ":" + threadID
+	data, err := Client.Get(ctx, key).Bytes()
 	if err != nil {
-		logs.Error("Error unmarshalling recent post: %v", err)
-		return models.RecentPosts{}
+		logs.Error("Error getting thread: ", err)
+		return 0
 	}
 
-	return post
-}
-
-func GetAllLatestPosts() []models.RecentPosts {
-	posts := []models.RecentPosts{}
-
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		if len(key) > 7 && key[:7] == "recent:" {
-			p := GetLatestPost(key[8:])
-			posts = append(posts, p)
-		}
+	thread := models.ThreadPost{}
+	err = json.Unmarshal(data, &thread)
+	if err != nil {
+		logs.Error("Failed to unmarshal thread: ", err)
+		return 0
 	}
 
-	return posts
+	return len(thread.Posts)
 }
 
-func GetLatestPostsHandler(c echo.Context) error {
-	posts := GetAllLatestPosts()
-	return c.JSON(200, posts)
+func GetTotalThreadCount(boardID string) int {
+	threads := GetThreadsHandler(boardID)
+	return len(threads)
 }
+func CheckDuplicatePostContent(boardID string, threadID string, content string) bool {
+	key := "thread:" + boardID + ":" + threadID
+	data, err := Client.Get(ctx, key).Bytes()
+	if err != nil {
+		logs.Error("Error getting thread: ", err)
+		return false
+	}
 
-func ResetBoards() {
-	b.Start()
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		if len(key) > 5 && key[:5] == "board" {
-			Cache.Delete(key)
+	thread := models.ThreadPost{}
+	err = json.Unmarshal(data, &thread)
+	if err != nil {
+		logs.Error("Failed to unmarshal thread: ", err)
+		return false
+	}
+
+	posts := thread.Posts
+	for _, post := range posts {
+		if post.Content == content {
+			return true
 		}
 	}
-	b.Close()
+	return false
 }
-
-func ResetThreads() {
-	b.Start()
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		if len(key) > 6 && key[:6] == "thread" {
-			Cache.Delete(key)
+func CheckDuplicateThreadContent(boardID string, content string) bool {
+	threads := GetThreadsHandler(boardID)
+	for _, thread := range threads {
+		if thread.Content == content {
+			return true
 		}
 	}
-	b.Close()
+	return false
+}
+func CheckBoardExists(boardID string) bool {
+	key := "board:" + boardID
+	return Client.Exists(ctx, key).Val() == 1
 }
 
-func ResetPosts() {
-	b.Start()
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		if len(key) > 5 && key[:5] == "post:" {
-			Cache.Delete(key)
-		}
-	}
-	b.Close()
+func CheckBoardLocked(boardID string) bool {
+	board := GetBoard(boardID)
+	return board.Locked
 }
 
-func ResetNews() {
-	b.Start()
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		if len(key) > 5 && key[:5] == "news:" {
-			Cache.Delete(key)
-		}
-	}
-	b.Close()
+func CheckBoardImageOnly(boardID string) bool {
+	board := GetBoard(boardID)
+	return board.ImageOnly
 }
 
-func ResetLatestPosts() {
-	b.Start()
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		if len(key) > 7 && key[:7] == "recent:" {
-			Cache.Delete(key)
-		}
-	}
-	b.Close()
+func CheckBoardArchived(boardID string) bool {
+	board := GetBoard(boardID)
+	return board.Archived
 }
 
-func ResetCache() {
-	b.Start()
-	iterator := Cache.Iterator()
-	for iterator.SetNext() {
-		entry, err := iterator.Value()
-		if err != nil {
-			continue
-		}
-		key := string(entry.Key())
-		Cache.Delete(key)
-	}
-	b.Close()
+func ClearCache() {
+	Client.FlushAll(ctx)
 }

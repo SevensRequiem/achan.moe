@@ -4,7 +4,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"runtime"
 	"strconv"
@@ -24,7 +23,6 @@ import (
 	"achan.moe/home"
 	"achan.moe/logs"
 	"achan.moe/routes"
-	"achan.moe/utils/blocker"
 	"achan.moe/utils/cache"
 	"achan.moe/utils/minecraft"
 	"achan.moe/utils/news"
@@ -36,11 +34,31 @@ func init() {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		fmt.Println("Dropping collections")
+		database.Drops()
+		fmt.Println("Migrating bans")
+		database.Migratebansfromsql()
+		fmt.Println("Migrating boards")
+		database.Migrateboardsfromsql()
+		fmt.Println("Migrating threads")
+		board.MigrateToMongoFromGob()
+		fmt.Println("Migrating misc")
+		database.Migratemisc()
+		fmt.Println("Migrating news")
+		news.Migratenewsfromsql()
+		fmt.Println("finish")
+		os.Exit(0)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "reset" {
+		fmt.Println("Dropping collections")
+		database.Drops()
+		os.Exit(0)
+	}
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	cache.On = true
+	cache.InitCache()
 	e := echo.New()
-	b := blocker.NewBlocker()
-	e.Use(b.Middleware)
 
 	e.Use(bans.BanMiddleware)
 	err := godotenv.Load() // Load .env file from the current directory
@@ -141,25 +159,7 @@ func main() {
 	//go env.RegenSecretKey()
 	//go plugins.LoadPlugins(e)
 	logs.Info("Server started on port " + portStr)
-	if len(os.Args) > 1 && os.Args[1] == "migrate" {
-		fmt.Println("Dropping collections")
-		database.Drops()
-		fmt.Println("Migrating bans")
-		database.Migratebansfromsql()
-		fmt.Println("Migrating boards")
-		database.Migrateboardsfromsql()
-		fmt.Println("Migrating threads")
-		board.MigrateToMongoFromGob()
-		fmt.Println("Migrating misc")
-		database.Migratemisc()
-		fmt.Println("Migrating news")
-		news.Migratenewsfromsql()
-		fmt.Println("finish")
-	}
-	if len(os.Args) > 1 && os.Args[1] == "reset" {
-		fmt.Println("Dropping collections")
-		database.Drops()
-	}
+
 	//s := souin_echo.NewMiddleware(souin_echo.DefaultConfiguration)
 	//e.Use(s.Process)
 	e.StartTLS(":"+strconv.Itoa(port), "certificates/cert.pem", "certificates/key.pem")

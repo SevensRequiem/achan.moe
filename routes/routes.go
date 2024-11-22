@@ -140,7 +140,7 @@ func Routes(e *echo.Echo) {
 		if !auth.AdminCheck(c) {
 			c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
-		bans.BanIP(c)
+		bans.ManualBanIP(c)
 		return nil
 	})
 	e.POST("/admin/unban", func(c echo.Context) error {
@@ -230,6 +230,12 @@ func Routes(e *echo.Echo) {
 		}
 		return bans.GetBansDeleted(c)
 	})
+	e.POST("/api/ban", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return bans.BanIP(c)
+	})
 
 	// statistics
 	e.GET("/api/contentsize", func(c echo.Context) error {
@@ -307,12 +313,12 @@ func Routes(e *echo.Echo) {
 	})
 
 	e.GET("/api/board/:b/threads", func(c echo.Context) error {
-		threads := cache.GetThreadsHandler(c.Param("b"))
+		threads := cache.GetThreadsHandler(c, c.Param("b"))
 		return c.JSON(http.StatusOK, threads)
 	})
 
 	e.GET("/api/board/:b/thread/:t", func(c echo.Context) error {
-		thread := cache.GetThreadHandler(c.Param("b"), c.Param("t"))
+		thread := cache.GetThreadHandler(c, c.Param("b"), c.Param("t"))
 		return c.JSON(http.StatusOK, thread)
 	})
 
@@ -327,7 +333,7 @@ func Routes(e *echo.Echo) {
 		if !(auth.AdminCheck(c) || auth.ModeratorCheck(c) || auth.JannyCheck(c, boardID)) {
 			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
-		board.DeleteThread(c, boardID, threadID)
+		admin.DeleteThread(c, boardID, threadID)
 		return nil
 	})
 
@@ -339,7 +345,7 @@ func Routes(e *echo.Echo) {
 		if !(auth.AdminCheck(c) || auth.ModeratorCheck(c) || auth.JannyCheck(c, boardID)) {
 			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
-		board.DeletePost(c, boardID, threadID, postID)
+		admin.DeletePost(c, boardID, threadID, postID)
 		return nil
 	})
 

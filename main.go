@@ -144,6 +144,8 @@ func main() {
 	s24h.ScheduleTask(schedule.Task{
 		Action: func() {
 			auth.ExpireUsers()
+			cache.CacheGlobalPostCount()
+			cache.CacheTotalUserCount()
 		},
 		Duration: 24 * time.Hour,
 	})

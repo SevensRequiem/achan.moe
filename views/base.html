@@ -241,7 +241,7 @@ setInterval(function () {
             <a href="https://github.com/SevensRequiem/achan.moe" target="_blank">source</a>
         </span>
         <span id="site-data">
-            <span>Total: <span class="totalsize"></span> MB</span>
+            <span>Total: <span class="totalsize">{{.TotalSize}}</span> GB</span>
             <span>IP: {{.IP}}</span>
         </span>
     </footer>
@@ -255,26 +255,6 @@ setInterval(function () {
             dropdown.style.display = "none";
         }
     }
-function getTotalContent() {
-    const contenturl = "/api/contentsize";
-    fetch(contenturl)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            const totalsizeElements = document.getElementsByClassName("totalsize");
-            for (let i = 0; i < totalsizeElements.length; i++) {
-                totalsizeElements[i].innerText = data;
-            }
-        })
-        .catch(error => {
-            console.error('There was a problem with the fetch operation:', error);
-        });
-}
-getTotalContent();
 </script>
 
 </html>

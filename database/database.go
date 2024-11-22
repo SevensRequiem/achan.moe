@@ -68,7 +68,17 @@ func init() {
 		DB_Main.CreateCollection(context.Background(), "recent_posts")
 		DB_Main.CreateCollection(context.Background(), "data")
 
-		DB_Main.Collection("data").InsertOne(context.Background(), bson.M{"post_count": 0})
+		filter := bson.M{"post_count": bson.M{"$exists": true}}
+		var result bson.M
+		err := DB_Main.Collection("data").FindOne(context.Background(), filter).Decode(&result)
+		if err == mongo.ErrNoDocuments {
+			_, err = DB_Main.Collection("data").InsertOne(context.Background(), bson.M{"post_count": 0})
+			if err != nil {
+				logs.Fatal("Error inserting post count: %v", err)
+			}
+		} else if err != nil {
+			logs.Fatal("Error checking post count: %v", err)
+		}
 
 		DB_Main.CreateCollection(context.Background(), "news")
 		DB_Main.CreateCollection(context.Background(), "hits")

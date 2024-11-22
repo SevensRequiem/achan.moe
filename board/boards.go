@@ -479,29 +479,6 @@ func ReportPost(c echo.Context) error {
 	return nil
 }
 
-func DeleteThread(c echo.Context, boardID string, threadID string) {
-	db := client.Database(boardID)
-	ctx := context.Background()
-	_, err := db.Collection(threadID).DeleteMany(ctx, bson.M{})
-	if err != nil {
-		logs.Error("Error deleting thread: %v", err)
-		return
-	}
-	RemoveFromRecentPosts("", threadID, boardID)
-
-}
-func DeletePost(c echo.Context, boardID string, threadID string, postID string) {
-	db := client.Database(boardID)
-	ctx := context.Background()
-	_, err := db.Collection(threadID).DeleteOne(ctx, bson.M{"post_id": postID})
-	if err != nil {
-		logs.Error("Error deleting post: %v", err)
-		return
-	}
-	RemoveFromRecentPosts(postID, threadID, boardID)
-
-}
-
 func RemoveFromRecentPosts(postID string, threadID string, board string) {
 	db := database.DB_Main.Collection("recent_posts")
 	ctx := context.Background()
@@ -595,7 +572,7 @@ func CreateThread(c echo.Context) error {
 	if imageOnly && c.FormValue("image") == "" || imageOnly && c.FormValue("content") != "" {
 		return c.String(http.StatusForbidden, "Board is image only")
 	}
-	count := cache.GetTotalThreadCount(boardID)
+	count := cache.GetTotalThreadCount(c, boardID)
 	if count >= 30 {
 		DeleteLastThread(c, boardID)
 	}
@@ -650,8 +627,31 @@ func CreateThread(c echo.Context) error {
 	if len(content) > 100 {
 		partialContent = content[:100]
 	}
+	session, err := session.Get("session", c)
+	if err != nil {
+		logs.Error("Failed to get session: %v", err)
+		return c.String(http.StatusInternalServerError, "Failed to get session")
+	}
+	var trueuser string
+
+	userSessionValue, ok := session.Values["user"]
+	if !ok {
+		return nil
+	}
+
+	user, ok := userSessionValue.(models.User)
+	if !ok {
+		return nil
+	}
+
+	if user.Username != "" {
+		trueuser = user.Username
+	} else {
+		trueuser = ""
+	}
 
 	threadpost := models.ThreadPost{
+		Author:         author,
 		BoardID:        boardID,
 		ThreadID:       threadID,
 		PostID:         postID,
@@ -665,14 +665,18 @@ func CreateThread(c echo.Context) error {
 		Locked:         locked,
 		PostCount:      1,
 		ReportCount:    0,
+		IP:             c.RealIP(),
+		TrueUser:       trueuser,
 	}
 
-	queue.Q.Enqueue("thread:create", processThreadPost(threadpost, c))
+	queue.Q.Enqueue("thread:create", func() { processThreadPost(threadpost, c) })
 
 	return c.JSON(http.StatusOK, "Thread created")
 }
 
 func processThreadPost(threadpost models.ThreadPost, c echo.Context) func() {
+	globalpostcount := cache.GetGlobalPostCount()
+	threadpost.PostNumber = int64(globalpostcount) + 1
 	cache.AddThreadToCache(threadpost.BoardID, threadpost)
 	cache.AddToRecentThreadsCache(threadpost)
 	db := client.Database(threadpost.BoardID)
@@ -684,6 +688,7 @@ func processThreadPost(threadpost models.ThreadPost, c echo.Context) func() {
 		return nil
 	}
 	AddGlobalPostCount()
+	cache.CacheGlobalPostCount()
 	AddBoardPostCount(threadpost.BoardID)
 	AddRecentPost(models.Posts{}, threadpost)
 	SetSessionSelfPostID(c, threadpost.PostID)
@@ -761,7 +766,31 @@ func CreatePost(c echo.Context) error {
 		partialContent = content[:100]
 	}
 
+	session, err := session.Get("session", c)
+	if err != nil {
+		logs.Error("Failed to get session: %v", err)
+		return c.String(http.StatusInternalServerError, "Failed to get session")
+	}
+	var trueuser string
+
+	userSessionValue, ok := session.Values["user"]
+	if !ok {
+		return nil
+	}
+
+	user, ok := userSessionValue.(models.User)
+	if !ok {
+		return nil
+	}
+
+	if user.Username != "" {
+		trueuser = user.Username
+	} else {
+		trueuser = ""
+	}
+
 	post := models.Posts{
+		Author:         author,
 		BoardID:        boardID,
 		ParentID:       threadID,
 		PostID:         postID,
@@ -771,13 +800,17 @@ func CreatePost(c echo.Context) error {
 		Thumbnail:      Thumbnail,
 		Subject:        subject,
 		Timestamp:      timestamp,
+		IP:             c.RealIP(),
+		TrueUser:       trueuser,
 	}
 
-	queue.Q.Enqueue("post:create", processPost(post, c))
+	queue.Q.Enqueue("post:create", func() { processPost(post, c) })
 	return c.JSON(http.StatusOK, "Post created")
 }
 
 func processPost(post models.Posts, c echo.Context) func() {
+	globalpostcount := cache.GetGlobalPostCount()
+	post.PostNumber = int64(globalpostcount) + 1
 	cache.AddPostToThreadCache(post.BoardID, post.ParentID, post)
 	cache.AddThreadPostCountToCache(post.BoardID, post.ParentID)
 	db := client.Database(post.BoardID)
@@ -788,6 +821,7 @@ func processPost(post models.Posts, c echo.Context) func() {
 		return nil
 	}
 	AddGlobalPostCount()
+	cache.CacheGlobalPostCount()
 	AddBoardPostCount(post.BoardID)
 	AddThreadPostCount(post.BoardID, post.ParentID)
 	SetSessionSelfPostID(c, post.PostID)

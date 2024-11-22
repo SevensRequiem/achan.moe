@@ -10,6 +10,8 @@ import (
 	"achan.moe/auth"
 	"achan.moe/database"
 	"achan.moe/logs"
+	"achan.moe/models"
+	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -34,10 +36,24 @@ type OldBans struct {
 	Expires   string `bson:"expires" json:"expires"`
 }
 
-func BanIP(c echo.Context) Bans {
+func ManualBanIP(c echo.Context) error {
+	sess, err := session.Get("session", c)
+	if err != nil {
+		return nil
+	}
+
+	userSessionValue, ok := sess.Values["user"]
+	if !ok {
+		return nil
+	}
+
+	user, ok := userSessionValue.(models.User)
+	if !ok {
+		return nil
+	}
 	ip := c.FormValue("ip")
 	reason := c.FormValue("reason")
-	username := c.FormValue("username")
+	username := user.Username
 	timestamp := time.Now().Format(time.RFC3339)
 	expires := c.FormValue("expires")
 
@@ -62,7 +78,53 @@ func BanIP(c echo.Context) Bans {
 
 	logs.Info("Banned IP %s for %s by %s", ip, reason, username)
 
-	return bannedIP
+	return nil
+}
+
+func BanIP(c echo.Context) error {
+	sess, err := session.Get("session", c)
+	if err != nil {
+		return nil
+	}
+
+	userSessionValue, ok := sess.Values["user"]
+	if !ok {
+		return nil
+	}
+
+	user, ok := userSessionValue.(models.User)
+	if !ok {
+		return nil
+	}
+	ip := c.FormValue("ip")
+	reason := c.FormValue("reason")
+	username := user.Username
+	timestamp := time.Now().Format(time.RFC3339)
+	expires := c.FormValue("expires")
+
+	// Parse the expires date to ensure it's in the correct format
+	expiresTime, err := time.Parse("2006-01-02", expires)
+	if err != nil {
+		logs.Error("Error parsing expires date: %v", err)
+		expiresTime = time.Now().Add(24 * time.Hour) // Default to 24 hours if parsing fails
+	}
+
+	expires = expiresTime.Format(time.RFC3339)
+
+	bannedIP := Bans{
+		IP:        ip,
+		Status:    "active",
+		Reason:    reason,
+		Username:  username,
+		Timestamp: timestamp,
+		Expires:   expires,
+	}
+	db := database.DB_Main.Collection("bans")
+	db.InsertOne(context.Background(), bannedIP)
+
+	logs.Info("Banned IP %s for %s by %s", ip, reason, username)
+
+	return nil
 }
 
 func UnbanIP(c echo.Context) Bans {

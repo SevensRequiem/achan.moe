@@ -27,13 +27,20 @@
                     const threadcontainer = document.getElementById('threadcontainer');
                     const post = document.createElement('div');
                     content = marked.parse(thread.Content);
+                    const threadTimestamp = new Date(thread.Timestamp * 1000).toLocaleString("en-US")
                     post.innerHTML = `
                         <fieldset id="thread">
                             <legend>
                                 <span class="author">${thread.Author}</span>
+                                <span class="postnumber">No. ${thread.PostNumber}</span>
                                 <span class="subject">${thread.Subject}</span>
                                 <a href="#${thread.ThreadID}" class="postid">#${thread.ThreadID}</a>
-                                <span class="timestamp">${thread.Timestamp}</span>
+                                <span class="timestamp">${threadTimestamp}</span>
+                                {{if or .IsAdmin .IsModerator .IsJanny}}
+                                <span>|</span>
+                                <a href="#" onclick="banIP('${thread.IP}'); return false;" class="mod">${thread.IP}</a>
+                                <a href="#" onclick="deleteThread('${thread.ThreadID}'); return false;" class="mod">Delete</a>
+                                {{end}}
                             </legend>
                             <img class="postfile" src="/image/${thread.BoardID}/${thread.Image}" alt="File">
                             <p class="content">${content}</p>
@@ -45,39 +52,82 @@
                     thread.Posts.slice(1).forEach(post => {
                         const postElement = document.createElement('div');
                         content = marked.parse(post.Content);
+                        const postTimestamp = new Date(post.Timestamp * 1000).toLocaleString("en-US")
                         postElement.innerHTML = `
                             <fieldset class="post">
                                 <legend>
                                     <span class="author">${post.Author}</span>
                                     <span>No. ${post.PostNumber}</span>
-                                    <span class="postid">${post.PostID}</span> 
                                     <a href="#${post.PostID}" class="replyquote">#${post.PostID}</a>
-                                    <span class="timestamp">${post.Timestamp}</span>
+                                    <span class="timestamp">${postTimestamp}</span>
+                                    {{if or .IsAdmin .IsModerator .IsJanny}}
+                                    <span>|</span>
+                                    <a href="#" onclick="banIP(${post.IP}); return false;" class="mod">${post.IP}</a>
+                                    <a href="#" onclick="deletePost('${post.ParentID}', '${post.PostID}'); return false;" class="mod">Delete</a>
+                                    {{end}}
                                 </legend>
                                 ${post.Image ? `<img class="postfile" src="/image/${post.BoardID}/${post.Image}" alt="File">` : ''}
                                 <p class="content">${content}</p>
                             </fieldset>
                         `;
-
+            
                         posts.appendChild(postElement);
                     });
                 })
 
+                {{if or .IsAdmin .IsModerator .IsJanny}}
+                function banIP(ip) {
+    const reason = prompt("Enter the reason for banning this IP:");
+    if (reason === null) {
+        return;
+    }
+    const confirmBan = confirm(`Are you sure you want to ban IP: ${ip} for the following reason?\n\n${reason}`);
+    if (!confirmBan) {
+        return;
+    }
+
+    const formdata = new FormData();
+    formdata.append('ip', ip);
+    formdata.append('reason', reason);
+
+    axios.post('/api/ban', formdata)
+        .then(response => {
+            console.log(response);
+        })
+        .catch(error => {
+            console.error(error);
+        });
+}
+
+                function deletePost(threadID, postID) {
+                    axios.delete(`/board/${boardid}/${threadID}/${postID}`)
+                        .then(response => {
+                            console.log(response);
+                        })
+                        .catch(error => {
+                            console.error(error);
+                        });
+                }
+
+                function deleteThread(ThreadID) {
+                    axios.delete(`/board/${boardid}/${ThreadID}`)
+                        .then(response => {
+                            console.log(response);
+                        })
+                        .catch(error => {
+                            console.error(error);
+                        });
+                }
+                {{end}}
 
         </script>
-            <script>
-            document.querySelectorAll("#unixtime").forEach(unixtime => {
-                const date = new Date(parseInt(unixtime.innerText) * 1000);
-                unixtime.innerText = date.toLocaleString();
-            });
-            </script>
         </div>
         <hr>
         <a href="#" onclick="loadForm(); return false;" class="createpost">Post a Reply</a>
         <hr>
         <fieldset class="reply">
             <legend>Reply</legend>
-            <form action="/post/{{.BoardID}}/{{.ThreadID}}" method="post" enctype="multipart/form-data" id="postform">
+            <form id="postform">
                 <input type="text" id="boardID" name="b" value="{{.BoardID}}" hidden><br><br>
                 <label for="author">Username:</label>
                 <input type="text" id="author" name="author" value="Anonymous" required><br><br>
@@ -88,8 +138,28 @@
                 <input type="checkbox" id="isAnonymous" name="isAnonymous"><br><br>
                 <label for="image">Image:</label>
                 <input type="file" id="image" name="image" accept="image/*"><br><br>
-                <a href="#" id="submitpost" return false;>Submit</a>
+                <a href="#" id="submitpost">Submit</a>
             </form>
+            
+            <script>
+            document.getElementById('submitpost').addEventListener('click', function(event) {
+                event.preventDefault();
+            
+                const form = document.getElementById('postform');
+                const formData = new FormData(form);
+            
+                axios.post(`/post/{{.BoardID}}/{{.ThreadID}}`, formData)
+                    .then(response => {
+                        console.log('Post submitted successfully:', response.data);
+                        if (response.data === "Post created") {
+                            window.location.reload();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error submitting post:', error);
+                    });
+            });
+            </script>
         </fieldset>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
@@ -106,20 +176,6 @@
                 }
             });
 
-        </script>
-        <script>
-
-            document.getElementById('submitpost').addEventListener('click', function() {
-                const postform = document.getElementById('postform'); 
-                const postformData = new FormData(postform);
-                axios.post(postform.action, postformData)
-                    .then(response => {
-                        location.reload(5 * 1000);
-                    })
-                    .catch(error => {
-                        console.error(error);
-                    });
-            });
         </script>
              <div class="banners">
                 <img src="https://placehold.co/728x90">
@@ -184,6 +240,7 @@
     #thread img {
         max-width: 400px;
         max-height: 400px;
+        margin-right: 10px;
     }
     .post {
         display: flex;
@@ -206,6 +263,7 @@
     .post img {
         max-width: 250px;
         max-height: 250px;
+        margin-right: 10px;
     }
     .post video {
         max-width: 250px;
@@ -287,6 +345,28 @@
     img {
         max-width: 400px;
         max-height: 400px;
+    }
+
+    .author {
+        color: #ffffff;
+    }
+
+    .author::before {
+        content: '[ ';
+        color: #aaf;
+    }
+
+    .author::after {
+        content: ' ]';
+        color: #aaf;
+    }
+
+    .timestamp {
+        color: #8a8a8a;
+    }
+
+    .postid {
+        color: #ff00ff;
     }
 </style>
 {{end}}

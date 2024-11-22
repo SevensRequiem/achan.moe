@@ -8,11 +8,15 @@ import (
 	"sort"
 	"time"
 
+	"achan.moe/auth"
 	"achan.moe/boardimages"
 	"achan.moe/logs"
 	"achan.moe/models"
 	"achan.moe/utils/blocker"
+	"achan.moe/utils/config"
 	"achan.moe/utils/news"
+	"achan.moe/utils/stats"
+	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -26,12 +30,6 @@ var ctx = context.Background()
 
 var Client *redis.Client
 
-func ListAllKeys() {
-	keys := Client.Keys(ctx, "*").Val()
-	for _, key := range keys {
-		fmt.Println(key)
-	}
-}
 func Connect() *redis.Client {
 	if Client == nil {
 		InitCache()
@@ -74,7 +72,10 @@ func InitCache() {
 	for _, n := range news {
 		CacheNews(n)
 	}
-	ListAllKeys()
+	CacheGlobalPostCount()
+	CacheTotalUserCount()
+	CacheGlobalConfig()
+	CacheTotalSize()
 }
 
 func CacheBoards() {
@@ -173,6 +174,64 @@ func CacheNews(news models.News) {
 	Client.Set(ctx, "news:"+news.ID, news, 0)
 }
 
+func CacheGlobalPostCount() {
+	count := stats.GetGlobalPostCount()
+	Client.Set(ctx, "global:postcount", count, 0)
+}
+
+func GetGlobalPostCount() int {
+	count := 0
+	Client.Get(ctx, "global:postcount").Scan(&count)
+	return count
+}
+
+func CacheTotalUserCount() {
+	count := stats.GetTotalUserCount()
+	Client.Set(ctx, "global:usercount", count, 0)
+}
+
+func GetTotalUserCount() int {
+	count := 0
+	Client.Get(ctx, "global:usercount").Scan(&count)
+	return count
+}
+
+func CacheGlobalConfig() {
+	config := config.ReadGlobalConfig()
+	json, err := json.Marshal(config)
+	if err != nil {
+		logs.Error("Failed to marshal global config: ", err)
+		return
+	}
+	Client.Set(ctx, "global:config", json, 0)
+}
+
+func GetGlobalConfig() config.GlobalConfig {
+	config := config.GlobalConfig{}
+	data, err := Client.Get(ctx, "global:config").Bytes()
+	if err != nil {
+		logs.Error("Error getting global config: ", err)
+		return config
+	}
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		logs.Error("Failed to unmarshal global config: ", err)
+		return config
+	}
+	return config
+}
+
+func CacheTotalSize() {
+	size := stats.GetTotalSize()
+	Client.Set(ctx, "global:size", size, 0)
+}
+
+func GetTotalSize() float64 {
+	size := 0.0
+	Client.Get(ctx, "global:size").Scan(&size)
+	return size
+}
+
 func GetNews(newsID string) models.News {
 	news := models.News{}
 	Client.Get(ctx, "news:"+newsID).Scan(&news)
@@ -192,16 +251,18 @@ func GetThumbnail(boardID string, thumbid string) models.Image {
 }
 func GetThread(boardID string, threadID string) models.ThreadPost {
 	thread := models.ThreadPost{}
-	Client.Get(ctx, "thread:"+boardID+":"+threadID).Scan(&thread)
+	data, err := Client.Get(ctx, "thread:"+boardID+":"+threadID).Result()
+	if err != nil {
+		logs.Debug("Error getting thread: ", err)
+		return thread
+	}
+	err = json.Unmarshal([]byte(data), &thread)
+	if err != nil {
+		logs.Debug("Failed to unmarshal thread: ", err)
+		return thread
+	}
 	return thread
 }
-
-func GetPost(boardID string, threadID string, postID string) models.Posts {
-	post := models.Posts{}
-	Client.Get(ctx, "post:"+boardID+":"+threadID+":"+postID).Scan(&post)
-	return post
-}
-
 func GetLatestThreadsHandler() []models.ThreadPost {
 	threads := []models.ThreadPost{}
 	keys := Client.Keys(ctx, "recent:*").Val()
@@ -230,7 +291,7 @@ func GetBoardHandler(boardID string) models.Board {
 	return board
 }
 
-func GetThreadsHandler(boardID string) []models.ThreadPost {
+func GetThreadsHandler(c echo.Context, boardID string) []models.ThreadPost {
 	threads := []models.ThreadPost{}
 	keys := Client.Keys(ctx, "thread:"+boardID+":*").Val()
 	for _, key := range keys {
@@ -245,6 +306,16 @@ func GetThreadsHandler(boardID string) []models.ThreadPost {
 			logs.Error("Failed to unmarshal thread: ", err)
 			continue
 		}
+
+		if !auth.AdminCheck(c) {
+			thread.IP = ""
+			thread.TrueUser = ""
+			for i := range thread.Posts {
+				thread.Posts[i].IP = ""
+				thread.Posts[i].TrueUser = ""
+			}
+		}
+
 		threads = append(threads, thread)
 	}
 
@@ -277,7 +348,7 @@ func GetThreadsHandler(boardID string) []models.ThreadPost {
 	return threads
 }
 
-func GetThreadHandler(boardID string, threadID string) models.ThreadPost {
+func GetThreadHandler(c echo.Context, boardID string, threadID string) models.ThreadPost {
 	thread := models.ThreadPost{}
 	keys := Client.Keys(ctx, "thread:"+boardID+":"+threadID).Val()
 	if len(keys) == 0 {
@@ -288,6 +359,15 @@ func GetThreadHandler(boardID string, threadID string) models.ThreadPost {
 	err := json.Unmarshal([]byte(data), &thread)
 	if err != nil {
 		logs.Error("Failed to unmarshal thread: ", err)
+	}
+
+	if !auth.AdminCheck(c) {
+		thread.IP = ""
+		thread.TrueUser = ""
+		for i := range thread.Posts {
+			thread.Posts[i].IP = ""
+			thread.Posts[i].TrueUser = ""
+		}
 	}
 
 	return thread
@@ -433,8 +513,8 @@ func GetTotalThreadPostCount(boardID string, threadID string) int {
 	return len(thread.Posts)
 }
 
-func GetTotalThreadCount(boardID string) int {
-	threads := GetThreadsHandler(boardID)
+func GetTotalThreadCount(c echo.Context, boardID string) int {
+	threads := GetThreadsHandler(c, boardID)
 	return len(threads)
 }
 func CheckDuplicatePostContent(boardID string, threadID string, content string) bool {
@@ -460,8 +540,8 @@ func CheckDuplicatePostContent(boardID string, threadID string, content string) 
 	}
 	return false
 }
-func CheckDuplicateThreadContent(boardID string, content string) bool {
-	threads := GetThreadsHandler(boardID)
+func CheckDuplicateThreadContent(c echo.Context, boardID string, content string) bool {
+	threads := GetThreadsHandler(c, boardID)
 	for _, thread := range threads {
 		if thread.Content == content {
 			return true
@@ -489,6 +569,34 @@ func CheckBoardArchived(boardID string) bool {
 	return board.Archived
 }
 
+func DeleteThreadFromCache(boardID string, threadID string) {
+	b.Start()
+	key := "thread:" + boardID + ":" + threadID
+	Client.Del(ctx, key)
+	b.Close()
+}
+func DeletePostFromCache(boardID string, threadID string, postID string) {
+	b.Start()
+	thread := GetThread(boardID, threadID)
+	for i, post := range thread.Posts {
+		if post.PostID == postID {
+			thread.Posts = append(thread.Posts[:i], thread.Posts[i+1:]...)
+			break
+		}
+	}
+	AddThreadToCache(boardID, thread)
+	b.Close()
+}
+
 func ClearCache() {
+	b.Start()
 	Client.FlushAll(ctx)
+	b.Close()
+}
+
+func ReloadEntireCache() {
+	b.Start()
+	ClearCache()
+	InitCache()
+	b.Close()
 }

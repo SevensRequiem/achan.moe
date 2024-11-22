@@ -5,50 +5,19 @@ import (
 	"net/http"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"achan.moe/auth"
+	"achan.moe/board"
 	"achan.moe/database"
+	"achan.moe/logs"
+	"achan.moe/models"
+	"achan.moe/utils/cache"
+	"achan.moe/utils/queue"
 	"github.com/labstack/echo/v4"
 )
 
-// Board is a struct for a board
-type Board struct {
-	BoardID     string `gob:"id" gorm:"column:board_id"`
-	Name        string `gob:"name"`
-	Description string `gob:"description"`
-	PostCount   int64  `gob:"post_count"`
-	ImageOnly   bool   `gob:"image_only" gorm:"default:false"`
-	Locked      bool   `gob:"locked" gorm:"default:false"`
-	Archived    bool   `gob:"archived"	gorm:"default:false"`
-	LatestPosts bool   `gob:"latest_posts" gorm:"default:false"`
-}
-
-type Post struct {
-	BoardID   string `gob:"BoardID"`
-	ThreadID  string `gob:"ThreadID"`
-	PostID    string `gob:"PostID"`
-	Content   string `gob:"Content"`
-	ImageURL  string `gob:"ImageURL"`
-	Subject   string `gob:"Subject"`
-	Author    string `gob:"Author"`
-	ParentID  string `gob:"ParentID"`
-	Timestamp string `gob:"Timestamp"`
-	IP        string `gob:"IP"`
-	Sticky    bool   `gob:"Sticky"`
-	Locked    bool   `gob:"Locked"`
-}
-
-type RecentPosts struct {
-	BoardID   string `gob:"BoardID"`
-	ThreadID  string `gob:"ThreadID"`
-	PostID    string `gob:"PostID"`
-	Content   string `gob:"Content"`
-	ImageURL  string `gob:"ImageURL"`
-	Subject   string `gob:"Subject"`
-	Author    string `gob:"Author"`
-	ParentID  string `gob:"ParentID"`
-	Timestamp string `gob:"Timestamp"`
-}
+var client = database.Client
 
 // CreateBoard creates a new board
 func CreateBoard(c echo.Context) error {
@@ -78,7 +47,7 @@ func CreateBoard(c echo.Context) error {
 	imgonly := c.FormValue("imageonly") == "true"
 
 	// check if board exists
-	var board Board
+	var board models.Board
 	db := database.DB_Main
 	collection := db.Collection("boards")
 	err := collection.FindOne(context.Background(), bson.M{"board_id": boardID}).Decode(&board)
@@ -88,7 +57,7 @@ func CreateBoard(c echo.Context) error {
 	boardsclient := database.Client
 
 	// create board
-	board = Board{
+	board = models.Board{
 		BoardID:     boardID,
 		Name:        name,
 		Description: description,
@@ -134,4 +103,95 @@ func DeleteBoard(c echo.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, "Board deleted")
+}
+
+func DeleteThread(c echo.Context, boardID string, threadID string) {
+	queue.Q.Enqueue("thread:delete", func() { processDeleteThread(c, boardID, threadID) })
+}
+
+func DeletePost(c echo.Context, boardID string, threadID string, postID string) {
+	queue.Q.Enqueue("post:delete", func() { processDeletePost(c, boardID, threadID, postID) })
+}
+
+func processDeleteThread(c echo.Context, boardID string, threadID string) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	var thread models.ThreadPost
+	err := db.Collection(threadID).FindOne(ctx, bson.M{"thread_id": threadID}).Decode(&thread)
+	if err != nil {
+		logs.Error("Error decoding thread: %v", err)
+		return
+	}
+
+	imageid := thread.Image
+	thumbid := thread.Thumbnail
+	imageObjectID, err := primitive.ObjectIDFromHex(imageid)
+	if err != nil {
+		logs.Error("Invalid image ID: %v", err)
+		return
+	}
+
+	thumbObjectID, err := primitive.ObjectIDFromHex(thumbid)
+	if err != nil {
+		logs.Error("Invalid thumbnail ID: %v", err)
+		return
+	}
+
+	_, err = db.Collection("images").DeleteOne(ctx, bson.M{"_id": imageObjectID})
+	if err != nil {
+		logs.Error("Error deleting image: %v", err)
+	}
+
+	_, err = db.Collection("thumbs").DeleteOne(ctx, bson.M{"_id": thumbObjectID})
+	if err != nil {
+		logs.Error("Error deleting thumbnail: %v", err)
+	}
+
+	_, err = db.Collection(threadID).DeleteMany(ctx, bson.M{})
+	if err != nil {
+		logs.Error("Error deleting thread: %v", err)
+	}
+	board.RemoveFromRecentPosts("", threadID, boardID)
+	cache.DeleteThreadFromCache(boardID, threadID)
+}
+
+func processDeletePost(c echo.Context, boardID string, threadID string, postID string) {
+	db := client.Database(boardID)
+	ctx := context.Background()
+	var post models.Posts
+	err := db.Collection(threadID).FindOne(ctx, bson.M{"post_id": postID}).Decode(&post)
+	if err != nil {
+		logs.Error("Error decoding post: %v", err)
+		return
+	}
+
+	imageid := post.Image
+	thumbid := post.Thumbnail
+	imageObjectID, err := primitive.ObjectIDFromHex(imageid)
+	if err != nil {
+		logs.Error("Invalid image ID: %v", err)
+		return
+	}
+
+	thumbObjectID, err := primitive.ObjectIDFromHex(thumbid)
+	if err != nil {
+		logs.Error("Invalid thumbnail ID: %v", err)
+		return
+	}
+
+	_, err = db.Collection("images").DeleteOne(ctx, bson.M{"_id": imageObjectID})
+	if err != nil {
+		logs.Error("Error deleting image: %v", err)
+	}
+
+	_, err = db.Collection("thumbs").DeleteOne(ctx, bson.M{"_id": thumbObjectID})
+	if err != nil {
+		logs.Error("Error deleting thumbnail: %v", err)
+	}
+
+	_, err = db.Collection(threadID).DeleteOne(ctx, bson.M{"post_id": postID})
+	if err != nil {
+		logs.Error("Error deleting post: %v", err)
+	}
+	cache.DeletePostFromCache(boardID, threadID, postID)
 }

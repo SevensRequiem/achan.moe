@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"achan.moe/auth"
-	"achan.moe/board"
 	"achan.moe/models"
 	"achan.moe/utils/cache"
 	config "achan.moe/utils/config"
@@ -59,17 +58,13 @@ func BoardHandler(c echo.Context) error {
 	}
 	data := map[string]interface{}{}
 	data = globaldata(c)
-	boardname := board.GetBoardName(c.Param("b"))
-	data["Pagename"] = boardname
-	data["Board"] = board.GetBoard(c.Param("b"))
-	data["BoardID"] = board.GetBoardID(c.Param("b"))
-	description, err := board.GetBoardDescription(c.Param("b"))
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Error getting board description")
-	}
+	board := cache.GetBoard(c.Param("b"))
+	data["Pagename"] = board.Name
+	data["Board"] = board
+	data["BoardID"] = board.BoardID
+	description := board.Description
 	data["BoardDesc"] = description
-	boardid := board.GetBoardID(c.Param("b"))
-	data["Threads"] = models.GetThreads(boardid)
+	boardid := board.BoardID
 	data["IsJanny"] = auth.JannyCheck(c, boardid)
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
@@ -87,10 +82,9 @@ func ThreadHandler(c echo.Context) error {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
 	data := map[string]interface{}{}
-	// Assuming globaldata is a function that populates some global data for the template
 	data = globaldata(c)
-	t := c.Param("t") // Get the parameter as string
-	b := c.Param("b") // Get the parameter as string
+	t := c.Param("t")
+	b := c.Param("b")
 
 	session, err := session.Get("session", c)
 	if err != nil {
@@ -99,14 +93,9 @@ func ThreadHandler(c echo.Context) error {
 
 	selfposts := session.Values["self_post_id"]
 
-	// Assuming you want to display posts in the thread, and each post has a Title field
-	data["Thread"] = board.GetThread(b, t)
 	data["ThreadID"] = t
-	data["BoardID"] = board.GetBoardID(b)
-	description, err := board.GetBoardDescription(c.Param("b"))
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, "Error getting board description")
-	}
+	data["BoardID"] = cache.GetBoard(b).BoardID
+	description := cache.GetBoard(b).Description
 	data["BoardDesc"] = description
 	data["IsJanny"] = auth.JannyCheck(c, b)
 	data["SelfPosts"] = selfposts
@@ -170,14 +159,14 @@ func globaldata(c echo.Context) map[string]interface{} {
 	data["IsAdmin"] = auth.AdminCheck(c)
 	data["IsModerator"] = auth.ModeratorCheck(c)
 	data["User"] = user
-	boards := cache.GetBoards()
-	data["Boards"] = boards
+	data["Boards"] = cache.GetBoards()
 	data["IP"] = c.RealIP()
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	data["user"] = "Anonymous"
-	data["PostCount"] = board.GetTotalPostCount()
-	data["TotalUsers"] = auth.GetTotalUsers()
-	data["GlobalConfig"] = config.ReadGlobalConfig()
+	data["PostCount"] = cache.GetGlobalPostCount()
+	data["TotalSize"] = cache.GetTotalSize()
+	data["TotalUsers"] = cache.GetTotalUserCount()
+	data["GlobalConfig"] = cache.GetGlobalConfig()
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
 	return data
 }

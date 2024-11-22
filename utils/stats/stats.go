@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"achan.moe/bans"
-	"achan.moe/board"
 	"achan.moe/database"
 	"achan.moe/models"
 	"github.com/labstack/echo/v4"
@@ -92,7 +91,6 @@ func GetStats(c echo.Context) error {
 	binarySum := hex.EncodeToString(hash[:])
 
 	// Assuming these functions exist and return the required values
-	allTimePostCount := board.GetTotalPostCount()
 	liveBanCount := bans.GetActiveBanCount()
 	totalBanCount := bans.GetTotalBanCount()
 
@@ -104,9 +102,8 @@ func GetStats(c echo.Context) error {
 	stats.CPUUsage = fmt.Sprintf("%.2f", cpuPercent[0])
 	stats.BinarySum = binarySum
 	stats.BinarySize = fmt.Sprintf("%d", binarySize)
-	stats.PostCount = "TODO"   // Replace with actual value
-	stats.ThreadCount = "TODO" // Replace with actual value
-	stats.AllTimePostCount = fmt.Sprintf("%d", allTimePostCount)
+	stats.PostCount = "TODO"          // Replace with actual value
+	stats.ThreadCount = "TODO"        // Replace with actual value
 	stats.AllTimeThreadCount = "TODO" // Replace with actual value
 	stats.LiveBanCount = fmt.Sprintf("%d", liveBanCount)
 	stats.TotalBanCount = fmt.Sprintf("%d", totalBanCount)
@@ -241,4 +238,91 @@ func uptime() string {
 	minutes := int(duration.Minutes()) % 60
 	seconds := int(duration.Seconds()) % 60
 	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
+func GetTotalUserCount() int64 {
+	db := database.DB_Main.Collection("users")
+	cursor, err := db.Find(context.Background(), bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(context.Background())
+
+	var userCount int64
+	for cursor.Next(context.Background()) {
+		userCount++
+	}
+	return userCount
+}
+
+func GetTotalBoardCount(c echo.Context) error {
+	db := database.DB_Main.Collection("boards")
+	cursor, err := db.Find(context.Background(), bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(context.Background())
+
+	var boardCount int
+	for cursor.Next(context.Background()) {
+		boardCount++
+	}
+	return c.JSON(http.StatusOK, boardCount)
+}
+
+func GetGlobalPostCount() int32 {
+	db := database.DB_Main.Collection("data")
+	cursor, err := db.Find(context.Background(), bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(context.Background())
+
+	var postCount int32
+	for cursor.Next(context.Background()) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			log.Fatal(err)
+		}
+		postCount = doc["post_count"].(int32)
+	}
+	return postCount
+}
+
+func GetTotalSize() float64 {
+	boards := models.GetBoards()
+	var totalSize float64
+	for _, board := range boards {
+		boardDB := database.Client.Database(board.BoardID)
+		collections, err := boardDB.ListCollectionNames(context.Background(), bson.M{})
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, collection := range collections {
+			if collection == "banners" {
+				continue
+			}
+			col := boardDB.Collection(collection)
+			docsCursor, err := col.Find(context.Background(), bson.M{})
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer docsCursor.Close(context.Background())
+			for docsCursor.Next(context.Background()) {
+				var doc bson.M
+				if err := docsCursor.Decode(&doc); err != nil {
+					log.Fatal(err)
+				}
+				docBytes, err := bson.Marshal(doc)
+				if err != nil {
+					log.Fatal(err)
+				}
+				docSize := len(docBytes)
+				totalSize += float64(docSize)
+			}
+		}
+	}
+	totalSize = totalSize / 1024 / 1024 / 1024
+	totalSize = math.Round(totalSize*100) / 100
+	return totalSize
 }

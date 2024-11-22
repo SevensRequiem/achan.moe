@@ -31,7 +31,7 @@ func (s *Scheduler) ScheduleTask(task Task) {
 
 func (s *Scheduler) Run() {
 	s.StartTime = time.Now()
-	logs.Info("Scheduler started at: ", s.StartTime)
+	logs.Info("Scheduler started at: %v", s.StartTime)
 
 	for _, task := range s.Tasks {
 		go func(t Task) {
@@ -42,7 +42,7 @@ func (s *Scheduler) Run() {
 				t.Action()
 				s.LastUpdate = time.Now()
 				s.LastUpdateDuration = s.LastUpdate.Sub(s.StartTime)
-				logs.Info("Task executed: ", t.Duration)
+				logs.Info("Task executed: %v", t.Duration)
 			}
 		}(task)
 	}

@@ -32,7 +32,7 @@ type ThreadPost struct {
 	Content        string             `bson:"content"`
 	PartialContent string             `bson:"partial_content"`
 	Image          string             `bson:"image"`
-	Thumbnail      string             `bson:"thumb"`
+	Thumbnail      string             `bson:"thumbnail"`
 	Subject        string             `bson:"subject"`
 	Author         string             `bson:"author"`
 	TrueUser       string             `bson:"true_user"`

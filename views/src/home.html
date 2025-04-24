@@ -1,0 +1,463 @@
+{{define "content"}}
+<fieldset id="welcome">
+    <legend>Welcome to {{.GlobalConfig.Name}}</legend>
+    <p>This is a community-driven imageboard where you can post and share content with others.</p>
+    <p>We have a variety of boards for different topics, and we encourage you to explore and participate in discussions.</p>
+    <p>TOR Support is limited currently. We may add support in the future.</p>
+    <p>We are currently in beta, so please report any bugs you find to the email below.</p>
+    <p>We are also looking for moderators and developers to help us improve the site.</p>
+    <p>If you are interested, please contact us at <a href="mailto:general@achan.moe">general@achan.moe</a>.</p>
+    </fieldset>
+    <style>
+        #welcome {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 70%;
+            margin: 0 auto;
+            border-top: 30px solid var(--border);
+            border-left: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            background-color: var(--bg);
+        }
+        #welcome legend {
+            color: var(--green);
+            font-weight: bold;
+        }
+        #welcome p {
+            margin: 10px 0;
+            color: #ffffff;
+        }
+    </style>
+    <fieldset id="home">
+        <legend>Info</legend>
+        <div id="homecontainer">
+            <div id="homeleft">
+                <ul id="news">
+                    <h3>News</h3>
+                </ul>
+            </div>
+
+            <script>
+                const newsUrl = "/api/news";
+                fetch(newsUrl)
+                    .then(response => response.json())
+                    .then(data => {
+                        const newsList = document.getElementById("news");
+                        data.forEach(news => {
+                            const li = document.createElement("li");
+                            const title = document.createElement("span");
+                            title.className = "newstitle";
+                            title.innerText = news.title;
+                            li.appendChild(title);
+                            const content = document.createElement("p");
+                            content.className = "newscontent";
+                            content.innerText = news.content;
+                            li.appendChild(content);
+                            const date = document.createElement("span");
+                            date.className = "newsdate";
+                            date.innerText = new Date(news.date * 1000).toLocaleDateString();
+                            li.appendChild(date);
+                            newsList.appendChild(li);
+                            const author = document.createElement("span");
+                            author.className = "newsauthor";
+                            author.innerText = " -「" + news.author + "」";
+                            li.appendChild(author);
+                        });
+                    });
+                
+            </script>
+            <style>
+                #news {
+                    max-height: 300px;
+                    overflow: scroll;
+                }
+                #news li {
+                    margin: 10px 0;
+                    padding: 10px;
+                    border-radius: 5px;
+                    background-color: var(--bg);
+                    border: 1px solid var(--border);
+                }
+                #news li:hover {
+                    background-color: var(--bg-hover);
+                }
+                #news .newstitle {
+                    font-weight: bold;
+                    color: var(--green);
+                }
+                #news .newscontent {
+                    color: var(--text-main);
+                }
+                #news .newsdate {
+                    font-size: 0.8em;
+                    color: var(--text-main);
+                }
+                #news .newsauthor {
+                    font-size: 0.8em;
+                    color: var(--text-tertiary);
+                }
+            </style>
+            <div id="homeright">
+        <div id="rules">
+        <h3>Rules</h3>
+        <ol>
+            <li>No illegal content.</li>
+            <li>No spamming.</li>
+            <li>No doxxing.</li>
+            <li>No flooding.</li>
+            <li>No impersonation.</li>
+            <li>No off-topic posts.</li>
+            <li>No advertising.</li>
+        </ol>
+        </div>
+        <div id="minecraft">
+            <h3>Join our Minecraft server!</h3>
+            <p>Server IP: {{.GlobalConfig.MinecraftIP}}:{{.GlobalConfig.MinecraftPort}}</p>
+            <p>Version: <span id="mcversion"></span></p>
+            <span><span id="mcplayers"></span>/<span id="mcmaxplayers"></span> players online</span>
+        </div>
+        <script>
+            const url = "/api/minecraft";
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("mcversion").innerText = data.Version;
+                    document.getElementById("mcplayers").innerText = data.Players;
+                    document.getElementById("mcmaxplayers").innerText = data.MaxPlayers;
+                });
+        </script>
+        </div>
+        </div>
+        <style>
+
+            #homeleft {
+                width: 30%;
+                margin: 0 auto;
+            }
+            #homeleft h3 {
+                text-align: center;
+                color: var(--green);
+            }
+            #homeleft ul {
+                list-style-type: none;
+                padding: 15px;
+                margin: 0;
+            }
+
+
+            #homeright {
+                width: 60%;
+                margin: 0 auto;
+            }
+
+            #rules {
+                padding: 15px;
+            }
+
+            #rules h3 {
+                text-align: center;
+                color: var(--green);
+            }
+
+            #rules ol {
+                padding-left: 20px;
+            }
+        </style>
+    </fieldset>
+    <fieldset id="boards">
+        <span>
+            All posts are the responsibility of the poster. Please report any posts you see breaking the rules.
+        </span>
+        <legend>Boards</legend>
+        <ul>
+            {{range .Boards}}
+                <li><a href="/board/{{.BoardID}}">/{{.BoardID}}/</a> - {{.Description}}</li>
+            {{end}}
+        </ul>
+        <hr>
+        <h3>Top User-Created Boards:</h3>
+        <div id="user-created-boards">
+            Coming soon!
+            Register Now: <a href="/register"> Register</a>
+        </div>
+    </fieldset>
+    <fieldset id="stats">
+        <legend>Stats</legend>
+        <p>Posts: <span class="data">{{.PostCount}}</span></p>
+        <p>Users: <span class="data">{{.TotalUsers}}</span></p>
+        <p>Total Content: <span class="data"><span class="totalsize">{{.TotalSize}}</span> GB</span></p>
+        <p>Visits: <span class="data">{{.Hits}}</span></p>
+    </fieldset>
+<fieldset id="latest">
+    <legend>Latest Threads</legend>
+</fieldset>
+<script>
+    const latesturl = "/api/latest";
+    fetch(latesturl)
+        .then(response => response.json())
+        .then(data => {
+            const latest = document.getElementById("latest");
+            const ul = document.createElement("ul");
+            data.forEach(post => {
+                const li = document.createElement("li");
+                const a = document.createElement("a");
+                const formatedDate = new Date(post.Timestamp * 1000).toLocaleDateString();
+                a.href = "/board/" + post.BoardID + "/" + post.ThreadID;
+                a.className = "recent-board";
+                a.target = "_blank";
+                const img = document.createElement("img");
+                img.src = "/thumb/" + post.BoardID + "/" + post.Thumbnail;
+                img.alt = post.Subject;
+                a.appendChild(img);
+                const subject = document.createElement("span");
+                subject.className = "subject";
+                subject.innerText = post.Subject;
+                a.appendChild(subject);
+                const p = document.createElement("p");
+                p.innerText = post.Content;
+                const timestamp = document.createElement("span");
+                timestamp.className = "timestamp";
+                timestamp.innerText = formatedDate;
+                a.appendChild(p);
+                a.appendChild(timestamp);
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+            latest.appendChild(ul);
+        });
+</script>
+
+    
+    <br>
+    <br>
+    <style>
+        #banners {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+        }
+        #homecontainer {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            width: 100%;
+        }
+    .subject {
+        font-weight: bold;
+        color: var(--text-tertiary);
+    }
+
+        #boards span {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+        }
+        #boards ul {
+            display: flex;
+            flex-wrap: wrap;
+            flex-direction: row;
+            justify-content: space-around;
+            list-style-type: none;
+            padding: 15px;
+            margin: 0;
+        }
+        #boards li {
+            margin: 0;
+            padding: 0;
+            color: var(--text-secondary);
+        }
+        #boards li::before {
+            content: "[";
+            margin-right: 5px;
+            color: var(--text-main);
+        }
+        #boards li::after {
+            content: "]";
+            margin-left: 5px;
+            color: var(--text-main);
+        }
+        #boards a {
+            text-decoration: none;
+            color: #02ff6b;
+        }
+        #boards a:hover {
+            color: #ffffff;
+        }
+
+        #boards hr {
+            width: 70%;
+            margin: 0 auto;
+            border: 3px solid var(--border);
+        }
+
+        #boards h3 {
+            text-align: center;
+            color: var(--green);
+        }
+
+
+        
+
+        #stats {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-evenly !important;
+        }
+        #latest ul {
+            display: flex;
+            flex-wrap: wrap;
+            flex-direction: row;
+            justify-content: space-around;
+            list-style-type: none;
+            padding: 15px;
+            margin: 0;
+        }
+
+        #latest li {
+            margin: 0;
+            padding: 0;
+        }
+
+        #latest li a {
+            text-decoration: none;
+            color: var(--green);
+            height: 300px;
+            width: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-top: 5px solid var(--border);
+            border-left: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            margin: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #latest li a:hover {
+            border-top: 5px solid #ffffff;
+            border-left: 1px solid #ffffff;
+            border-right: 1px solid #ffffff;
+            border-bottom: 1px solid #ffffff;
+        }
+
+        #latest li a img {
+            max-width: 200px;
+            max-height: 200px;
+        }
+
+        #latest li a .subject {
+            font-weight: bold;
+            color: var(--green);
+        }
+        #latest li a .subject:hover {
+            font-weight: bold;
+            color: var(--text-tertiary);
+        }
+
+
+        #latest li a .subject::before {
+            content: "[";
+            margin-right: 5px;
+            color: var(--text-secondary);
+        }
+
+        #latest li a .subject::after {
+            content: "]";
+            margin-left: 5px;
+            color: var(--text-secondary);
+        }
+
+        #latest li a p {
+            margin: 0;
+            padding: 0;
+            color: var(--text-main);
+        }
+
+        #latest li a .timestamp {
+            color: var(--text-tertiary);
+            font-size: 0.8em;
+        }
+
+        #latest video {
+            max-width: 300px;
+            max-height: 200px;
+        }
+
+        #latest img {
+            max-height: 200px;
+            max-width: 200px;
+        }
+        #home p {
+            margin: 0;
+            padding: 0;
+        }
+
+        .data {
+            font-weight: bold;
+            color: var(--text-main);
+        }
+
+    .postfile {
+        max-width: 250px;
+        max-height: 250px;
+    }
+
+    #minecraft {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    #minecraft p {
+        margin: 0;
+        padding: 0;
+    }
+    #minecraft span {
+        color: var(--text-main);
+    }
+    #minecraft img {
+        max-width: 250px;
+        max-height: 250px;
+    }
+    #rules {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    fieldset {
+        width: 70%;
+        border-top: 30px solid var(--border);
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background-color: var(--bg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        margin-top: 2em;
+    }
+
+    fieldset legend {
+            color: var(--green);
+            font-weight: bold;
+            background-color: var(--border);
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+{{end}}

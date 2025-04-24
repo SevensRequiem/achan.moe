@@ -1,0 +1,322 @@
+{{define "content"}}
+<div id="top-content">
+    <h1>/{{.BoardID}}/</h1>
+    <h2>{{.BoardDesc}}</h2>
+</div>
+<div class="banners">
+<img src="" alt="Banner">
+</div>
+<script>
+        const banner = document.querySelector(".banners img");
+        const boardid1 = "{{.BoardID}}";
+        const bannerurl = `/banner/${boardid1}`;
+        banner.src = bannerurl;
+        banner.alt = `Banner for /${boardid1}/`;
+</script>
+    <a href="#" onclick="loadForm(); loadCaptcha(); return false;" class="createpost">Create Thread</a>
+    <fieldset class="reply">
+        <form action="/board/{{.BoardID}}" method="post" enctype="multipart/form-data" id="threadform">
+            <div>
+            <label for="subject">Subject:</label>
+            <input type="text" id="subject" name="subject" maxlength="30" required><br><br>
+            <label for="author">Username:</label>
+            <input type="text" id="author" name="author" value="Anonymous"><br><br>
+            </div>
+            <label for="content">Post:</label>
+            <textarea id="content" name="content" rows="4" maxlength="200" required></textarea><br><br>
+            <div id="options">
+            {{if .User.Username}}
+            <label for="isAnonymous">Disable display name:</label>
+            <input type="checkbox" id="isAnonymous" name="isAnonymous"><br><br>
+            {{end}}
+            {{if .IsAdmin}}
+            <label for="isSticky">Sticky:</label>
+            <input type="checkbox" id="isSticky" name="isSticky"><br><br>
+            <label for="isLocked">Locked:</label>
+            <input type="checkbox" id="isLocked" name="isLocked"><br><br>
+            {{else if .IsJanny}}
+            <label for="isSticky">Sticky:</label>
+            <input type="checkbox" id="isSticky" name="isSticky"><br><br>
+            <label for="isLocked">Locked:</label>
+            <input type="checkbox" id="isLocked" name="isLocked"><br><br>
+            {{end}}
+            
+            <label for="image">Image:</label>
+            
+            <input type="file" id="image" name="image" accept="image/*" required><br><br>
+            </div>
+            <hr>
+            <img id="captcha">
+            <label for="captcha">Captcha:</label>
+            <input type="text" id="captcha" name="captcha" placeholder="Enter captcha" required><br><br>
+            <hr>
+            
+            <a href="#" id="submitthread" class="createpost">Submit</a>
+            <a href="#" onclick="loadForm(); return false;" class="createpost">Cancel</a>
+        </form>
+        <script>
+            document.getElementById('submitthread').addEventListener('click', function() {
+                const threadform = document.getElementById('threadform');
+                const threadformData = new FormData(threadform);
+                axios.post(threadform.action, threadformData)
+                    .then(response => {
+                        location.reload();
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    });
+            });
+
+            function loadCaptcha() {
+                const captcha = document.getElementById('captcha');
+                const captchaImgSrc = `/api/gencaptcha`;
+                captcha.src = captchaImgSrc;
+            }
+
+
+
+
+        </script>
+    </fieldset>
+
+    <script>
+        const loadForm = () => {
+            const form = document.querySelector('.reply');
+            if (form.style.display === 'flex') {
+                form.style.display = 'none';
+            } else {
+                form.style.display = 'flex';
+            }
+        }
+    </script>
+<fieldset id="threads"></fieldset>
+<script>
+    const boardid = "{{.BoardID}}";
+    const threadapi = `/api/board/${boardid}/threads`;
+    axios.get(threadapi)
+        .then(response => {
+            let threads = response.data;
+            const threadlist = document.getElementById('threads');
+            const ul = document.createElement('ul');
+
+            threads = threads.sort((a, b) => b.Sticky - a.Sticky);
+
+            threads.forEach(thread => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = `/board/${thread.BoardID}/${thread.ThreadID}`;
+                if (thread.Sticky) {
+                    a.classList.add('sticky');
+                }
+                const img = document.createElement('img');
+                img.src = `/thumb/${thread.BoardID}/${thread.Thumbnail}`;
+                const p = document.createElement('p');
+                p.textContent = thread.Subject;
+                const span = document.createElement('span');
+                const count = document.createElement('span');
+                span.textContent = thread.Author;
+                count.textContent = thread.PostCount - 1;
+                count.classList.add('postcount');
+                span.classList.add('author');
+                a.appendChild(span);
+                a.appendChild(img);
+                a.appendChild(p);
+                a.appendChild(count);
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+            threadlist.appendChild(ul);
+        })
+        .catch(error => {
+            console.error(error);
+        });
+</script>
+<style>
+    hr {
+            width: 70%;
+            margin: 0 auto;
+            border: 3px solid var(--border);
+            margin: 0.6em;
+        }
+    .reply {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+    }
+
+    .reply #options {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .postcount {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+    }
+
+    .postcount::before {
+        content: "Replies: ";
+        color: var(--text-main);
+    }
+
+    .author {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+    }
+    .createpost {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        width: 200px;
+        text-align: center;
+        padding: 10px;
+        background-color: var(--bg);
+        border: 1px solid var(--border);
+        color: var(--text-main);
+        text-decoration: none;
+    }
+    .createpost:hover {
+        background-color: var(--bg-hover);
+    }
+    
+    #top-content {
+        font-size: 0.9rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        width: 50%;
+    }
+
+    #top-content hr {
+        width: 100%;
+    }
+    #top-nav {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #top-nav a {
+        text-decoration: none;
+        color: var(--text-secondary);
+        padding: 5px;
+    }
+    .subject {
+        font-weight: bold;
+        color: var(--text-secondary);
+    }
+
+    #threads {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        list-style-type: none;
+        padding: 15px;
+        margin: 0;
+        border: 0;
+    }
+    #threads ul {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+
+    }
+    #threads li a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
+        margin: 5px;
+        padding: 5px;
+        border-top: 5px solid var(--border);
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background-color: var(--bg);
+        width: 200px;
+        height: 250px;
+        overflow: hidden;
+    }
+    
+    #threads li a p {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        margin: 0;
+        padding: 0;
+        text-align: center;
+    }
+    #threads li a span {
+        color: var(--text-main)
+    }
+    #threads a {
+        text-decoration: none;
+        color: var(--green);
+        padding: 5px;
+
+    }
+
+    .sticky {
+        border-top: 5px solid var(--text-highlight2) !important;
+    }
+    #threads a:hover {
+        border-top: 5px solid #ffffff;
+        border-left: 1px solid #ffffff;
+        border-right: 1px solid #ffffff;
+        border-bottom: 1px solid #ffffff;
+    }
+
+    #threads img {
+        max-height: 150px;
+        max-width: 150px;
+    }
+
+    #options {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+    }
+    .container {
+        display: flex;
+        flex-direction: column;
+        align-items: left;
+        width: 30%;
+        margin: 0 auto;
+    }
+    .banners {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        margin-top: 1.7rem;
+        margin-bottom: 1.7rem;
+    }
+    .banners {
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+        justify-content: center;
+        margin: 0 auto;
+        width: 50%;
+    }
+    .banners img {
+        max-height: 150px;
+    }
+
+    .banners img {
+        margin: 10px;
+    }
+</style>
+
+{{end}}

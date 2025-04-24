@@ -1,0 +1,107 @@
+{{define "content"}}
+<div id="content-wrapper">
+<fieldset id="register">
+    <legend>Register</legend>
+    <span>All usernames and passwords are randomly generated.</span>
+    <span>All accounts will be deleted after 30days of inactivity.</span>
+    <span>If you would like a permanent account, you can purchase one <a href="/store">here</a>.</span>
+    <div id="username">Username: ...</div>
+    <div id="password">Password: ...</div>
+    <a href="#" onclick="Register()">Register</a>
+    <script>
+        const usrdiv = document.getElementById('username');
+        const pwddiv = document.getElementById('password');
+        const Register = async () => {
+            const response = await fetch('/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+            });
+            const r = await response.json();
+            if (r.error) {
+                usrdiv.innerHTML = '';
+                pwddiv.innerHTML = '';
+                usrdiv.innerHTML = r.error;
+            } else {
+                usrdiv.innerHTML = '';
+                pwddiv.innerHTML = '';
+                usrdiv.innerHTML = `Username: ${r.username}`;
+                pwddiv.innerHTML = `Password: ${r.password}`;
+            }
+        };
+    </script>
+</fieldset>
+</div>
+    <style>
+        #content-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100%;
+        }
+        
+        #register {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            width: 70%;
+            margin: 0 auto;
+            border-top: 30px solid var(--border);
+            border-left: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            background-color: var(--bg);
+        }
+
+        #register legend {
+            color: var(--green);
+            font-weight: bold;
+            background-color: var(--border);
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #register span {
+            margin: 10px 0;
+            color: #ffffff;
+        }
+        #register a {
+            text-align: center;
+        color: #02ff6b;
+    }
+
+    #register a:hover {
+        color: #ffffffff;
+    }
+
+    #register a::before {
+        content: "[";
+        margin-right: 5px;
+        color: #AAF;
+    }
+
+    #register a::after {
+        content: "]";
+        margin-left: 5px;
+        color: #AAF;
+    }
+
+    #username, #password {
+        color: var(--green);
+        font-weight: bold;
+        background-color: var(--bg);
+        font-size: 1.2em;
+        margin: 10px 0;
+        padding: 5px;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        width: 20%;
+        text-align: center;
+    }
+    </style>
+    {{end}}

@@ -66,13 +66,25 @@ func init() {
 		DB_Main.CreateCollection(context.Background(), "old_bans")
 		DB_Main.CreateCollection(context.Background(), "boards")
 		DB_Main.CreateCollection(context.Background(), "recent_posts")
-		DB_Main.CreateCollection(context.Background(), "data")
+		DB_Main.CreateCollection(context.Background(), "stats")
+		DB_Main.CreateCollection(context.Background(), "announcements")
+		DB_Main.CreateCollection(context.Background(), "news")
 
 		filter := bson.M{"post_count": bson.M{"$exists": true}}
 		var result bson.M
-		err := DB_Main.Collection("data").FindOne(context.Background(), filter).Decode(&result)
+		err := DB_Main.Collection("stats").FindOne(context.Background(), filter).Decode(&result)
 		if err == mongo.ErrNoDocuments {
-			_, err = DB_Main.Collection("data").InsertOne(context.Background(), bson.M{"post_count": 0})
+			_, err = DB_Main.Collection("stats").InsertOne(context.Background(), bson.M{
+				"post_count":   0,
+				"thread_count": 0,
+				"board_count":  0,
+				"ban_count":    0,
+				"total_size":   0,
+				"total_users":  0,
+				"hit_count":    0,
+				"image_count":  0,
+				"file_count":   0,
+			})
 			if err != nil {
 				logs.Fatal("Error inserting post count: %v", err)
 			}
@@ -87,18 +99,14 @@ func init() {
 	}
 
 	if DB_Actions != nil {
-		DB_Actions.CreateCollection(context.Background(), "actions")
-		DB_Actions.CreateCollection(context.Background(), "reports")
-		DB_Actions.CreateCollection(context.Background(), "sessions")
-		DB_Actions.CreateCollection(context.Background(), "settings")
+		DB_Actions.CreateCollection(context.Background(), "announcements")
 		DB_Actions.CreateCollection(context.Background(), "bans")
-		DB_Actions.CreateCollection(context.Background(), "old_bans")
+		DB_Actions.CreateCollection(context.Background(), "unbans")
 		DB_Actions.CreateCollection(context.Background(), "boards")
-		DB_Actions.CreateCollection(context.Background(), "recent_posts")
-		DB_Actions.CreateCollection(context.Background(), "data")
-		DB_Actions.CreateCollection(context.Background(), "news")
-		DB_Actions.CreateCollection(context.Background(), "hits")
-		DB_Actions.CreateCollection(context.Background(), "users")
+		DB_Actions.CreateCollection(context.Background(), "threads")
+		DB_Actions.CreateCollection(context.Background(), "posts")
+		DB_Actions.CreateCollection(context.Background(), "actions")
+
 	} else {
 		logs.Error("DB_Actions is nil")
 	}
@@ -180,7 +188,6 @@ func Migrateboardsfromsql() {
 	}
 
 	for _, board := range boards {
-		// Check if the board already exists in MongoDB
 		var existingBoard bson.M
 		err := DB_Main.Collection("boards").FindOne(context.Background(), bson.M{"board_id": board.BoardID}).Decode(&existingBoard)
 		if err != nil && err != mongo.ErrNoDocuments {
@@ -192,7 +199,6 @@ func Migrateboardsfromsql() {
 			continue
 		}
 
-		// Create collections for the board
 		err = Client.Database(board.BoardID).CreateCollection(context.Background(), "thumbs")
 		if err != nil {
 			logs.Error("Error creating thumbs collection: %v", err)
@@ -203,8 +209,6 @@ func Migrateboardsfromsql() {
 			logs.Error("Error creating images collection: %v", err)
 			continue
 		}
-
-		// Insert the board into MongoDB
 		_, err = DB_Main.Collection("boards").InsertOne(context.Background(), bson.M{
 			"boardid":      board.BoardID,
 			"name":         board.Name,
@@ -242,15 +246,12 @@ func Migratebansfromsql() {
 	}
 
 	for _, ban := range bans {
-		// Check if the ban already exists in MongoDB
 		var existingBan bson.M
 		err := DB_Main.Collection("bans").FindOne(context.Background(), bson.M{"id": ban.ID}).Decode(&existingBan)
 		if err == nil {
 			logs.Info("Ban already exists: %v", ban.ID)
 			continue
 		}
-
-		// Insert the ban into MongoDB
 		_, err = DB_Main.Collection("bans").InsertOne(context.Background(), bson.M{
 			"id":     ban.ID,
 			"ip":     ban.IP,
@@ -290,21 +291,37 @@ func Migratemisc() {
 		return
 	}
 
-	DB_Main.Collection("hits").Drop(context.Background())
-	DB_Main.CreateCollection(context.Background(), "hits")
-	if len(visits) > 0 {
-		DB_Main.Collection("hits").InsertOne(context.Background(), bson.M{"hits": visits[0].Hits})
+	DB_Main.Collection("stats").Drop(context.Background())
+	DB_Main.CreateCollection(context.Background(), "stats")
+	_, err := DB_Main.Collection("stats").InsertOne(context.Background(), bson.M{
+		"_id":          1,
+		"post_count":   0,
+		"thread_count": 0,
+		"board_count":  0,
+		"ban_count":    0,
+		"total_size":   0,
+		"total_users":  0,
+		"hit_count":    0,
+		"image_count":  0,
+		"file_count":   0,
+	})
+	if err != nil {
+		logs.Error("Error inserting stats: %v", err)
+		return
 	}
-
-	DB_Main.Collection("data").Drop(context.Background())
-	DB_Main.CreateCollection(context.Background(), "data")
 	if len(pcount) > 0 {
-		DB_Main.Collection("data").InsertOne(context.Background(), bson.M{"post_count": pcount[0].PostCount})
+		DB_Main.Collection("stats").UpdateOne(context.Background(), bson.M{"_id": 1}, bson.M{"post_count": pcount[0].PostCount})
+		DB_Main.Collection("stats").UpdateOne(context.Background(), bson.M{"_id": 1}, bson.M{"hit_count": visits[0].Hits})
+		banCount, err := DB_Main.Collection("bans").CountDocuments(context.Background(), bson.M{})
+		if err != nil {
+			logs.Error("Error counting bans: %v", err)
+		} else {
+			DB_Main.Collection("stats").UpdateOne(context.Background(), bson.M{"_id": 1}, bson.M{"ban_count": banCount})
+		}
 	}
 }
 
 func Drops() {
-	// get all boards
 	cursor, err := DB_Main.Collection("boards").Find(context.Background(), bson.M{})
 	if err != nil {
 		logs.Error("Error finding boards")
@@ -328,12 +345,11 @@ func Drops() {
 	DB_Main.Collection("users").Drop(context.Background())
 	DB_Main.Collection("reports").Drop(context.Background())
 	DB_Main.Collection("sessions").Drop(context.Background())
-	DB_Main.Collection("settings").Drop(context.Background())
+	DB_Main.Collection("config").Drop(context.Background())
 	DB_Main.Collection("bans").Drop(context.Background())
 	DB_Main.Collection("old_bans").Drop(context.Background())
 	DB_Main.Collection("boards").Drop(context.Background())
 	DB_Main.Collection("recent_posts").Drop(context.Background())
-	DB_Main.Collection("data").Drop(context.Background())
 	DB_Main.Collection("news").Drop(context.Background())
-	DB_Main.Collection("hits").Drop(context.Background())
+	DB_Main.Collection("announcements").Drop(context.Background())
 }

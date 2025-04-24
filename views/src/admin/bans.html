@@ -1,0 +1,216 @@
+{{define "page"}}
+
+<div id="admin-content"></div>
+<div id="bans">
+<form>
+    <input type="text" name="ip" placeholder="IP Address" required>
+    <input type="text" name="reason" placeholder="Reason" required>
+    <input hidden type="text" name="username" value="{{.User.Username}}" required>
+    <input type="date" name="expires" placeholder="Expires" required>
+    <a href="#" onclick="return false;">Ban IP</a>
+</form>
+<script>
+    document.querySelector("#bans form a").addEventListener("click", async () => {
+        const ip = document.querySelector("#bans form input[name='ip']").value;
+        const reason = document.querySelector("#bans form input[name='reason']").value;
+        const username = document.querySelector("#bans form input[name='username']").value;
+        const expires = document.querySelector("#bans form input[name='expires']").value;
+        const formData = new URLSearchParams();
+        formData.append('ip', ip);
+        formData.append('reason', reason);
+        formData.append('username', username);
+        formData.append('expires', expires);
+        const response = await fetch("/admin/ban", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: formData
+        });
+        if (response.ok) {
+            alert("IP banned successfully");
+        } else {
+            const errorText = await response.text();
+            alert(`Failed to ban IP: ${errorText}`);
+        }
+    });
+</script>
+        <div class="dashboard-row">
+            <div class="dashboard-column">
+                <div class="dashboard-box">
+                    <h2>Bans</h2>
+                    <table>
+                        <tr>
+                            <th>Time</th>
+                            <th>Status</th>
+                            <th>IP</th>
+                            <th>Reason</th>
+                            <th>Staff</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </table>
+                    <hr>
+                    <h2>Historic Bans</h2>
+                    <table>
+                        <tr>
+                            <th>Time</th>
+                            <th>Status</th>
+                            <th>IP</th>
+                            <th>Reason</th>
+                            <th>Staff</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        async function loadBans() {
+            try {
+                const response = await fetch("/api/bans");
+                if (response.ok) {
+                    const bans = await response.json();
+                    const table = document.querySelector("#bans table:first-of-type");
+                    populateTable(table, bans, true);
+                } else {
+                    const errorText = await response.text();
+                    alert(`Failed to load bans: ${errorText}`);
+                }
+            } catch (error) {
+                console.error("Error loading bans:", error);
+            }
+        }
+    
+        async function loadHistoricBans() {
+            try {
+                const response = await fetch("/api/bans/old");
+                if (response.ok) {
+                    const bans = await response.json();
+                    const table = document.querySelector("#bans table:nth-of-type(2)");
+                    populateTable(table, bans, false);
+                } else {
+                    const errorText = await response.text();
+                    alert(`Failed to load historic bans: ${errorText}`);
+                }
+            } catch (error) {
+                console.error("Error loading historic bans:", error);
+            }
+        }
+    
+        function populateTable(table, bans, allowActions) {
+            bans.forEach(ban => {
+                const row = document.createElement("tr");
+    
+                const time = document.createElement("td");
+                time.textContent = ban.Timestamp || ban.time;
+                row.appendChild(time);
+    
+                const status = document.createElement("td");
+                status.textContent = ban.Status;
+                row.appendChild(status);
+    
+                const ip = document.createElement("td");
+                ip.textContent = ban.IP || ban.ip;
+                row.appendChild(ip);
+    
+                const reason = document.createElement("td");
+                reason.textContent = ban.Reason || ban.reason;
+                row.appendChild(reason);
+    
+                const staff = document.createElement("td");
+                staff.textContent = ban.Username || ban.username;
+                row.appendChild(staff);
+    
+                const expires = document.createElement("td");
+                expires.textContent = ban.Expires || ban.expires;
+                row.appendChild(expires);
+    
+                const actions = document.createElement("td");
+                if (allowActions) {
+                    const unban = document.createElement("a");
+                    unban.href = "#";
+                    unban.textContent = "Unban";
+                    unban.dataset.ip = ban.IP;
+                    unban.addEventListener("click", async (event) => {
+                        event.preventDefault();
+                        const ip = event.target.dataset.ip;
+                        const confirmUnban = confirm(`Are you sure you want to unban ${ip}?`);
+                        if (confirmUnban) {
+                            await unbanIP(ip);
+                        }
+                    });
+                    actions.appendChild(unban);
+                } else {
+                    actions.textContent = "N/A";
+                }
+                row.appendChild(actions);
+    
+                table.appendChild(row);
+            });
+        }
+    
+        async function unbanIP(ip) {
+            try {
+                const response = await fetch(`/admin/unban?ip=${ip}`, {
+                    method: "POST"
+                });
+                if (response.ok) {
+                    alert("IP unbanned successfully");
+                    location.reload();
+                } else {
+                    const errorText = await response.text();
+                    alert(`Failed to unban IP: ${errorText}`);
+                }
+            } catch (error) {
+                console.error("Error unbanning IP:", error);
+            }
+        }
+    
+        loadBans();
+        loadHistoricBans();
+    </script>
+
+</div>
+<style>
+    #bans {
+        margin: 0 auto;
+        width: 80%;
+        margin-top: 1.7rem;
+    }
+    #bans table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    #bans th, #bans td {
+        border: 1px solid #ddd;
+        padding: 8px;
+    }
+    #bans th {
+        background-color: #494949;
+    }
+
+    #bans a {
+        color: #02ff6b;
+        text-decoration: none;
+    }
+
+    #bans a:hover {
+        color: #ffffffff;
+    }
+
+    #bans a::before {
+        content: "[";
+        color: #AAF;
+    }
+
+    #bans a::after {
+        content: "]";
+        color: #AAF;
+    }
+
+
+</style>
+{{end}}

@@ -5,11 +5,20 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/tdewolff/minify"
+	"github.com/tdewolff/minify/css"
+	"github.com/tdewolff/minify/html"
+	"github.com/tdewolff/minify/js"
+	"github.com/tdewolff/minify/json"
+	"github.com/tdewolff/minify/svg"
+	"github.com/tdewolff/minify/xml"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo-contrib/session"
@@ -24,9 +33,8 @@ import (
 	"achan.moe/logs"
 	"achan.moe/routes"
 	"achan.moe/utils/cache"
-	"achan.moe/utils/minecraft"
-	"achan.moe/utils/news"
 	"achan.moe/utils/schedule"
+	"achan.moe/utils/stats"
 )
 
 func init() {
@@ -45,8 +53,6 @@ func main() {
 		board.MigrateToMongoFromGob()
 		fmt.Println("Migrating misc")
 		database.Migratemisc()
-		fmt.Println("Migrating news")
-		news.Migratenewsfromsql()
 		fmt.Println("finish")
 		os.Exit(0)
 	}
@@ -55,13 +61,20 @@ func main() {
 		database.Drops()
 		os.Exit(0)
 	}
+	if len(os.Args) > 1 && os.Args[1] == "process" {
+		fmt.Println("Generating HTML + CSS")
+		processHTMLCSS()
+		os.Exit(0)
+	}
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	stats.CalcTotalSize()
 	cache.On = true
-	cache.InitCache()
+	cache.InitCaches()
+
 	e := echo.New()
 
 	e.Use(bans.BanMiddleware)
-	err := godotenv.Load() // Load .env file from the current directory
+	err := godotenv.Load()
 	if err != nil {
 		logs.Fatal("Error loading .env file")
 	}
@@ -116,25 +129,16 @@ func main() {
 		CookieHTTPOnly: false,
 		CookieSameSite: http.SameSiteStrictMode,
 	})
-
-	accesslog, err := os.OpenFile("access.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
-	if err != nil {
-		logs.Fatal("Failed to open access.log")
-	}
-
-	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: "${remote_ip} - ${id} [${time_rfc3339}] \"${method} ${uri} HTTP/1.1\" ${status} ${bytes_sent}\n",
-		Output: accesslog,
-	}))
-	e.Renderer = home.NewTemplateRenderer("views/*.html")
+	e.Renderer = home.NewTemplateRenderer("views/dst/*.html")
 	routes.Routes(e)
 	e.HTTPErrorHandler = home.ErrorHandler
 	// schedules
 	s5 := schedule.NewScheduler()
 	s5.ScheduleTask(schedule.Task{
 		Action: func() {
-			minecraft.GetServerStatus()
 			bans.ExpireCheck()
+			stats.SetTotalSize(stats.CalcTotalSize())
+			stats.SetTotalUsers()
 		},
 		Duration: 5 * time.Minute,
 	})
@@ -144,8 +148,7 @@ func main() {
 	s24h.ScheduleTask(schedule.Task{
 		Action: func() {
 			auth.ExpireUsers()
-			cache.CacheGlobalPostCount()
-			cache.CacheTotalUserCount()
+
 		},
 		Duration: 24 * time.Hour,
 	})
@@ -156,13 +159,66 @@ func main() {
 	if err != nil {
 		logs.Fatal("PORT is not set")
 	}
-	//mail.TestMail()
-	//go env.RegenEncryptedKey()
-	//go env.RegenSecretKey()
-	//go plugins.LoadPlugins(e)
+
 	logs.Info("Server started on port " + portStr)
 
-	//s := souin_echo.NewMiddleware(souin_echo.DefaultConfiguration)
-	//e.Use(s.Process)
 	e.StartTLS(":"+strconv.Itoa(port), "certificates/cert.pem", "certificates/key.pem")
+}
+
+func processHTMLCSS() {
+	m := minify.New()
+	m.AddFunc("text/css", css.Minify)
+	m.AddFunc("text/html", html.Minify)
+	m.AddFunc("image/svg+xml", svg.Minify)
+	m.AddFuncRegexp(regexp.MustCompile("^(application|text)/(x-)?(java|ecma)script$"), js.Minify)
+	m.AddFuncRegexp(regexp.MustCompile("[/+]json$"), json.Minify)
+	m.AddFuncRegexp(regexp.MustCompile("[/+]xml$"), xml.Minify)
+
+	srcDir := "views/src"
+	destDir := "views/dst"
+
+	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+
+		destPath := filepath.Join(destDir, relPath)
+		err = os.MkdirAll(filepath.Dir(destPath), os.ModePerm)
+		if err != nil {
+			return err
+		}
+
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		destFile, err := os.Create(destPath)
+		if err != nil {
+			return err
+		}
+		defer destFile.Close()
+
+		err = m.Minify("text/html", destFile, srcFile)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logs.Error("Error processing HTML/CSS: ", err)
+	} else {
+		logs.Info("HTML/CSS processing completed")
+	}
 }

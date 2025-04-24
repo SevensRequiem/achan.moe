@@ -1,0 +1,436 @@
+{{define "content"}}
+
+<div class="content-wrapper">
+    <div id="top-content">
+        <h1>/{{.BoardID}}/</h1>
+        <h2>{{.BoardDesc}}</h2>
+    </div>
+    <div class="banners">
+    <img src="" alt="Banner">
+    </div>
+    <script>
+            const banner = document.querySelector(".banners img");
+            const boardid1 = "{{.BoardID}}";
+            const bannerurl = `/banner/${boardid1}`;
+            banner.src = bannerurl;
+            banner.alt = `Banner for /${boardid1}/`;
+    </script>
+
+    <hr>
+    <a href="#" onclick="loadForm(); loadCaptcha(); return false;" class="createpost">Post a Reply</a>
+    <hr>
+     <div class="container">
+        <meta charset="UTF-8" id="selfposts" content="{{.SelfPosts}}">
+        <div id="threadcontainer"></div>
+        <div id="posts"></div>
+        </div>
+        <script>
+            const threadid = "{{.ThreadID}}";
+            const boardid = "{{.BoardID}}";
+            const threadapi = `/api/board/${boardid}/thread/${threadid}`;
+            axios.get(threadapi)
+                .then(response => {
+                    const thread = response.data;
+            
+                    const threadcontainer = document.getElementById('threadcontainer');
+                    const posts = document.getElementById('posts');
+                    if (!threadcontainer || !posts) {
+                        console.error('Required elements not found in the DOM.');
+                        return;
+                    }
+            
+                    const content = marked.parse(thread.Content || '');
+                    const threadTimestamp = new Date(thread.Timestamp * 1000).toLocaleString("en-US");
+                    const threadPost = document.createElement('div');
+                    threadPost.innerHTML = `
+                        <fieldset id="thread">
+                            <legend>
+                                <span class="author">${thread.Author}</span>
+                                <span class="postnumber">No. ${thread.PostNumber}</span>
+                                <span class="subject">${thread.Subject}</span>
+                                <a href="#${thread.ThreadID}" class="postid">#${thread.ThreadID}</a>
+                                <span class="timestamp">${threadTimestamp}</span>
+                                <a href="/image/${thread.BoardID}/${thread.Image}" class="file" target="_blank">Full Image</a>
+                                {{if or .IsAdmin .IsModerator .IsJanny}}
+                                <div class="spacer1"></div>
+                                <a href="#" onclick="deleteThread('${thread.ThreadID}'); return false;" class="mod">Delete</a>
+                                <div class="spacer1"></div>
+                                <a href="#" onclick="checkIP('${thread.IP}'); return false;" class="mod">Check IP</a>
+                                <div class="spacer1"></div>
+                                <a href="#" onclick="banIP('${thread.IP}'); return false;" class="mod">Ban IP</a>
+                                {{end}}
+                            </legend>
+                            <img class="postfile" src="/thumb/${thread.BoardID}/${thread.Thumbnail}" alt="File">
+                            <p class="content">${content}</p>
+                        </fieldset>
+                    `;
+                    threadcontainer.appendChild(threadPost);
+            
+                    thread.Posts.forEach(post => {
+                        const postElement = document.createElement('div');
+                        const content = marked.parse(post.Content || '');
+                        const postTimestamp = new Date(post.Timestamp * 1000).toLocaleString("en-US");
+                        postElement.innerHTML = `
+                            <fieldset class="post">
+                                <legend>
+                                    <span class="author">${post.Author}</span>
+                                    <span>No. ${post.PostNumber}</span>
+                                    <a href="#${post.PostID}" class="replyquote">#${post.PostID}</a>
+                                    <span class="timestamp">${postTimestamp}</span>
+                                    <a href="/image/${post.BoardID}/${post.Image}" class="file" target="_blank">Full Image</a>
+                                    {{if or .IsAdmin .IsModerator .IsJanny}}
+                                    <div class="spacer1"></div>
+                                    <a href="#" onclick="deletePost('${post.ParentID}, ${post.PostID}'); return false;" class="mod">Delete</a>
+                                    <div class="spacer1"></div>
+                                    <a href="#" onclick="checkIP('${post.IP}'); return false;" class="mod">Check IP</a>
+                                    <div class="spacer1"></div>
+                                    <a href="#" onclick="banIP('${post.IP}'); return false;" class="mod">Ban IP</a>
+                                    {{end}}
+                                </legend>
+                                ${post.Image ? `<img class="postfile" src="/thumb/${post.BoardID}/${post.Thumbnail}" alt="File">` : ''}
+                                <p class="content">${content}</p>
+                            </fieldset>
+                        `;
+                        posts.appendChild(postElement);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching thread data:', error);
+                });
+</script>
+
+{{if or .IsAdmin .IsModerator .IsJanny}}
+<script>
+    function banIP(ip) {
+    const reason = prompt("Enter the reason for banning this IP:");
+    if (reason === null) {
+        return;
+    }
+    const confirmBan = confirm(`Are you sure you want to ban IP: ${ip} for the following reason?\n\n${reason}`);
+    if (!confirmBan) {
+        return;
+    }
+
+    const formdata = new FormData();
+    formdata.append('ip', ip);
+    formdata.append('reason', reason);
+
+    axios.post('/api/ban', formdata)
+        .then(response => {
+            console.log(response);
+        })
+        .catch(error => {
+            console.error(error);
+        });
+}
+
+    function deleteThread(threadID) {
+    const confirmDelete = confirm("Are you sure you want to delete this thread?");
+    if (confirmDelete) {
+        axios.delete(`/board/${boardid}/${threadID}`)
+            .then(response => {
+                console.log(response);
+            })
+            .catch(error => {
+                console.error(error);
+            });
+    }
+}
+                function deletePost(threadID, postID) {
+                    const confirmDelete = confirm("Are you sure you want to delete this post?");
+                    if (confirmDelete) {
+                        axios.delete(`/board/${boardid}/${threadID}/${postID}`)
+                            .then(response => {
+                                console.log(response);
+                            })
+                            .catch(error => {
+                                console.error(error);
+                            });
+                    }
+                }
+
+                function checkIP(ip) {
+                    const newWindow = window.open(`https://whatismyipaddress.com/ip/${ip}`, '_blank');
+                    if (newWindow) {
+                        newWindow.focus();
+                    }
+                }
+        </script>
+                {{end}}
+                <hr>
+                <a href="#" onclick="loadForm(); loadCaptcha(); return false;" class="createpost">Post a Reply</a>
+                <hr>
+</div>
+
+        <fieldset class="reply">
+            <legend>Reply</legend>
+            <form id="postform">
+                <input type="text" id="boardID" name="b" value="{{.BoardID}}" hidden><br><br>
+                <label for="author">Username:</label>
+                <input type="text" id="author" name="author" value="Anonymous" required><br><br>
+                <label for="content">Post:</label>
+                <textarea id="formcontent" name="content" maxlength="500"></textarea><br><br>
+                <div id="charCount">500 characters remaining</div>
+                <label for="isAnonymous">Anon:</label>
+                <input type="checkbox" id="isAnonymous" name="isAnonymous"><br><br>
+                <label for="image">Image:</label>
+                <input type="file" id="image" name="image" accept="image/*"><br><br>
+                <hr>
+                <img id="captcha">
+                <label for="captcha">Captcha:</label>
+                <input type="text" id="captcha" name="captcha" placeholder="Enter captcha" required><br><br>
+                <hr>
+                <a href="#" id="submitpost" class="createpost">Submit</a>
+                <a href="#" onclick="loadForm(); return false;" class="createpost">Cancel</a>
+            </form>
+            <script>
+            document.getElementById('submitpost').addEventListener('click', function(event) {
+                event.preventDefault();
+            
+                const form = document.getElementById('postform');
+                const formData = new FormData(form);
+            
+                axios.post(`/post/{{.BoardID}}/{{.ThreadID}}`, formData)
+                    .then(response => {
+                        console.log('Post submitted successfully:', response.data);
+                        if (response.data === "Post created") {
+                            window.location.reload();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error submitting post:', error);
+                    });
+            });
+
+            </script>
+        </fieldset>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const formcontent = document.getElementById('formcontent');
+                if (formcontent) {
+                    const maxLength = formcontent.getAttribute('maxlength');
+                    formcontent.addEventListener('input', function() {
+                        const currentLength = formcontent.value.length;
+                        const remainingChars = maxLength - currentLength;
+                        document.getElementById('charCount').innerText = `${remainingChars} characters remaining`;
+                    });
+                } else {
+                    console.error('Element with ID "formcontent" not found.');
+                }
+            });
+
+        </script>
+    </div>
+
+<script>
+    function loadForm() {
+        const form = document.querySelector('.reply');
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+    function loadCaptcha() {
+                const captcha = document.getElementById('captcha');
+                const captchaImgSrc = `/api/gencaptcha`;
+                captcha.src = captchaImgSrc;
+            }
+</script>
+</div>
+<style>
+
+    .content-wrapper {
+        display: flex;
+        flex-direction: column;
+        overflow: scroll;
+        width: 100%;
+        margin-top: 1.5rem;
+        height: 100%;
+    }
+
+    hr {
+            width: 70%;
+            margin: 0 auto;
+            border: 3px solid var(--border);
+            margin: 0.6em;
+        }
+
+        #top-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            width: 70%;
+        }
+        #top-content h1 {
+            color: var(--green);
+            font-weight: bold;
+        }
+        #top-content h2 {
+            color: var(--text-main);
+            font-weight: bold;
+        }
+        .banners {
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+        justify-content: center;
+        margin: 0 auto;
+        width: 50%;
+    }
+    .banners img {
+        max-height: 150px;
+    }
+
+
+
+    #thread {
+        position: relative;
+        display: flex;
+        flex-direction: row;
+        justify-content: left;
+        align-items: center;
+        word-break: break-all;
+        border-top: 5px solid var(--border);
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background-color: var(--bg);
+        width: 95%;
+        min-height: 100px;
+        margin: 0 auto;
+    }
+    #thread .postcontent {
+        
+        padding: 10px;
+    }
+    #thread img {
+        max-width: 400px;
+        max-height: 400px;
+        margin-right: 10px;
+    }
+    .post {
+        display: flex;
+        flex-direction: row;
+        justify-content: left;
+        align-items: center;
+        word-break: break-all;
+        border-top: 5px solid var(--border);
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background-color: var(--bg);
+        width: 95%;
+        min-height: 100px;
+        margin: 0 auto;
+    }
+    .post a:hover {
+        color: #FFF;
+    }
+    .post img {
+        max-width: 250px;
+        max-height: 250px;
+        margin-right: 10px;
+    }
+    .post video {
+        max-width: 250px;
+        max-height: 250px;
+    }
+    .post p {
+        margin: 10px;
+    }
+    
+    .createpost {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        width: 200px;
+        text-align: center;
+        padding: 10px;
+        background-color: var(--bg);
+        border: 1px solid var(--border);
+        text-decoration: none;
+    }
+    .createpost:hover {
+        background-color: var(--border);
+    }
+    
+    .mod {
+        color: var(--text-highlight3);
+        text-decoration: none;
+    }
+    .mod:hover {
+        color: var(--text-highlight2);
+    }
+    hr {
+        border: 1px solid var(--border);
+        margin: 0 auto;
+        width: 80%;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        background-color: var(--border);
+        height: 1px;
+        border: none;
+    }
+
+    .replyquote {
+        color: var(--text-highlight4)
+    }
+    .replyquote a {
+        color: var(--text-highlight4);
+        text-decoration: none;
+    }
+
+    .postcontent {
+        padding: 10px;
+    }
+
+    .file {
+        color: var(--file);
+    }
+
+    .subject {
+        color: var(--green);
+    }
+
+    .votes {
+        color: var(--text-highlight2);
+    }
+
+    .votes a {
+        color: var(--text-highlight4);
+        text-decoration: none;
+    }
+
+    video {
+        max-width: 400px;
+        max-height: 250px;
+    }
+
+    img {
+        max-width: 400px;
+        max-height: 400px;
+    }
+
+    .author {
+        color: #ffffff;
+    }
+
+    .author::before {
+        content: '[ ';
+        color: var(--text-secondary);
+    }
+
+    .author::after {
+        content: ' ]';
+        color: var(--text-secondary);
+    }
+
+    .timestamp {
+        color: var(--text-tertiary);
+    }
+
+    .postid {
+        color: var(--text-highlight)
+    }
+</style>
+{{end}}

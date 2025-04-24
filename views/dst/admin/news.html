@@ -1,0 +1,10 @@
+{{define "page"}}<div id=news><form action=/admin/addnews method=post><label for=title>Title:</label>
+<input id=title name=title required><br><label for=content>Content:</label>
+<textarea id=content name=content required></textarea><br><input type=submit value="Add News"></form><table id=news-table><caption>News Articles</caption><thead><tr><th>Title<th>Content<th>Date<th>Author<th>Edit<th>Delete<tbody id=news-articles></table></div><script>const updateurl="/admin/addnews";const form=document.querySelector('form');form.addEventListener('submit',function(event){event.preventDefault();const formData=new FormData(form);fetch(updateurl,{method:'POST',body:formData}).then(response=>response.json()).then(data=>{if(data.success){alert('Article updated successfully!');}else{alert('Error updating article: '+data.message);}}).catch(error=>{console.error('Error:',error);});});const newsUrl="/api/news";fetch(newsUrl).then(response=>response.json()).then(data=>{const table=document.getElementById('news-articles');data.forEach(article=>{const row=document.createElement('tr');row.innerHTML=`
+                    <td>${article.title}</td>
+                    <td>${article.content}</td>
+                    <td>${new Date(article.date*1000).toLocaleDateString()}</td>
+                    <td>${article.author}</td>
+                    <td><button onclick="editArticle(${article.id})">Edit</button></td>
+                    <td><button onclick="deleteArticle(${article.id})">Delete</button></td>
+                `;table.appendChild(row);});}).catch(error=>{console.error('Error fetching news:',error);});</script><style>#news{overflow:hidden}#news-table{width:80%;margin:20px auto;overflow:scroll}#news-table caption{font-size:24px;margin-bottom:10px}#news-table th,#news-table td{padding:10px;text-align:left}input[type=submit]{background-color:#0000;color:#fff;padding:10px 20px;border:none;border-radius:5px;cursor:pointer}</style>{{end}}

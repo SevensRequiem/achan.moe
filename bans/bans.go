@@ -2,6 +2,7 @@ package bans
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -11,29 +12,34 @@ import (
 	"achan.moe/database"
 	"achan.moe/logs"
 	"achan.moe/models"
+	"achan.moe/utils/cache"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
+	"github.com/valkey-io/valkey-go"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type Bans struct {
-	ID        string `bson:"_id,omitempty"`        // MongoDB uses _id as the primary key
-	Status    string `bson:"status" json:"status"` // active, expired, deleted
-	IP        string `bson:"ip" json:"ip"`
-	Reason    string `bson:"reason" json:"reason"`
-	Username  string `bson:"username" json:"username"`
-	Timestamp string `bson:"timestamp" json:"timestamp"`
-	Expires   string `bson:"expires" json:"expires"`
-}
+var Client = cache.ClientBans
+var ctx = context.Background()
 
-type OldBans struct {
-	ID        string `bson:"_id,omitempty"`        // MongoDB uses _id as the primary key
-	Status    string `bson:"status" json:"status"` // active, expired, deleted
-	IP        string `bson:"ip" json:"ip"`
-	Reason    string `bson:"reason" json:"reason"`
-	Username  string `bson:"username" json:"username"`
-	Timestamp string `bson:"timestamp" json:"timestamp"`
-	Expires   string `bson:"expires" json:"expires"`
+func GetBansFromDB() []models.Bans {
+	db := database.DB_Main.Collection("bans")
+	var bans []models.Bans
+	cur, err := db.Find(context.Background(), bson.M{})
+	if err != nil {
+		return nil
+	}
+	defer cur.Close(context.Background())
+	for cur.Next(context.Background()) {
+		var ban models.Bans
+		err := cur.Decode(&ban)
+		if err != nil {
+			return nil
+		}
+		bans = append(bans, ban)
+	}
+	return bans
 }
 
 func ManualBanIP(c echo.Context) error {
@@ -53,103 +59,80 @@ func ManualBanIP(c echo.Context) error {
 	}
 	ip := c.FormValue("ip")
 	reason := c.FormValue("reason")
-	username := user.Username
+	userID := user.ID
 	timestamp := time.Now().Format(time.RFC3339)
 	expires := c.FormValue("expires")
 
-	// Parse the expires date to ensure it's in the correct format
 	expiresTime, err := time.Parse("2006-01-02", expires)
 	if err != nil {
 		logs.Error("Error parsing expires date: %v", err)
-		expiresTime = time.Now().Add(24 * time.Hour) // Default to 24 hours if parsing fails
+		expiresTime = time.Now().Add(24 * time.Hour)
 	}
 	expires = expiresTime.Format(time.RFC3339)
-
-	bannedIP := Bans{
+	ID := primitive.NewObjectID()
+	bannedIP := models.Bans{
+		ID:        ID,
 		IP:        ip,
 		Status:    "active",
 		Reason:    reason,
-		Username:  username,
+		Username:  user.Username,
+		UserID:    userID,
 		Timestamp: timestamp,
 		Expires:   expires,
 	}
 	db := database.DB_Main.Collection("bans")
 	db.InsertOne(context.Background(), bannedIP)
-
-	logs.Info("Banned IP %s for %s by %s", ip, reason, username)
+	// Set the ban in Redis
+	bannedIPdata, err := json.Marshal(bannedIP)
+	if err != nil {
+		logs.Error("Error marshalling banned IP data: %v", err)
+		return nil
+	}
+	err = cache.ClientBans.Do(ctx, cache.ClientBans.B().Set().Key(ip).Value(string(bannedIPdata)).Build()).Error()
+	if err != nil {
+		logs.Error("Error setting banned IP in Redis: %v", err)
+		return nil
+	}
+	logs.Info("Banned IP %s for %s by %s", ip, reason, userID)
 
 	return nil
 }
 
-func BanIP(c echo.Context) error {
+func UnbanIP(c echo.Context) error {
+	ip := c.QueryParam("ip")
+	var ban models.Bans
+	err := database.DB_Main.Collection("bans").FindOne(context.Background(), bson.M{"ip": ip}).Decode(&ban)
+	if err != nil {
+		logs.Error("Error finding ban: %v", err)
+		return nil
+	}
+	_, err = database.DB_Main.Collection("bans").DeleteOne(context.TODO(), bson.M{"ip": ip})
+	if err != nil {
+		logs.Error("Error deleting ban: %v", err)
+		return nil
+	}
 	sess, err := session.Get("session", c)
 	if err != nil {
 		return nil
 	}
-
-	userSessionValue, ok := sess.Values["user"]
+	user, ok := sess.Values["user"].(models.User)
 	if !ok {
+		logs.Error("Error getting user from session: %v", err)
 		return nil
 	}
-
-	user, ok := userSessionValue.(models.User)
-	if !ok {
-		return nil
-	}
-	ip := c.FormValue("ip")
-	reason := c.FormValue("reason")
-	username := user.Username
-	timestamp := time.Now().Format(time.RFC3339)
-	expires := c.FormValue("expires")
-
-	// Parse the expires date to ensure it's in the correct format
-	expiresTime, err := time.Parse("2006-01-02", expires)
-	if err != nil {
-		logs.Error("Error parsing expires date: %v", err)
-		expiresTime = time.Now().Add(24 * time.Hour) // Default to 24 hours if parsing fails
-	}
-
-	expires = expiresTime.Format(time.RFC3339)
-
-	bannedIP := Bans{
-		IP:        ip,
-		Status:    "active",
-		Reason:    reason,
-		Username:  username,
-		Timestamp: timestamp,
-		Expires:   expires,
-	}
-	db := database.DB_Main.Collection("bans")
-	db.InsertOne(context.Background(), bannedIP)
-
-	logs.Info("Banned IP %s for %s by %s", ip, reason, username)
-
-	return nil
-}
-
-func UnbanIP(c echo.Context) Bans {
-	id := c.Param("id")
-	db := database.DB_Main.Collection("bans")
-	var ban Bans
-	db.FindOne(context.Background(), bson.M{"id": id}).Decode(&ban)
-	// Move to OldBans table
-	oldBan := OldBans{
+	oldBan := models.Bans{
 		ID:        ban.ID,
 		Status:    "deleted",
 		IP:        ban.IP,
 		Reason:    ban.Reason,
-		Username:  ban.Username,
+		Username:  user.Username,
+		UserID:    user.ID,
 		Timestamp: ban.Timestamp,
 		Expires:   ban.Expires,
 	}
-	// Delete from Bans table
-	db.DeleteOne(context.Background(), bson.M{"id": id})
-
-	// add to old bans
-	olddb := database.DB_Main.Collection("old_bans")
-	olddb.InsertOne(context.Background(), oldBan)
+	database.DB_Main.Collection("old_bans").InsertOne(context.Background(), oldBan)
 	logs.Info("Unbanned IP %s", ban.IP)
-	return ban
+	return nil
 }
 
 func GetTotalBans(c echo.Context) error {
@@ -159,7 +142,7 @@ func GetTotalBans(c echo.Context) error {
 
 func GetBans(c echo.Context) error {
 	db := database.DB_Main.Collection("bans")
-	var bans []Bans
+	var bans []models.Bans
 	cur, err := db.Find(context.Background(), bson.M{})
 	if err != nil {
 		logs.Error("Error getting bans: %v", err)
@@ -167,7 +150,7 @@ func GetBans(c echo.Context) error {
 	}
 	defer cur.Close(context.Background())
 	for cur.Next(context.Background()) {
-		var ban Bans
+		var ban models.Bans
 		err := cur.Decode(&ban)
 		if err != nil {
 			logs.Error("Error decoding ban: %v", err)
@@ -180,7 +163,7 @@ func GetBans(c echo.Context) error {
 
 func GetBansOld(c echo.Context) error {
 	db := database.DB_Main.Collection("old_bans")
-	var bans []OldBans
+	var bans []models.Bans
 	cur, err := db.Find(context.Background(), bson.M{})
 	if err != nil {
 		logs.Error("Error getting old bans: %v", err)
@@ -188,7 +171,7 @@ func GetBansOld(c echo.Context) error {
 	}
 	defer cur.Close(context.Background())
 	for cur.Next(context.Background()) {
-		var ban OldBans
+		var ban models.Bans
 		err := cur.Decode(&ban)
 		if err != nil {
 			logs.Error("Error decoding old ban: %v", err)
@@ -201,7 +184,7 @@ func GetBansOld(c echo.Context) error {
 
 func GetBansActive(c echo.Context) error {
 	db := database.DB_Main.Collection("bans")
-	var bans []Bans
+	var bans []models.Bans
 	cur, err := db.Find(context.Background(), bson.M{"status": "active"})
 	if err != nil {
 		logs.Error("Error getting active bans: %v", err)
@@ -209,7 +192,7 @@ func GetBansActive(c echo.Context) error {
 	}
 	defer cur.Close(context.Background())
 	for cur.Next(context.Background()) {
-		var ban Bans
+		var ban models.Bans
 		err := cur.Decode(&ban)
 		if err != nil {
 			logs.Error("Error decoding active ban: %v", err)
@@ -222,7 +205,7 @@ func GetBansActive(c echo.Context) error {
 
 func GetBansExpired(c echo.Context) error {
 	db := database.DB_Main.Collection("old_bans")
-	var bans []Bans
+	var bans []models.Bans
 	cur, err := db.Find(context.Background(), bson.M{"status": "expired"})
 	if err != nil {
 		logs.Error("Error getting expired bans: %v", err)
@@ -230,7 +213,7 @@ func GetBansExpired(c echo.Context) error {
 	}
 	defer cur.Close(context.Background())
 	for cur.Next(context.Background()) {
-		var ban Bans
+		var ban models.Bans
 		err := cur.Decode(&ban)
 		if err != nil {
 			logs.Error("Error decoding expired ban: %v", err)
@@ -243,7 +226,7 @@ func GetBansExpired(c echo.Context) error {
 
 func GetBansDeleted(c echo.Context) error {
 	db := database.DB_Main.Collection("old_bans")
-	var bans []Bans
+	var bans []models.Bans
 	cur, err := db.Find(context.Background(), bson.M{"status": "deleted"})
 	if err != nil {
 		logs.Error("Error getting deleted bans: %v", err)
@@ -251,7 +234,7 @@ func GetBansDeleted(c echo.Context) error {
 	}
 	defer cur.Close(context.Background())
 	for cur.Next(context.Background()) {
-		var ban Bans
+		var ban models.Bans
 		err := cur.Decode(&ban)
 		if err != nil {
 			logs.Error("Error decoding deleted ban: %v", err)
@@ -265,7 +248,7 @@ func GetBansDeleted(c echo.Context) error {
 func GetBanByIP(c echo.Context) error {
 	ip := c.Param("ip")
 	db := database.DB_Main.Collection("bans")
-	var ban Bans
+	var ban models.Bans
 	err := db.FindOne(context.Background(), bson.M{"ip": ip}).Decode(&ban)
 	if err != nil {
 		logs.Error("Error getting ban by IP: %v", err)
@@ -291,66 +274,61 @@ func GetActiveBanCount() int64 {
 	}
 	return count
 }
-
 func BanMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		db := database.DB_Main.Collection("bans")
-		var bans []Bans
-		cur, err := db.Find(context.Background(), bson.M{"status": "active"})
-		if err != nil {
-			logs.Error("Error getting active bans: %v", err)
-			return c.String(http.StatusInternalServerError, err.Error())
-		}
-		defer cur.Close(context.Background())
-		for cur.Next(context.Background()) {
-			var ban Bans
-			err := cur.Decode(&ban)
-			if err != nil {
-				logs.Error("Error decoding ban: %v", err)
-				return c.String(http.StatusInternalServerError, err.Error())
-			}
-			bans = append(bans, ban)
-		}
-
-		currentTime := time.Now()
 		clientIP := c.RealIP()
-		cfConnectingIP := c.Request().Header.Get("CF-Connecting-IP")
-		logs.Info("Client IP: %s, CF-Connecting-IP: %s", clientIP, cfConnectingIP)
-
-		for _, ban := range bans {
-			if ban.IP == clientIP || ban.IP == cfConnectingIP {
-				expiresTime, err := time.Parse(time.RFC3339, ban.Expires)
-				if err != nil {
-					logs.Error("Error parsing time: %v", err)
-					continue
-				}
-				if expiresTime.After(currentTime) {
-					tmpl, err := template.ParseFiles("views/util/banned.html")
-					if err != nil {
-						logs.Error("Error parsing template: %v", err)
-						return c.String(http.StatusInternalServerError, err.Error())
-					}
-					data := map[string]interface{}{
-						"Pagename":   "Banned",
-						"BanReason":  ban.Reason,
-						"BanExpires": ban.Expires,
-					}
-					err = tmpl.Execute(c.Response().Writer, data)
-					if err != nil {
-						logs.Error("Error executing template: %v", err)
-						return c.String(http.StatusInternalServerError, err.Error())
-					}
-					return nil
-				}
-			}
+		logs.Info("Checking ban for IP: %s", clientIP)
+		banBool, err := cache.ClientBans.Do(ctx, cache.ClientBans.B().Get().Key(clientIP).Build()).AsBool()
+		if err != valkey.Nil {
+			logs.Error("Error checking ban in Redis: %v", err)
+			return c.String(http.StatusInternalServerError, "Internal server error")
 		}
-		return next(c)
+		logs.Info("Ban check result for IP %s: %v", clientIP, banBool)
+		if banBool == true {
+			logs.Info("IP %s is banned", clientIP)
+
+			// Fetch ban data from Redis
+			banDataBytes, err := cache.ClientBans.Do(ctx, cache.ClientBans.B().Get().Key(clientIP).Build()).AsBytes()
+			if err != nil || len(banDataBytes) == 0 {
+				logs.Error("Error fetching ban data from Redis or data is empty: %v", err)
+				return c.String(http.StatusInternalServerError, "Internal server error")
+			}
+
+			var banData models.Bans
+			err = json.Unmarshal(banDataBytes, &banData)
+			if err != nil {
+				logs.Error("Error unmarshalling ban data: %v", err)
+				return c.String(http.StatusInternalServerError, "Internal server error")
+			}
+
+			logs.Info("Rendering ban page for IP: %s", clientIP)
+			tmpl, err := template.ParseFiles("views/util/banned.html")
+			if err != nil {
+				logs.Error("Error parsing template: %v", err)
+				return c.String(http.StatusInternalServerError, "Internal server error")
+			}
+
+			data := map[string]interface{}{
+				"Pagename":   "Banned",
+				"BanReason":  banData.Reason,
+				"BanExpires": banData.Expires,
+			}
+			err = tmpl.Execute(c.Response().Writer, data)
+			if err != nil {
+				logs.Error("Error executing template: %v", err)
+				return c.String(http.StatusInternalServerError, "Internal server error")
+			}
+		} else {
+			logs.Info("IP %s is not banned", clientIP)
+			return next(c)
+		}
+		return nil
 	}
 }
 func ExpireCheck() {
 	fmt.Println("Checking for expired bans...")
 	db := database.DB_Main.Collection("bans")
-	var bans []Bans
+	var bans []models.Bans
 	cur, err := db.Find(context.Background(), bson.M{})
 	if err != nil {
 		logs.Error("Error getting bans: %v", err)
@@ -358,7 +336,7 @@ func ExpireCheck() {
 	}
 	defer cur.Close(context.Background())
 	for cur.Next(context.Background()) {
-		var ban Bans
+		var ban models.Bans
 		err := cur.Decode(&ban)
 		if err != nil {
 			logs.Error("Error decoding ban: %v", err)
@@ -369,7 +347,7 @@ func ExpireCheck() {
 
 	currentTime := time.Now()
 	for _, ban := range bans {
-		expiresTime, err := time.Parse("2006-01-02", ban.Expires)
+		expiresTime, err := time.Parse(time.RFC3339, ban.Expires)
 		if err != nil {
 			logs.Error("Error parsing time:", err)
 			continue
@@ -378,7 +356,7 @@ func ExpireCheck() {
 			fmt.Println("Ban expired:", ban)
 			db.DeleteOne(context.Background(), bson.M{"id": ban.ID})
 			// Move to OldBans table
-			oldBan := OldBans{
+			oldBan := models.Bans{
 				ID:        ban.ID,
 				Status:    "expired",
 				IP:        ban.IP,
@@ -398,16 +376,16 @@ func ExpireCheck() {
 	}
 }
 
-func DeleteBan(c echo.Context) Bans {
+func DeleteBan(c echo.Context) models.Bans {
 	if !auth.AdminCheck(c) {
 		c.JSON(http.StatusUnauthorized, "Unauthorized")
 	}
 	id := c.Param("id")
 	db := database.DB_Main.Collection("bans")
-	var ban Bans
+	var ban models.Bans
 	db.FindOne(context.Background(), bson.M{"id": id}).Decode(&ban)
 	// Move to OldBans table
-	oldBan := OldBans{
+	oldBan := models.Bans{
 		ID:        ban.ID,
 		Status:    "deleted",
 		IP:        ban.IP,

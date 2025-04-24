@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"achan.moe/auth"
@@ -42,7 +43,7 @@ func PlusReputation(c echo.Context) error {
 			if _, err := collection.ReplaceOne(context.Background(), bson.M{"ip": ip, "id": userID}, recentRep); err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update recent reputation"})
 			}
-			if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"uuid": userID}, user); err != nil {
+			if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"_id": userID}, user); err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user reputation"})
 			}
 			return c.JSON(http.StatusOK, map[string]string{"message": "Reputation changed to positive"})
@@ -51,7 +52,7 @@ func PlusReputation(c echo.Context) error {
 	}
 
 	// Find the user by ID
-	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"ID": userID}).Decode(&user); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -68,7 +69,7 @@ func PlusReputation(c echo.Context) error {
 	}
 
 	// Update the user's reputation in the database
-	if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"uuid": userID}, user); err != nil {
+	if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"ID": userID}, user); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update reputation"})
 	}
 
@@ -93,7 +94,7 @@ func MinusReputation(c echo.Context) error {
 			if _, err := collection.ReplaceOne(context.Background(), bson.M{"ip": ip, "id": userID}, recentRep); err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update recent reputation"})
 			}
-			if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"uuid": userID}, user); err != nil {
+			if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"ID": userID}, user); err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user reputation"})
 			}
 			return c.JSON(http.StatusOK, map[string]string{"message": "Reputation changed to negative"})
@@ -102,7 +103,7 @@ func MinusReputation(c echo.Context) error {
 	}
 
 	// Find the user by ID
-	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"ID": userID}).Decode(&user); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -119,7 +120,7 @@ func MinusReputation(c echo.Context) error {
 	}
 
 	// Update the user's reputation in the database
-	if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"uuid": userID}, user); err != nil {
+	if _, err := db.Collection("users").ReplaceOne(context.Background(), bson.M{"ID": userID}, user); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update reputation"})
 	}
 
@@ -128,7 +129,7 @@ func MinusReputation(c echo.Context) error {
 
 type UserResponse struct {
 	Username        string `json:"username"`
-	UUID            string `json:"uuid"`
+	ID              string `json:"ID"`
 	Groups          Groups `json:"groups"`
 	PlusReputation  int    `json:"plus_reputation"`
 	MinusReputation int    `json:"minus_reputation"`
@@ -160,7 +161,7 @@ func GetUser(c echo.Context) error {
 	db := database.DB_Users
 	userID := c.Param("id")
 
-	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"ID": userID}).Decode(&user); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -169,7 +170,7 @@ func GetUser(c echo.Context) error {
 
 	response := UserResponse{
 		Username:        user.Username,
-		UUID:            user.UUID,
+		ID:              strconv.FormatUint(uint64(user.ID), 10),
 		Groups:          convertAuthGroupToGroups(user.Groups),
 		PlusReputation:  user.PlusReputation,
 		MinusReputation: user.MinusReputation,
@@ -184,7 +185,7 @@ func GetUserReputation(c echo.Context) error {
 	db := database.DB_Users
 	userID := c.Param("id")
 
-	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"ID": userID}).Decode(&user); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -217,7 +218,7 @@ func ListUsers(c echo.Context) error {
 		}
 		users = append(users, UserResponse{
 			Username:        user.Username,
-			UUID:            user.UUID,
+			ID:              strconv.FormatUint(uint64(user.ID), 10),
 			Groups:          convertAuthGroupToGroups(user.Groups),
 			PlusReputation:  user.PlusReputation,
 			MinusReputation: user.MinusReputation,
@@ -252,7 +253,7 @@ func ListUsersByReputation(c echo.Context) error {
 		}
 		users = append(users, UserResponse{
 			Username:        user.Username,
-			UUID:            user.UUID,
+			ID:              strconv.FormatUint(uint64(user.ID), 10),
 			Groups:          convertAuthGroupToGroups(user.Groups),
 			PlusReputation:  user.PlusReputation,
 			MinusReputation: user.MinusReputation,
@@ -286,7 +287,7 @@ func ListUsersByJoinDate(c echo.Context) error {
 		}
 		users = append(users, UserResponse{
 			Username:        user.Username,
-			UUID:            user.UUID,
+			ID:              strconv.FormatUint(uint64(user.ID), 10),
 			Groups:          convertAuthGroupToGroups(user.Groups),
 			PlusReputation:  user.PlusReputation,
 			MinusReputation: user.MinusReputation,
@@ -321,7 +322,7 @@ func ListUsersByLastLogin(c echo.Context) error {
 		}
 		users = append(users, UserResponse{
 			Username:        user.Username,
-			UUID:            user.UUID,
+			ID:              strconv.FormatUint(uint64(user.ID), 10),
 			Groups:          convertAuthGroupToGroups(user.Groups),
 			PlusReputation:  user.PlusReputation,
 			MinusReputation: user.MinusReputation,
@@ -409,7 +410,7 @@ func UpdateUserGroups(c echo.Context) error {
 	var user models.User
 
 	// Find the user by ID
-	if err := db.Collection("users").FindOne(context.Background(), bson.M{"uuid": userID}).Decode(&user); err != nil {
+	if err := db.Collection("users").FindOne(context.Background(), bson.M{"ID": userID}).Decode(&user); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
 		}
@@ -440,7 +441,7 @@ func UpdateUserGroups(c echo.Context) error {
 	}
 
 	// Save the updated user to the database
-	if err := db.Collection("users").FindOneAndReplace(context.Background(), bson.M{"uuid": userID}, user).Err(); err != nil {
+	if err := db.Collection("users").FindOneAndReplace(context.Background(), bson.M{"ID": userID}, user).Err(); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user groups"})
 	}
 

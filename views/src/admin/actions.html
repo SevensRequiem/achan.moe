@@ -1,0 +1,112 @@
+{{define "page"}}
+<div id="buttons">
+    <select id="action-count" class="form-select">
+        <option value="10">10</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="250">250</option>
+    </select>
+    <button data-action="threads" class="btn btn-primary">Show Thread Actions</button>
+    <button data-action="posts" class="btn btn-primary">Show Post Actions</button>
+    <button data-action="bans" class="btn btn-primary">Show Ban Actions</button>
+    <button data-action="announcements" class="btn btn-primary">Show Announcement Actions</button>
+</div>
+
+<table>
+    <thead>
+            <th>Action</th>
+            <th>Timestamp</th>
+            <th>User</th>
+            <th>IP</th>
+            <th>Details</th>
+            <th>Link</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const threadsButton = document.querySelector('button[data-action="threads"]');
+
+        threadsButton.addEventListener('click', function () {
+            const count = document.getElementById('action-count').value;
+            fetch(`/actions/threads?count=${count}`)
+                .then(response => response.json())
+                .then(data => {
+                    const table = document.querySelector('table tbody');
+                    table.innerHTML = '';
+                    data.forEach(action => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${action.action}</td>
+                            <td>${new Date(action.timestamp * 1000).toLocaleString()}</td>
+                            <td>${action.ip}</td>
+                            <td>${action.user}</td>
+                            <td>${action.details}</td>
+                            <td><a href="/board/${action.BoardID}/${action.ThreadID}">Link</a></td>
+                        `; 
+                        table.appendChild(row);
+                    });
+                });
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const postsButton = document.querySelector('button[data-action="posts"]');
+
+        postsButton.addEventListener('click', function () {
+            const count = document.getElementById('action-count').value;
+            fetch(`/actions/posts?count=${count}`)
+                .then(response => response.json())
+                .then(data => {
+                    const table = document.querySelector('table tbody');
+                    table.innerHTML = '';
+                    data.forEach(action => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${action.action}</td>
+                            <td>${new Date(action.timestamp * 1000).toLocaleString()}</td>
+                            <td>${action.ip}</td>
+                            <td>${action.user}</td>
+                            <td>${action.details}</td>
+                            <td><a href="/board/${action.BoardID}/${action.ThreadID}">Link</a></td>
+                        `; 
+                        table.appendChild(row);
+                    });
+                });
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const bansButton = document.querySelector('button[data-action="bans"]');
+
+        bansButton.addEventListener('click', function () {
+            const count = document.getElementById('action-count').value;
+            fetch(`/actions/bans?count=${count}`)
+                .then(response => response.json())
+                .then(data => {
+                    const table = document.querySelector('table tbody');
+                    table.innerHTML = '';
+                    data.forEach(action => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${action.action}</td>
+                            <td>${new Date(action.timestamp * 1000).toLocaleString()}</td>
+                            <td>${action.ip}</td>
+                            <td>${action.user}</td>
+                            <td>${action.details}</td>
+                            <td><a href="/board/${action.BoardID}/${action.ThreadID}">Link</a></td>
+                        `; 
+                        table.appendChild(row);
+                    });
+                });
+        });
+    });
+
+    
+
+
+
+</script>
+{{end}}

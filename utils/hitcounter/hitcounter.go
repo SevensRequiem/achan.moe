@@ -7,30 +7,21 @@ import (
 	"time"
 
 	"achan.moe/database"
+	"achan.moe/logs"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type HitCounter struct {
 	ID    int `gorm:"primaryKey"`
-	Hits  int // Exported field
+	Hits  int
 	mutex sync.Mutex
 	cache map[string]time.Time
 }
 
 var db = database.DB_Main
 
-func init() {
-	db.CreateCollection(context.Background(), "hits")
-	initialdocument()
-}
-func initialdocument() {
-	_, err := db.Collection("hits").InsertOne(context.Background(), bson.M{"hits": 0})
-	if err != nil {
-		log.Fatal(err)
-	}
-}
 func NewHitCounter() *HitCounter {
-	log.Println("Creating a new HitCounter...")
 	return &HitCounter{
 		cache: make(map[string]time.Time),
 	}
@@ -45,13 +36,14 @@ func (h *HitCounter) Hit(ip string) {
 		return
 	}
 
-	// Increment the count in the first row
-	_, err := db.Collection("hits").UpdateOne(context.Background(), bson.M{}, bson.M{"$inc": bson.M{"hits": 1}})
+	options := options.Update().SetUpsert(true)
+
+	_, err := db.Collection("stats").UpdateOne(context.Background(), bson.M{"_id": 1}, bson.M{"$inc": bson.M{"hit_count": 1}}, options)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Printf("Counted a hit from IP %s.\n", ip)
+	logs.Info("Hit from IP %s recorded.\n", ip)
 	h.cache[ip] = time.Now()
 	h.Hits++
 }

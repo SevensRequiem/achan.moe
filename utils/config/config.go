@@ -1,13 +1,18 @@
 package config
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"os"
-	"strconv"
+	"context"
+	"sync"
 
-	"github.com/labstack/echo/v4"
+	"achan.moe/database"
+	"achan.moe/logs"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+)
+
+var (
+	globalConfig *GlobalConfig
+	configMutex  sync.RWMutex // To ensure thread-safe access to the globalConfig
 )
 
 type GlobalConfig struct {
@@ -15,168 +20,140 @@ type GlobalConfig struct {
 	Version       string `json:"version"`
 	Description   string `json:"description"`
 	Fork          string `json:"fork"`
-	Path          string `json:"path"`
 	MinecraftIP   string `json:"minecraft-ip"`
 	MinecraftPort int    `json:"minecraft-port"`
 }
 
-// Custom unmarshalling method for GlobalConfig
-func (gc *GlobalConfig) UnmarshalJSON(data []byte) error {
-	type Alias GlobalConfig
-	aux := &struct {
-		MinecraftPort interface{} `json:"minecraft-port"`
-		*Alias
-	}{
-		Alias: (*Alias)(gc),
-	}
-
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-
-	switch v := aux.MinecraftPort.(type) {
-	case string:
-		port, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("invalid minecraft-port: %w", err)
-		}
-		gc.MinecraftPort = port
-	case float64:
-		gc.MinecraftPort = int(v)
-	default:
-		return fmt.Errorf("invalid type for minecraft-port")
-	}
-
-	return nil
-}
-
-type BoardConfig struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Locked      bool   `json:"locked"`
-	AllowImages bool   `json:"allowimages"`
-	ImageOnly   bool   `json:"imageonly"`
-	AllowLinks  bool   `json:"allowlinks"`
-	RateLimit   int    `json:"ratelimit"`
-	MaxThreads  int    `json:"maxthreads"`
-	MaxSize     int    `json:"maxsize"`
-}
-
-var globalConfig GlobalConfig
-
 func init() {
-	// Create directories if they don't exist
-	if err := os.MkdirAll("config/boards", 0755); err != nil {
-		log.Fatal(err)
+	// Ensure the database connection is established
+	if database.DB_Main == nil {
+		logs.Error("Database connection is not initialized")
+		return
 	}
 
-	// Load default global config into memory
-	file, err := os.Open("config/global.json")
+	// Create an index on the "name" field
+	_, err := database.DB_Main.Collection("config").Indexes().CreateOne(context.Background(), mongo.IndexModel{
+		Keys: bson.M{"name": 1},
+	})
 	if err != nil {
-		log.Println("No global config found, creating default")
-		file, err = os.Create("config/global.json")
-		if err != nil {
-			log.Fatal(err)
-		}
-		// Initialize with default values and write to the file
-		defaultConfig := GlobalConfig{
+		logs.Error("Failed to create index on config collection: %v", err)
+	}
+
+	// Check if the config exists in the database
+	if err := database.DB_Main.Collection("config").FindOne(context.Background(), bson.M{}).Err(); err != nil {
+		// Insert a default configuration if none exists
+		config := GlobalConfig{
 			Name:          "achan",
-			Version:       "1.0.0",
-			Description:   "a simple imageboard written in go",
-			Fork:          "https://github.com/SevensRequiem/achan.moe",
+			Version:       "0.0.4",
+			Description:   "a simple imageboard written in Go",
+			Fork:          "achan",
 			MinecraftIP:   "69.164.202.38",
 			MinecraftPort: 25565,
 		}
-		if err := WriteJSON(file, defaultConfig); err != nil {
-			log.Fatal(err)
-		}
-		file.Close()
-		// Reopen the file for reading
-		file, err = os.Open("config/global.json")
+		_, err := database.DB_Main.Collection("config").InsertOne(context.Background(), config)
 		if err != nil {
-			log.Fatal(err)
+			logs.Error("Failed to insert initial config: %v", err)
+			return
 		}
+		logs.Info("Inserted initial config: %+v", config)
 	}
-	defer file.Close()
 
-	// Decode the JSON file into the GlobalConfig struct
-	if err := ReadJSON(file, &globalConfig); err != nil {
-		log.Fatal(err)
+	// Load the configuration into memory
+	config, err := GetConfig()
+	if err != nil {
+		logs.Error("Failed to get config: %v", err)
+		return
 	}
+	setGlobalConfig(config)
+	logs.Info("Config loaded into memory: %+v", config)
 }
 
-func ReadJSON(file *os.File, config interface{}) error {
-	decoder := json.NewDecoder(file)
-	err := decoder.Decode(config)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func WriteJSON(file *os.File, config interface{}) error {
-	encoder := json.NewEncoder(file)
-	err := encoder.Encode(config)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func ReadGlobalConfig() GlobalConfig {
-	file, err := os.Open("config/global.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
+func GetConfig() (*GlobalConfig, error) {
 	var config GlobalConfig
-	err = ReadJSON(file, &config)
+	err := database.DB_Main.Collection("config").FindOne(context.Background(), bson.M{}).Decode(&config)
 	if err != nil {
-		log.Fatal(err)
+		logs.Error("Failed to get config from database: %v", err)
+		return nil, err
 	}
-	return config
+	logs.Debug("Config retrieved from database: %+v", config)
+	return &config, nil
 }
 
-func WriteGlobalConfig(c echo.Context) error {
-	// Parse multipart form
-	err := c.Request().ParseMultipartForm(10 << 20) // 10 MB
+func SetConfig(config *GlobalConfig) error {
+	_, err := database.DB_Main.Collection("config").UpdateOne(context.Background(), bson.M{}, bson.M{"$set": config})
 	if err != nil {
-		return fmt.Errorf("failed to parse multipart form: %w", err)
+		logs.Error("Failed to set config: %v", err)
+		return err
 	}
-
-	// Update globalConfig with form values
-	globalConfig.Name = c.FormValue("name")
-	globalConfig.Description = c.FormValue("description")
-	globalConfig.Fork = c.FormValue("fork")
-	globalConfig.MinecraftIP = c.FormValue("minecraft")
-
-	// Open the global config file for writing
-	file, err := os.OpenFile("config/global.json", os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open global config file for writing: %w", err)
-	}
-	defer file.Close()
-
-	if err := WriteJSON(file, globalConfig); err != nil {
-		return fmt.Errorf("failed to write JSON to config file: %w", err)
-	}
-
+	setGlobalConfig(config) // Update the in-memory config
 	return nil
 }
 
-func ReadBoardConfig(id string) BoardConfig {
-	file, err := os.Open("config/boards/" + id + ".json")
+func UpdateConfig(key string, value interface{}) error {
+	_, err := database.DB_Main.Collection("config").UpdateOne(context.Background(), bson.M{}, bson.M{"$set": bson.M{key: value}})
 	if err != nil {
-		log.Fatal(err)
+		logs.Error("Failed to update config: %v", err)
+		return err
 	}
-	defer file.Close()
 
-	var config BoardConfig
-	err = ReadJSON(file, &config)
-	if err != nil {
-		log.Fatal(err)
+	configMutex.Lock()
+	defer configMutex.Unlock()
+	switch key {
+	case "name":
+		globalConfig.Name = value.(string)
+	case "version":
+		globalConfig.Version = value.(string)
+	case "description":
+		globalConfig.Description = value.(string)
+	case "fork":
+		globalConfig.Fork = value.(string)
+	case "minecraft-ip":
+		globalConfig.MinecraftIP = value.(string)
+	case "minecraft-port":
+		globalConfig.MinecraftPort = value.(int)
 	}
-	return config
+	return nil
+}
+
+func GetConfigValue(key string) (interface{}, error) {
+	configMutex.RLock()
+	defer configMutex.RUnlock()
+
+	switch key {
+	case "name":
+		return globalConfig.Name, nil
+	case "version":
+		return globalConfig.Version, nil
+	case "description":
+		return globalConfig.Description, nil
+	case "fork":
+		return globalConfig.Fork, nil
+	case "minecraft-ip":
+		return globalConfig.MinecraftIP, nil
+	case "minecraft-port":
+		return globalConfig.MinecraftPort, nil
+	default:
+		logs.Error("Invalid config key: %s", key)
+		return nil, nil
+	}
+}
+func setGlobalConfig(config *GlobalConfig) {
+	if config == nil {
+		logs.Error("Attempted to set a nil globalConfig")
+		return
+	}
+	configMutex.Lock()
+	defer configMutex.Unlock()
+	globalConfig = config
+	logs.Debug("Global config set: %+v", globalConfig)
+}
+func GetGlobalConfig() *GlobalConfig {
+	configMutex.RLock()
+	defer configMutex.RUnlock()
+	logs.Debug("Global config accessed: %+v", globalConfig)
+	if globalConfig == nil {
+		logs.Error("Global config is nil")
+		return nil
+	}
+	return globalConfig
 }

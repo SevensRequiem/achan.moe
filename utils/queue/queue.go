@@ -19,14 +19,16 @@ var Q *Queue
 func init() {
 	fmt.Println("Creating Queues...")
 	Q = NewQueue() // Initialize the global Q variable
-	Q.CreateQueue("thread:create", 500)
+	Q.CreateQueue("thread:create", 5000)
 	Q.CreateQueue("thread:delete", 10)
 
-	Q.CreateQueue("post:create", 1000)
+	Q.CreateQueue("post:create", 10000)
 	Q.CreateQueue("post:delete", 100)
 
 	Q.CreateQueue("mail:send", 100)
 	Q.CreateQueue("mail:remind", 100)
+
+	Q.CreateQueue("client:hit", 100000)
 	fmt.Println("Queues Created")
 }
 

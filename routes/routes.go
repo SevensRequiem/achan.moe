@@ -11,13 +11,13 @@ import (
 	"achan.moe/boardimages"
 	"achan.moe/home"
 	"achan.moe/user"
+	"achan.moe/utils/actions"
+	"achan.moe/utils/announcements"
 	"achan.moe/utils/cache"
 	captcha "achan.moe/utils/captcha"
-	"achan.moe/utils/config"
 	"achan.moe/utils/hitcounter"
-	"achan.moe/utils/minecraft"
 	"achan.moe/utils/news"
-	"achan.moe/utils/stats"
+	"achan.moe/utils/ratelimit"
 	"achan.moe/utils/websocket"
 	"github.com/labstack/echo/v4"
 )
@@ -47,90 +47,83 @@ func Routes(e *echo.Echo) {
 
 	e.GET("/admin", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return home.AdminHandler(c)
 	})
 
 	e.GET("/admin/dashboard", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return home.AdminDashboardHandler(c)
 	})
 
 	e.GET("/admin/boards", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return home.AdminBoardsHandler(c)
 	})
 
 	e.GET("/admin/users", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return home.AdminUsersHandler(c)
 	})
 
 	e.POST("/admin/user/edit", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return auth.EditUser(c)
 	})
 
 	e.GET("/admin/config", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return home.AdminConfigHandler(c)
 	})
 
-	e.POST("/admin/config", func(c echo.Context) error {
-		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		return config.WriteGlobalConfig(c)
-	})
-
 	e.GET("/admin/bans", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return home.AdminBansHandler(c)
 	})
 
 	e.GET("/admin/update", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return home.AdminUpdateHandler(c)
 	})
 
 	e.POST("/admin/board", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		admin.CreateBoard(c)
 		return nil
 	})
 	e.GET("/admin/news", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		return home.AdminNewsHandler(c)
 	})
 	e.POST("/admin/addnews", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		news.NewNews(c)
 		return nil
 	})
 	e.DELETE("/admin/delete/:b", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		admin.DeleteBoard(c)
 		return nil
@@ -138,17 +131,70 @@ func Routes(e *echo.Echo) {
 
 	e.POST("/admin/ban", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		bans.ManualBanIP(c)
 		return nil
 	})
 	e.POST("/admin/unban", func(c echo.Context) error {
 		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
 		}
 		bans.UnbanIP(c)
 		return nil
+	})
+
+	e.POST("/admin/announcement", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return announcements.AddAnnouncement(c)
+	})
+	e.GET("/admin/announcement", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return home.AdminAnnouncementsHandler(c)
+	})
+
+	e.GET("/admin/actions", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return home.AdminActionsHandler(c)
+	})
+	e.GET("/admin/reports", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return home.AdminReportsHandler(c)
+	})
+	e.GET("/admin/update", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return home.AdminUpdateHandler(c)
+	})
+
+	e.DELETE("/admin/announcement", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return announcements.DeleteAnnouncement(c)
+	})
+
+	e.DELETE("/admin/news", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return news.DeleteNews(c)
+	})
+
+	e.DELETE("/admin/banner", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return banners.DeleteBannerHandler(c)
 	})
 	// static files
 	e.Static("/assets", "assets")
@@ -169,23 +215,81 @@ func Routes(e *echo.Echo) {
 		boardID := c.Param("b")
 		return boardimages.ReturnThumb(c, boardID, thumbID)
 	})
-	e.GET("/banner/:b/global", func(c echo.Context) error {
-		return banners.GetRandomGlobalBanner(c)
+	e.GET("/api/banner/global/:id", func(c echo.Context) error {
+		id := c.Param("id")
+		if id == "" {
+			return c.JSON(http.StatusBadRequest, "Missing ID")
+		}
+		return banners.GetGlobalBanner(c, id)
 	})
 
-	e.GET("/banner/:b/local", func(c echo.Context) error {
+	e.GET("/api/banner/local/:b/:id", func(c echo.Context) error {
 		boardID := c.Param("b")
-		return banners.GetRandomLocalBanner(c, boardID)
+		id := c.Param("id")
+		if id == "" {
+			return c.JSON(http.StatusBadRequest, "Missing ID")
+		}
+		if boardID == "" {
+			return c.JSON(http.StatusBadRequest, "Missing board ID")
+		}
+		return banners.GetLocalBanner(c, boardID, id)
 	})
 	e.GET("/banner/:b", func(c echo.Context) error {
 		boardID := c.Param("b")
 		return banners.GetRandomBanner(c, boardID)
+	})
+
+	e.GET("/api/banners/global", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return banners.ListGlobalBanners(c)
+	})
+	e.GET("/api/banners/local/:boardid", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		return banners.ListLocalBanners(c)
+	})
+
+	e.DELETE("/api/banner/global/:id", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		id := c.Param("id")
+		if id == "" {
+			return c.JSON(http.StatusBadRequest, "Missing ID")
+		}
+		return banners.DeleteGlobalBanner(c, id)
+	})
+	e.DELETE("/api/banner/local/:b/:id", func(c echo.Context) error {
+		if !auth.AdminCheck(c) {
+			return c.JSON(http.StatusUnauthorized, "Unauthorized")
+		}
+		boardID := c.Param("b")
+		id := c.Param("id")
+		if id == "" {
+			return c.JSON(http.StatusBadRequest, "Missing ID")
+		}
+		if boardID == "" {
+			return c.JSON(http.StatusBadRequest, "Missing board ID")
+		}
+		return banners.DeleteLocalBanner(c, boardID, id)
 	})
 	//auth
 	e.GET("/login", func(c echo.Context) error {
 		return auth.LoginHandler(c)
 	})
 	e.POST("/login", func(c echo.Context) error {
+		exceeded, err := ratelimit.LoginHandler(c)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Internal server error")
+		}
+		if exceeded {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "You are being rate limited. Please try again later.",
+			})
+		}
 		return auth.LoginHandler(c)
 	})
 	e.GET("/logout", func(c echo.Context) error {
@@ -193,9 +297,21 @@ func Routes(e *echo.Echo) {
 	})
 
 	e.GET("/register", func(c echo.Context) error {
+		if auth.AuthCheck(c) {
+			return c.Redirect(http.StatusSeeOther, "/")
+		}
 		return home.RegisterHandler(c)
 	})
 	e.POST("/register", func(c echo.Context) error {
+		exceeded, err := ratelimit.RegisterHandler(c)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Internal server error")
+		}
+		if exceeded {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "You are being rate limited. Please try again later.",
+			})
+		}
 		return auth.NewUser(c)
 	})
 
@@ -230,27 +346,6 @@ func Routes(e *echo.Echo) {
 		}
 		return bans.GetBansDeleted(c)
 	})
-	e.POST("/api/ban", func(c echo.Context) error {
-		if !auth.AdminCheck(c) {
-			c.JSON(http.StatusUnauthorized, "Unauthorized")
-		}
-		return bans.BanIP(c)
-	})
-
-	// statistics
-	e.GET("/api/contentsize", func(c echo.Context) error {
-		return stats.ReturnContentSizeFromDB(c)
-	})
-	e.GET("/api/admin/stats", func(c echo.Context) error {
-		if !auth.AdminCheck(c) {
-			return c.JSON(401, "Unauthorized")
-		}
-		return stats.GetStats(c)
-	})
-	e.GET("/api/minecraft", func(c echo.Context) error {
-		return minecraft.JSONStatus(c)
-	})
-
 	// latest
 	e.GET("/api/latest", func(c echo.Context) error {
 		threads := cache.GetLatestThreadsHandler()
@@ -259,21 +354,28 @@ func Routes(e *echo.Echo) {
 
 	// news
 	e.GET("/api/news", func(c echo.Context) error {
-		news := cache.GetAllNewsHandler()
+		news := cache.GetAllNewsHandler(c)
 		return c.JSON(http.StatusOK, news)
 	})
 	// captcha
 	e.GET("/api/gencaptcha", func(c echo.Context) error {
-		return captcha.GenerateCaptchaHandler(c)
+		exceeded, err := ratelimit.CaptchaHandler(c)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Internal server error")
+		}
+		if exceeded {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "You are being rate limited. Please try again later.",
+			})
+		}
+		return captcha.GetCaptcha(c)
 	})
-	e.POST("/api/verifycaptcha", func(c echo.Context) error {
-		return captcha.VerifyCaptchaHandler(c)
+
+	e.GET("/api/debug/captcha", func(c echo.Context) error {
+		return captcha.GetCurrentCaptcha(c)
 	})
 
 	// server status
-	e.GET("/api/status", func(c echo.Context) error {
-		return stats.ServerStatus(c)
-	})
 
 	// websocket
 	e.GET("/ws", func(c echo.Context) error {
@@ -293,17 +395,35 @@ func Routes(e *echo.Echo) {
 	})
 
 	e.POST("/board/:b", func(c echo.Context) error {
+		exceeded, err := ratelimit.ThreadHandler(c)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Internal server error")
+		}
+		if exceeded {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "You are being rate limited. Please try again later.",
+			})
+		}
 		board.CreateThread(c)
 		return nil
 	})
 
 	e.POST("/post/:b/:t", func(c echo.Context) error {
+		exceeded, err := ratelimit.PostHandler(c)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, "Internal server error")
+		}
+		if exceeded {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "You are being rate limited. Please try again later.",
+			})
+		}
 		board.CreatePost(c)
 		return nil
 	})
 
 	e.GET("/api/boards", func(c echo.Context) error {
-		boards := cache.GetBoardsHandler()
+		boards := cache.GetBoards()
 		return c.JSON(http.StatusOK, boards)
 	})
 
@@ -320,11 +440,6 @@ func Routes(e *echo.Echo) {
 	e.GET("/api/board/:b/thread/:t", func(c echo.Context) error {
 		thread := cache.GetThreadHandler(c, c.Param("b"), c.Param("t"))
 		return c.JSON(http.StatusOK, thread)
-	})
-
-	e.GET("/test/thumb/:b/:t", func(c echo.Context) error {
-		thumbnail := cache.GetThumbnail(c.Param("b"), c.Param("t"))
-		return c.JSON(http.StatusOK, thumbnail)
 	})
 
 	e.DELETE("/board/:b/:t", func(c echo.Context) error {
@@ -367,4 +482,5 @@ func Routes(e *echo.Echo) {
 		return home.AdminBannersHandler(c)
 	})
 	user.Routes(e)
+	actions.Routes(e)
 }

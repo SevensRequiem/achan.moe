@@ -1,13 +1,15 @@
 package mail
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 
+	"achan.moe/logs"
 	"achan.moe/utils/queue"
-	mail "github.com/wneessen/go-mail" // Ensure the correct version and alias
+	"github.com/go-mail/mail/v2"
 )
 
 type Mail struct {
@@ -31,28 +33,28 @@ func (m *Mail) Send() error {
 		return fmt.Errorf("Invalid SMTP port: %v", err)
 	}
 
-	msg := mail.NewMsg()
-	if err := msg.From(smtpUser); err != nil {
-		return fmt.Errorf("failed to set From address: %v", err)
-	}
-	if err := msg.To(m.To); err != nil {
-		return fmt.Errorf("failed to set To address: %v", err)
-	}
-	msg.Subject(m.Subject)
-	msg.SetBodyString(mail.TypeTextPlain, m.Body)
+	d := mail.NewDialer(smtpHost, port, smtpUser, smtpPass)
+	d.StartTLSPolicy = mail.NoStartTLS
 
-	client, err := mail.NewClient(smtpHost, mail.WithPort(port), mail.WithSMTPAuth(mail.SMTPAuthPlain),
-		mail.WithUsername(smtpUser), mail.WithPassword(smtpPass))
-	if err != nil {
-		return fmt.Errorf("failed to create mail client: %v", err)
+	if d.TLSConfig == nil {
+		d.TLSConfig = &tls.Config{}
 	}
 
-	if err := client.DialAndSend(msg); err != nil {
-		log.Printf("Failed to send email to %s: %v", m.To, err)
-		return err
-	}
+	d.TLSConfig.InsecureSkipVerify = true
+	d.TLSConfig.ServerName = smtpHost
+	d.TLSConfig.MinVersion = 0x0303 // TLS 1.2
+	d.TLSConfig.MaxVersion = 0x0304 // TLS 1.3
 
-	log.Printf("Email sent to %s", m.To)
+	mail := mail.NewMessage()
+	mail.SetHeader("From", smtpUser)
+	mail.SetHeader("To", m.To)
+	mail.SetHeader("Subject", m.Subject)
+	mail.SetBody("text/html", m.Body)
+	if err := d.DialAndSend(mail); err != nil {
+		logs.Error("Failed to send email: %v", err)
+		return fmt.Errorf("failed to send email: %w", err)
+	}
+	logs.Info("Email sent to %s with subject %s", m.To, m.Subject)
 	return nil
 }
 
@@ -73,7 +75,7 @@ func TestMail() {
 }
 
 func AddMailToQueue(to, subject, body string) {
-	queue.NewQueue().Enqueue("mail:send", func() {
+	queue.Q.Enqueue("mail:send", func() {
 		SendEmail(to, subject, body)
 	})
 }

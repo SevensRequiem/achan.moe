@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="cache-control" content="no-cache, no-store, must-revalidate" />
+    <meta name="pragma" content="no-cache" />
+    <meta name="expires" content="0" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="title" content="achan.moe">
+    <meta name="description" content="An anonymous imageboard written in Go.">
+    <meta name="keywords" content="anonymous, imageboard, 4chan, achan">
+    <meta name="robots" content="index, follow">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="language" content="English">
+    <meta name="revisit-after" content="1 days">
+
+    <link rel="icon" type="image/png" href="{{.BaseURL}}/assets/img/favicon.png" />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link rel="canonical" href="{{.BaseURL}}" />
+
+    <title>achan.moe</title>
+    <link rel="stylesheet" href="{{.BaseURL}}/assets/css/main.css" />
+</head>
+
+<body>
+    <div id="staticbg"></div>
+    <div id="staticoverlay"></div>
+    <div id="scanlines"></div>
+    <div id="message-tab">
+        <div id="message-tab-close" onclick="document.getElementById('message-tab').style.display = 'none';">X</div>
+        <div id="message-tab-content">
+            <h3 id="message-tab-title"></h3>
+            <span id="message-tab-text"></span>
+        </div>
+    </div>
+    <style>
+        #message-tab {
+            position: fixed;
+            bottom: 50%;
+            transform: translateY(50%);
+            right: 0;
+            z-index: 9999;
+            background-color: var(--bg);
+            border: 5px solid var(--border);
+            padding: 10px;
+            margin-right: 10px;
+            width: 160px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            display: none;
+        }
+
+        #message-tab-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #message-tab-close {
+        }
+        #message-tab-text {
+            color: var(--text-main);
+        }
+        #message-tab-close {
+            color: var(--text-secondary);
+        }
+        #message-tab-close:hover {
+            color: var(--text-main);
+        }
+        #message-tab-close::before {
+            content: "[";
+            color: var(--text-secondary);
+            margin-right: 5px;
+        }
+        #message-tab-close::after {
+            content: "]";
+            color: var(--text-secondary);
+            margin-left: 5px;
+        }
+    </style>
+    <header>
+        <span id="title">{{.GlobalConfig.Name}}<span id="version">{{.GlobalConfig.Version}}</span></span>
+            <div id="boardnav">
+                {{range .Boards}}
+                <div class="spacer1"></div>
+                <a href="/board/{{.BoardID}}" title="{{.Description}}">/{{.BoardID}}/</a>
+                {{end}}
+                <div class="spacer1"></div>
+            </div>
+            <div id="mainnav">
+                <a href="/">home</a>
+                <a href="/donate">donate</a>
+                {{if .User.Username}}
+                <span class="user">[{{.User.Username}}]</span>
+                <a href="/profile">profile</a>
+                <a href="/logout">logout</a>
+                {{else}}
+                    <a href="#" onclick="ToggleLoginDropdown()">login</a>
+                    {{end}}
+                    {{if .IsAdmin}}
+                    <a href="/admin/dashboard">admin</a>
+                    {{end}}
+            </div>
+    </header>
+    <style>
+        #boardnav {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #boardnav a {
+            color: var(--green);
+            text-decoration: none;
+            font-size: 0.9em;
+            margin: 0 5px;
+        }
+        #boardnav a:hover {
+            color: var(--text-main);
+        }
+        #mainnav {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #mainnav a {
+            color: var(--green);
+            text-decoration: none;
+            font-size: 0.9em;
+            margin: 0 5px;
+        }
+        #mainnav a:hover {
+            color: var(--text-main);
+        }
+        #version {
+            color: var(--text-secondary);
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+        #title {
+            color: var(--green);
+            font-size: 1.5em;
+            font-weight: bold;
+            text-align: center;
+        }
+    </style>
+    <div id="logindropdown" style="display: none;">
+        <a href="#" onclick="ToggleLoginDropdown()">close</a>
+        <a href="/register">register</a>
+        <form action="/login" method="post">
+            <input type="text" name="username" placeholder="username" />
+            <input type="password" name="password" placeholder="password" />
+            <button type="submit">login</button>
+        </form>
+        <script>
+            // login
+            document.getElementById("logindropdown").addEventListener("submit", function (event) {
+                event.preventDefault();
+                var form = event.target;
+                var data = new FormData(form);
+                fetch(form.action, {
+                    method: form.method,
+                    body: data
+                }).then(response => response.json()).then(data => {
+                    if (data.success === "Logged in") {
+                        window.location.reload();
+                    } else {
+                        alert(data.Message);
+                    }
+                });
+            });
+        </script>
+    </div>
+    </div>
+    <div id="announcebar">
+        <span>
+            <span id="announcement" class="announcement">
+                No announcement
+            </span>
+        </span>
+    </div>
+    <div id="content">
+        {{template "content" .}}
+    </div>
+    <footer>
+        <span id="page-url">
+            >> achan.moe
+            <span id="subtitle">{{.Pagename}}</span>
+        </span>
+        <span id="socials">
+            <a href="https://discord.gg/zzZzRJy" target="_blank">discord</a>
+        </span>
+        <span id="footer-links">
+            <a href="/terms">terms</a>
+            <a href="/privacy">privacy</a>
+            <a href="/contact">contact</a>
+            <a href="{{.GlobalConfig.Fork}}" target="_blank">source</a>
+        </span>
+        <span id="site-data">
+            <span>Total: <code class="totalsize">{{.TotalSize}}</code> GB</span>
+            <span>IP: {{.IP}}</span>
+        </span>
+    </footer>
+</body>
+<script>
+    function ToggleLoginDropdown() {
+        var dropdown = document.getElementById("logindropdown");
+        if (dropdown.style.display === "none") {
+            dropdown.style.display = "block";
+        } else {
+            dropdown.style.display = "none";
+        }
+    }
+</script>
+
+</html>
+<style>
+    .status {
+        color: var(--green);
+    }
+
+    .status::before {
+        content: "[";
+        margin-right: 5px;
+        color: var(--text-secondary);
+    }
+    .status::after {
+        content: "]";
+        margin-left: 5px;
+        color: var(--text-secondary);
+    }
+
+    #logindropdown {
+        position: fixed;
+        top: 3rem;
+        right: 0;
+        z-index: 544;
+        background-color: var(--bg);
+        border: 1px solid var(--border);
+    }
+
+    #logindropdown a {
+        color: var(--green);
+    }
+
+    #logindropdown a:hover {
+        color: var(--text-main);
+    }
+
+    #logindropdown a::before {
+        content: "[";
+        margin-right: 5px;
+        color: var(--text-secondary);
+    }
+
+    #logindropdown a::after {
+        content: "]";
+        margin-left: 5px;
+        color: var(--text-secondary);
+    }
+
+    #logindropdown form {
+        display: flex;
+        flex-direction: column;
+    }
+
+    #logindropdown input {
+        margin: 5px;
+    }
+
+    #logindropdown button {
+        margin: 5px;
+    }
+
+
+    #site-data {
+        display: flex;
+        justify-content: space-between;
+    }
+    #site-data span::before {
+        content: "[";
+        margin-right: 5px;
+        color: var(--text-secondary);
+    }
+    #site-data span::after {
+        content: "]";
+        margin-left: 5px;
+        color: var(--text-secondary);
+    }
+    #site-data code.totalsize {
+        color: var(--green);
+        font-weight: bold;
+        font-size: 1.2em;
+    }
+    #page-url {
+        color: var(--green);
+    }
+    #page-url::before {
+        content: "[";
+        color: var(--text-secondary);
+        margin-right: 5px;
+    }
+    #page-url::after {
+        content: "]";
+        color: var(--text-secondary);
+        margin-left: 5px;
+    }
+    #footer-links {
+        display: flex;
+        justify-content: space-between;
+    }
+    #footer-links a {
+        color: var(--green);
+    }
+    #footer-links a:hover {
+        color: var(--text-main);
+    }
+    #footer-links a::before {
+        content: "[";
+        color: var(--text-secondary);
+        margin-right: 5px;
+    }
+    #footer-links a::after {
+        content: "]";
+        color: var(--text-secondary);
+        margin-left: 5px;
+    }
+
+    #socials {
+        display: flex;
+        justify-content: space-between;
+    }
+    #socials a {
+        color: var(--green);
+    }
+    #socials a:hover {
+        color: var(--text-main);
+    }
+    #socials a::before {
+        content: "[";
+        color: var(--text-secondary);
+        margin-right: 5px;
+    }
+    #socials a::after {
+        content: "]";
+        color: var(--text-secondary);
+        margin-left: 5px;
+    }
+    .announcement-title {
+        color: var(--green);
+    }
+
+    .announcement {
+        color: var(--text-secondary);
+    }
+
+    .announcement::before {
+        content: "// ";
+        color: var(--text-tertiary);
+        margin-right: 5px;
+    }
+</style>

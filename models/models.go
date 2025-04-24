@@ -2,7 +2,10 @@ package models
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sort"
+	"time"
 
 	"achan.moe/database"
 	"achan.moe/logs"
@@ -21,7 +24,6 @@ type Board struct {
 	Locked      bool   `bson:"locked"`
 	Archived    bool   `bson:"archived"`
 	LatestPosts bool   `bson:"latest_posts"`
-	Pages       int    `bson:"pages"`
 }
 
 type ThreadPost struct {
@@ -91,16 +93,23 @@ type Recents struct {
 	PostID string `bson:"post_id"`
 }
 
-type PostCounter struct {
-	ID        int   `bson:"_id,omitempty"`
-	PostCount int64 `bson:"post_count"`
+type Stats struct {
+	ID          int `bson:"_id,omitempty"`
+	PostCount   int `bson:"post_count"`
+	ThreadCount int `bson:"thread_count"`
+	BoardCount  int `bson:"board_count"`
+	BanCount    int `bson:"ban_count"`
+	TotalSize   int `bson:"total_size"`
+	TotalUsers  int `bson:"total_users"`
+	TotalHits   int `bson:"hit_count"`
+	TotalImages int `bson:"image_count"`
+	TotalFiles  int `bson:"file_count"`
 }
 
 // USER MODEL
 
 type User struct {
 	ID              uint   `bson:"_id"`
-	UUID            string `bson:"UUID"`
 	Username        string `bson:"username"`
 	Password        string `bson:"password"`
 	Groups          Group  `bson:"groups"`
@@ -116,6 +125,7 @@ type User struct {
 	MinusReputation int    `bson:"minus_reputation"`
 	Posts           int    `bson:"posts"`
 	Threads         int    `bson:"threads"`
+	DisplayName     string `bson:"display_name"`
 }
 
 type Group struct {
@@ -132,8 +142,127 @@ type News struct {
 	ID      string `json:"id" bson:"_id"`
 	Title   string `json:"title"`
 	Content string `json:"content"`
-	Date    string `json:"date"`
+	Date    int64  `json:"date"`
 	Author  string `json:"author"`
+}
+
+// bans
+
+type Bans struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty"`
+	Status    string             `bson:"status"`
+	IP        string             `bson:"ip"`
+	Reason    string             `bson:"reason"`
+	Username  string             `bson:"username"`
+	UserID    uint               `bson:"userid"`
+	Timestamp string             `bson:"timestamp"`
+	Expires   string             `bson:"expires"`
+}
+
+// actions
+
+type AnnouncementActions struct {
+	ID        primitive.ObjectID `json:"id" bson:"_id"`
+	BoardID   string             `json:"boardid" bson:"boardid"`
+	Content   string             `json:"content" bson:"content"`
+	Timestamp int64              `json:"timestamp" bson:"timestamp"`
+	UserID    uint               `json:"user" bson:"user"`
+	IP        string             `json:"ip" bson:"ip"`
+	Action    string             `json:"action" bson:"action"`
+}
+
+type BanActions struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty"`
+	Status    string             `bson:"status" json:"status"`
+	IP        string             `bson:"ip" json:"ip"`
+	Reason    string             `bson:"reason" json:"reason"`
+	Username  string             `bson:"username" json:"username"`
+	UserID    uint               `bson:"userid" json:"userid"`
+	Timestamp string             `bson:"timestamp" json:"timestamp"`
+	Expires   string             `bson:"expires" json:"expires"`
+}
+type UnbanActions struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty"`
+	Status    string             `bson:"status" json:"status"`
+	IP        string             `bson:"ip" json:"ip"`
+	Reason    string             `bson:"reason" json:"reason"`
+	Username  string             `bson:"username" json:"username"`
+	UserID    uint               `bson:"userid" json:"userid"`
+	Timestamp string             `bson:"timestamp" json:"timestamp"`
+	Expires   string             `bson:"expires" json:"expires"`
+}
+
+type BoardActions struct {
+	ID        primitive.ObjectID `json:"id" bson:"_id"`
+	BoardID   string             `json:"boardid" bson:"boardid"`
+	BoardName string             `json:"boardname" bson:"boardname"`
+	Username  string             `json:"user" bson:"user"`
+	UserID    uint               `json:"userid" bson:"userid"`
+	Action    string             `json:"action" bson:"action"`
+	Timestamp int64              `json:"timestamp" bson:"timestamp"`
+	IP        string             `json:"ip" bson:"ip"`
+}
+type ThreadActions struct {
+	ID             primitive.ObjectID `json:"id" bson:"_id"`
+	BoardID        string             `json:"boardid" bson:"boardid"`
+	ThreadID       string             `json:"threadid" bson:"threadid"`
+	PostID         string             `json:"postid" bson:"postid"`
+	Username       string             `json:"user" bson:"user"`
+	UserID         uint               `json:"userid" bson:"userid"`
+	Action         string             `json:"action" bson:"action"`
+	Timestamp      int64              `json:"timestamp" bson:"timestamp"`
+	IP             string             `json:"ip" bson:"ip"`
+	Subject        string             `json:"subject" bson:"subject"`
+	PartialContent string             `json:"partial_content" bson:"partial_content"`
+	Image          string             `json:"image" bson:"image"`
+	Thumbnail      string             `json:"thumb" bson:"thumb"`
+}
+type PostActions struct {
+	ID             primitive.ObjectID `json:"id" bson:"_id"`
+	BoardID        string             `json:"boardid" bson:"boardid"`
+	ThreadID       string             `json:"threadid" bson:"threadid"`
+	PostID         string             `json:"postid" bson:"postid"`
+	Username       string             `json:"user" bson:"user"`
+	UserID         uint               `json:"userid" bson:"userid"`
+	Action         string             `json:"action" bson:"action"`
+	Timestamp      int64              `json:"timestamp" bson:"timestamp"`
+	IP             string             `json:"ip" bson:"ip"`
+	Subject        string             `json:"subject" bson:"subject"`
+	PartialContent string             `json:"partial_content" bson:"partial_content"`
+	Image          string             `json:"image" bson:"image"`
+	Thumbnail      string             `json:"thumb" bson:"thumb"`
+}
+type ConfigActions struct {
+	ID            primitive.ObjectID `json:"id" bson:"_id"`
+	AdminUsername string             `json:"admin_user" bson:"admin_user"`
+	Action        string             `json:"action" bson:"action"`
+	Timestamp     int64              `json:"timestamp" bson:"timestamp"`
+	IP            string             `json:"ip" bson:"ip"`
+}
+
+type DataActions struct {
+	ID        primitive.ObjectID `json:"id" bson:"_id"`
+	Action    string             `json:"action" bson:"action"`
+	Timestamp int64              `json:"timestamp" bson:"timestamp"`
+	IP        string             `json:"ip" bson:"ip"`
+}
+
+type NewsActions struct {
+	ID        primitive.ObjectID `json:"id" bson:"_id"`
+	Title     string             `json:"title" bson:"title"`
+	Content   string             `json:"content" bson:"content"`
+	Timestamp int64              `json:"timestamp" bson:"timestamp"`
+	Author    string             `json:"author" bson:"author"`
+	IP        string             `json:"ip" bson:"ip"`
+}
+
+type UserActions struct {
+	ID        primitive.ObjectID `json:"id" bson:"_id"`
+	Username  string             `json:"username" bson:"username"`
+	UserID    uint               `json:"userid" bson:"userid"`
+	Action    string             `json:"action" bson:"action"`
+	Timestamp int64              `json:"timestamp" bson:"timestamp"`
+	IP        string             `json:"ip" bson:"ip"`
 }
 
 // FUNCS
@@ -269,4 +398,147 @@ func GetThreads(boardID string) []ThreadPost {
 	}
 
 	return sortedThreads
+}
+
+type Announcement struct {
+	ID        string `json:"id" bson:"_id"`
+	BoardID   string `json:"boardid" bson:"boardid"`
+	Content   string `json:"content" bson:"content"`
+	Timestamp int64  `json:"timestamp" bson:"timestamp"`
+	User      string `json:"user" bson:"user"`
+	UserID    string `json:"userid" bson:"userid"`
+}
+
+func GetAllAnnouncements() []Announcement {
+	var announcements []Announcement
+	db := database.DB_Main
+	cursor, err := db.Collection("announcements").Find(context.Background(), bson.M{})
+	if err != nil {
+		return nil
+	}
+	defer cursor.Close(context.Background())
+
+	for cursor.Next(context.Background()) {
+		var announcement Announcement
+		err := cursor.Decode(&announcement)
+		if err != nil {
+			return nil
+		}
+		announcements = append(announcements, announcement)
+	}
+	return announcements
+}
+
+func GetAnnouncementsByBoard(boardID string) ([]Announcement, error) {
+	var announcements []Announcement
+	db := database.DB_Main
+	cursor, err := db.Collection("announcements").Find(context.Background(), bson.M{"boardid": boardID})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	for cursor.Next(context.Background()) {
+		var announcement Announcement
+		err := cursor.Decode(&announcement)
+		if err != nil {
+			return nil, err
+		}
+		announcements = append(announcements, announcement)
+	}
+	return announcements, nil
+}
+
+func GetAnnouncementByType(announcementType string) *Announcement {
+	var announcement Announcement
+	db := database.DB_Main
+	err := db.Collection("announcements").FindOne(context.Background(), bson.M{"type": announcementType}).Decode(&announcement)
+	if err != nil {
+		return nil
+	}
+	return &announcement
+}
+
+func AddAnnouncement(boardID, content, user string) error {
+	announcement := Announcement{
+		BoardID:   boardID,
+		Content:   content,
+		Timestamp: time.Now().Unix(),
+		User:      user,
+	}
+	_, err := database.DB_Main.Collection("announcements").InsertOne(context.Background(), announcement)
+	return err
+}
+
+func DeleteAnnouncement(id string) error {
+	_, err := database.DB_Main.Collection("announcements").DeleteOne(context.Background(), bson.M{"_id": id})
+	return err
+}
+
+func GetAllNews() ([]News, error) {
+	cursor, err := database.DB_Main.Collection("news").Find(context.Background(), bson.M{})
+	if err != nil {
+		logs.Error("Error finding news: %v", err)
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var allNews []News
+	for cursor.Next(context.Background()) {
+		var news News
+		if err := cursor.Decode(&news); err != nil {
+			logs.Error("Error decoding news: %v", err)
+			continue
+		}
+		allNews = append(allNews, news)
+	}
+
+	if err := cursor.Err(); err != nil {
+		logs.Error("Cursor error: %v", err)
+		return nil, err
+	}
+
+	return allNews, nil
+}
+
+func GetAllBans() ([]Bans, error) {
+	cursor, err := database.DB_Main.Collection("bans").Find(context.Background(), bson.M{})
+	if err != nil {
+		logs.Error("Error finding bans: %v", err)
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var allBans []Bans
+	for cursor.Next(context.Background()) {
+		var ban Bans
+		if err := cursor.Decode(&ban); err != nil {
+			logs.Error("Error decoding ban: %v", err)
+			continue
+		}
+		allBans = append(allBans, ban)
+	}
+
+	if err := cursor.Err(); err != nil {
+		logs.Error("Cursor error: %v", err)
+		return nil, err
+	}
+
+	return allBans, nil
+}
+
+func GetAllStats() ([]byte, error) {
+	var stats Stats
+	err := database.DB_Main.Collection("stats").FindOne(context.Background(), bson.M{"_id": 1}).Decode(&stats)
+	if err != nil {
+		logs.Error("Error finding stats: %v", err)
+		return nil, err
+	}
+	fmt.Println("Stats: ", stats)
+	jsonData, err := json.Marshal(stats)
+	if err != nil {
+		logs.Error("Error marshalling stats: %v", err)
+		return nil, err
+	}
+	return jsonData, nil
 }

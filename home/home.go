@@ -3,6 +3,7 @@ package home
 import (
 	"fmt"
 	"io"
+	"os"
 
 	"html/template"
 	"net/http"
@@ -11,11 +12,12 @@ import (
 	"achan.moe/models"
 	"achan.moe/utils/cache"
 	config "achan.moe/utils/config"
-	"achan.moe/utils/hitcounter"
-	"achan.moe/utils/news"
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 )
+
+var baseUrl = ""
 
 type TemplateRenderer struct {
 	templates *template.Template
@@ -32,15 +34,21 @@ func NewTemplateRenderer(glob string) *TemplateRenderer {
 	}
 }
 
+func init() {
+	godotenv.Load()
+	baseUrl = os.Getenv("BASE_URL")
+}
+
 func HomeHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/home.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/home.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
 	data := map[string]interface{}{}
 	data = globaldata(c)
 	data["Pagename"] = "Home"
-	data["Hits"] = hitcounter.NewHitCounter().GetHits()
+	data["Hits"] = cache.GetTotalHitCount()
+	data["News"] = cache.GetAllNewsHandler(c)
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -52,7 +60,7 @@ func HomeHandler(c echo.Context) error {
 }
 
 func BoardHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/board.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/board.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -77,7 +85,7 @@ func BoardHandler(c echo.Context) error {
 }
 
 func ThreadHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/thread.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/thread.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -109,7 +117,7 @@ func ThreadHandler(c echo.Context) error {
 	return nil
 }
 func PostHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/post.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/post.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -136,7 +144,7 @@ func ErrorHandler(err error, c echo.Context) {
 	}
 
 	if err := c.Render(code, "error.html", data); err != nil {
-		c.Logger().Error(err)
+		c.String(http.StatusInternalServerError, err.Error())
 	}
 }
 func globaldata(c echo.Context) map[string]interface{} {
@@ -166,12 +174,21 @@ func globaldata(c echo.Context) map[string]interface{} {
 	data["PostCount"] = cache.GetGlobalPostCount()
 	data["TotalSize"] = cache.GetTotalSize()
 	data["TotalUsers"] = cache.GetTotalUserCount()
-	data["GlobalConfig"] = cache.GetGlobalConfig()
+	data["GlobalConfig"] = config.GetGlobalConfig()
 	data["Country"] = c.Request().Header.Get("CF-IPCountry")
+	var globalannouncement string
+	announcement := cache.GetGlobalAnnouncement()
+	if announcement.Content == "" {
+		globalannouncement = ""
+	} else {
+		globalannouncement = announcement.Content
+	}
+	data["GlobalAnnouncement"] = globalannouncement
+	data["BaseURL"] = baseUrl
 	return data
 }
 func RegisterHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/register.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/register.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -190,7 +207,7 @@ func AdminHandler(c echo.Context) error {
 	if !auth.AdminCheck(c) {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -213,7 +230,7 @@ func AdminDashboardHandler(c echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/dashboard.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/dashboard.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -237,7 +254,7 @@ func AdminBoardsHandler(c echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/boards.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/boards.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -259,7 +276,7 @@ func AdminUsersHandler(c echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/users.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/users.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -281,14 +298,13 @@ func AdminConfigHandler(c echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/config.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/config.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
 	data := globaldata(c)
 	data["Pagename"] = "Admin Config"
-	data["GlobalConfig"] = config.ReadGlobalConfig()
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -304,7 +320,7 @@ func AdminBansHandler(c echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/bans.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/bans.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -325,7 +341,7 @@ func AdminUpdateHandler(c echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/update.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/update.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -347,14 +363,14 @@ func AdminNewsHandler(c echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/news.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/news.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
 
 	data := globaldata(c)
 	data["Pagename"] = "Admin News"
-	data["News"] = news.GetNews()
+	data["News"] = cache.GetAllNewsHandler(c)
 
 	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
 	if err != nil {
@@ -369,7 +385,7 @@ func AdminBannersHandler(c echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	tmpl, err := template.ParseFiles("views/base.html", "views/admin/admin.html", "views/admin/banners.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/banners.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -384,9 +400,71 @@ func AdminBannersHandler(c echo.Context) error {
 	}
 	return nil
 }
+func AdminReportsHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
 
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/reports.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Reports"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+func AdminAnnouncementsHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/announcements.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Announcements"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
+func AdminActionsHandler(c echo.Context) error {
+	if !auth.AdminCheck(c) {
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/admin/admin.html", "views/dst/admin/actions.html")
+	if err != nil {
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	data := globaldata(c)
+	data["Pagename"] = "Admin Actions"
+
+	err = tmpl.ExecuteTemplate(c.Response().Writer, "base.html", data)
+	if err != nil {
+		fmt.Println("Error executing template:", err)
+		return c.String(http.StatusInternalServerError, err.Error())
+	}
+
+	return nil
+}
 func DonateHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/donate.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/donate.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -404,7 +482,7 @@ func DonateHandler(c echo.Context) error {
 }
 
 func TermsHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/terms.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/terms.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -422,7 +500,7 @@ func TermsHandler(c echo.Context) error {
 }
 
 func PrivacyHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/privacy.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/privacy.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -440,7 +518,7 @@ func PrivacyHandler(c echo.Context) error {
 }
 
 func ContactHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/contact.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/contact.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -458,7 +536,7 @@ func ContactHandler(c echo.Context) error {
 }
 
 func StoreHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/store.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/store.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -476,7 +554,7 @@ func StoreHandler(c echo.Context) error {
 }
 
 func SuccessHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/success.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/success.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}
@@ -494,7 +572,7 @@ func SuccessHandler(c echo.Context) error {
 }
 
 func ProfileHandler(c echo.Context) error {
-	tmpl, err := template.ParseFiles("views/base.html", "views/profile.html")
+	tmpl, err := template.ParseFiles("views/dst/base.html", "views/dst/profile.html")
 	if err != nil {
 		return c.String(http.StatusInternalServerError, err.Error())
 	}

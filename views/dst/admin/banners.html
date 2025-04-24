@@ -1,0 +1,29 @@
+{{define "page"}}<div id=admin-content><div id=banner-upload><h2>Upload Banners</h2><form id=banner-form enctype=multipart/form-data method=post><label for=board-select>Select Board:</label>
+<select id=board-select name=board>
+{{range .Boards}}
+<option value={{.BoardID}}>{{.Name}}
+{{end}}</select>
+<label for=banner-file>Choose Banner File:</label>
+<input type=file id=banner-file name=file accept=.jpg,.jpeg,.png,.gif required>
+<button>Upload</button></form></div><table><thead><tr><th>Board<th>Image<th>ID<th>Actions<tbody id=banner-table></table></div><script>const bannerTable=document.getElementById('banner-table');const boards="/api/boards";const localBanners="/api/banners/local/";const globalBanners="/api/banners/global";fetch(globalBanners).then(response=>{if(response.status===401){throw new Error("Unauthorized access");}
+return response.json();}).then(banners=>{banners.forEach(banner=>{const row=document.createElement('tr');row.innerHTML=`
+                    <td>Global</td>
+                    <td><img src="/api/banner/global/${banner.ID}" alt="Banner" width="100"></td>
+                    <td><span>${banner.ID}</span></td>
+                    <td>
+                        <button onclick="deleteBanner('${banner.ID}', 'global')">Delete</button>
+                    </td>
+                `;bannerTable.appendChild(row);});}).catch(error=>{console.error("Error fetching global banners:",error);});fetch(boards).then(response=>response.json()).then(data=>{data.forEach(board=>{const boardId=board.BoardID;const boardName=board.Name;fetch(`${localBanners}${boardId}`).then(response=>{if(response.status===401){throw new Error("Unauthorized access");}
+return response.json();}).then(banners=>{banners.forEach(banner=>{const row=document.createElement('tr');row.innerHTML=`
+                                <td>${boardName}</td>
+                                <td><img src="/api/banner/local/${boardId}/${banner.ID}" alt="Banner" width="100"></td>
+                                <td><span>${banner.ID}</span></td>
+                                <td>
+                                    <button onclick="deleteBanner('${banner.ID}', '${boardId}')">Delete</button>
+                                </td>
+                            `;bannerTable.appendChild(row);});}).catch(error=>{console.error(`Error fetching banners for board ${boardName}:`,error);});});}).catch(error=>{console.error("Error fetching boards:",error);});function deleteBanner(bannerID,boardID){const url="/admin/banner";const confirmation=confirm("Are you sure you want to delete this banner?");const formData=new FormData();formData.append('banner_id',bannerID);formData.append('board_id',boardID);if(confirmation){fetch(url,{method:'DELETE',body:formData}).then(response=>{if(response.status===401){throw new Error("Unauthorized access");}
+return response.json();}).then(data=>{console.log("Banner deleted successfully:",data);location.reload();}).catch(error=>{console.error("Error deleting banner:",error);});}
+else{console.log("Banner deletion cancelled.");}}
+document.getElementById('banner-form').addEventListener('submit',function(event){event.preventDefault();const formData=new FormData(this);const selectedBoard=document.getElementById('board-select').value;formData.append('boardid',selectedBoard);const image=document.getElementById('banner-file').files[0];if(!image){alert("Please select an image file.");return;}
+formData.append('image',image);formData.append('filename',image.name);fetch('/admin/banners',{method:'POST',body:formData}).then(response=>{if(response.status===401){throw new Error("Unauthorized access");}
+return response.json();}).then(data=>{console.log("Banner uploaded successfully:",data);location.reload();}).catch(error=>{console.error("Error uploading banner:",error);});});</script>{{end}}

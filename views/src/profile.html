@@ -1,0 +1,97 @@
+{{define "content"}}
+<fieldset id="profile">
+    <legend>Profile</legend>
+    <span>Hello, {{.User.Username}}!</span> 
+    <span class="userid">ID: {{.User.ID}}</span>
+    <span class="premium">Premium: {{if .User.Premium}}Yes{{else}}No{{end}}</span>
+    <span class="permanent">Permanent: {{if .User.Permanent}}Yes{{else}}No{{end}}</span>
+    <span class="last-login">Last Login: {{.User.LastLogin}} @ Server Time</span>
+    <div id="profile-form">
+        <div id="form-display-name" class="form-group">
+            <label for="display-name">Display Name:</label>
+            <input type="text" id="display-name" name="display-name" value="{{.User.DisplayName}}">
+        </div>
+        <div id="form-username" class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" value="{{.User.Username}}">
+        </div>
+        <div id="form-email" class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" value="{{.User.Email}}">
+        </div>
+        <div id="form-password" class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password">
+        </div>
+        <div id="form-confirm-password" class="form-group">
+            <label for="confirm-password">Confirm Password:</label>
+            <input type="password" id="confirm-password" name="confirm-password">
+        </div>
+        <button id="save-profile">Save Changes</button>
+    </div>
+</fieldset>
+
+<style>
+    #profile {
+        width: 80%;
+        margin: 0 auto;
+        margin-top: 1.7rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border-top: 5px solid var(--border);
+        border-left: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background-color: var(--bg);
+    }
+
+    #profile-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        width: 100%;
+    }
+    #profile-form .form-group {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    #profile-form label {
+        font-size: 1.2rem;
+        color: #fff;
+    }
+    #profile-form input {
+        font-size: 1rem;
+        border-radius: 5px;
+        border: 1px solid #1b1b1b;
+        background-color: #3a3a3a;
+        color: #fff;
+        width: 50%;
+    }
+    #profile-form button {
+        padding: 0.5rem 1rem;
+        font-size: 1.2rem;
+        background-color: #555555;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        width: 20%;
+        margin: 0 auto;
+    }
+    #profile-form button:hover {
+        background-color: #00b318;
+    }
+    .userid {
+        font-size: 0.7rem;
+        color: #fff;
+        margin-top: 1rem;
+    }
+
+</style>
+
+{{end}}

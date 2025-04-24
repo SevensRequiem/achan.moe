@@ -79,6 +79,7 @@ func CreateBoard(c echo.Context) error {
 	boardsclient.Database(boardID).CreateCollection(context.Background(), "images")
 	boardsclient.Database(boardID).CreateCollection(context.Background(), "thumbs")
 	boardsclient.Database(boardID).CreateCollection(context.Background(), "banners")
+	cache.CacheBoard(board)
 	return c.JSON(http.StatusOK, "Board created")
 }
 
@@ -102,6 +103,7 @@ func DeleteBoard(c echo.Context) {
 		c.JSON(http.StatusInternalServerError, "Error deleting board")
 		return
 	}
+	database.Client.Database(boardID).Drop(context.Background())
 	c.JSON(http.StatusOK, "Board deleted")
 }
 
@@ -194,4 +196,92 @@ func processDeletePost(c echo.Context, boardID string, threadID string, postID s
 		logs.Error("Error deleting post: %v", err)
 	}
 	cache.DeletePostFromCache(boardID, threadID, postID)
+}
+
+func LockBoard(c echo.Context) {
+	if !auth.AdminCheck(c) {
+		c.JSON(http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	boardID := c.Param("id")
+	if boardID == "" {
+		c.JSON(http.StatusBadRequest, "ID cannot be empty")
+		return
+	}
+
+	db := database.DB_Main
+	collection := db.Collection("boards")
+	_, err := collection.UpdateOne(context.Background(), bson.M{"board_id": boardID}, bson.M{"$set": bson.M{"locked": true}})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, "Error locking board")
+		return
+	}
+	c.JSON(http.StatusOK, "Board locked")
+}
+
+func UnlockBoard(c echo.Context) {
+	if !auth.AdminCheck(c) {
+		c.JSON(http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	boardID := c.Param("id")
+	if boardID == "" {
+		c.JSON(http.StatusBadRequest, "ID cannot be empty")
+		return
+	}
+
+	db := database.DB_Main
+	collection := db.Collection("boards")
+	_, err := collection.UpdateOne(context.Background(), bson.M{"board_id": boardID}, bson.M{"$set": bson.M{"locked": false}})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, "Error unlocking board")
+		return
+	}
+	c.JSON(http.StatusOK, "Board unlocked")
+}
+
+func ArchiveBoard(c echo.Context) {
+	if !auth.AdminCheck(c) {
+		c.JSON(http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	boardID := c.Param("id")
+	if boardID == "" {
+		c.JSON(http.StatusBadRequest, "ID cannot be empty")
+		return
+	}
+
+	db := database.DB_Main
+	collection := db.Collection("boards")
+	_, err := collection.UpdateOne(context.Background(), bson.M{"board_id": boardID}, bson.M{"$set": bson.M{"archived": true}})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, "Error archiving board")
+		return
+	}
+	c.JSON(http.StatusOK, "Board archived")
+}
+
+func UnarchiveBoard(c echo.Context) {
+	if !auth.AdminCheck(c) {
+		c.JSON(http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	boardID := c.Param("id")
+	if boardID == "" {
+		c.JSON(http.StatusBadRequest, "ID cannot be empty")
+		return
+	}
+
+	db := database.DB_Main
+	collection := db.Collection("boards")
+	_, err := collection.UpdateOne(context.Background(), bson.M{"board_id": boardID}, bson.M{"$set": bson.M{"archived": false}})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, "Error unarchiving board")
+		return
+	}
+	c.JSON(http.StatusOK, "Board unarchived")
 }

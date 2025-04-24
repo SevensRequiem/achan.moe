@@ -17,11 +17,14 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 
+	"achan.moe/auth"
 	"achan.moe/boardimages"
 	"achan.moe/database"
 	"achan.moe/logs"
 	"achan.moe/models"
+	"achan.moe/utils/actions"
 	"achan.moe/utils/cache"
+	"achan.moe/utils/captcha"
 	"achan.moe/utils/queue"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
@@ -44,6 +47,28 @@ func isValidImageExtension(ext string) bool {
 		}
 	}
 	return false
+}
+
+func ListAllBoards(c echo.Context) ([]models.Board, error) {
+	db := database.DB_Main.Collection("boards")
+	ctx := context.Background()
+	cursor, err := db.Find(ctx, bson.M{})
+	if err != nil {
+		logs.Error("Error finding boards: %v", err)
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var boards []models.Board
+	for cursor.Next(ctx) {
+		var board models.Board
+		if err := cursor.Decode(&board); err != nil {
+			logs.Error("Error decoding board: %v", err)
+			return nil, err
+		}
+		boards = append(boards, board)
+	}
+	return boards, nil
 }
 
 func GenUUID(boardid string) string {
@@ -360,22 +385,23 @@ func ThreadCheckLocked(c echo.Context, boardid string, threadid string) bool {
 	return threadpost.Locked
 }
 
-func AddGlobalPostCount() int64 {
-	db := database.DB_Main.Collection("data")
-	var counter models.PostCounter
+func AddGlobalPostCount() int {
+	db := database.DB_Main.Collection("stats")
+	var counter models.Stats
 	db.FindOne(context.Background(), bson.M{}).Decode(&counter)
-	_, err := db.UpdateOne(context.Background(), bson.M{}, bson.M{"$inc": bson.M{"post_count": 1}})
+	_, err := db.UpdateOne(context.Background(), bson.M{"_id": 1}, bson.M{"$inc": bson.M{"post_count": 1}})
 	if err != nil {
 		logs.Error("Error incrementing post count: %v", err)
 	}
+	// Update the cache
+	cache.SetGlobalPostCount(counter.PostCount + 1)
 	return counter.PostCount
 }
-func GetGlobalPostCount() int64 {
-	db := database.DB_Main.Collection("data")
-	var counter models.PostCounter
+func GetGlobalPostCount() int {
+	db := database.DB_Main.Collection("stats")
+	var counter models.Stats
 	db.FindOne(context.Background(), bson.M{}).Decode(&counter)
 	return counter.PostCount
-
 }
 
 func AddBoardPostCount(boardID string) {
@@ -576,6 +602,13 @@ func CreateThread(c echo.Context) error {
 	if count >= 30 {
 		DeleteLastThread(c, boardID)
 	}
+	captchaStr := c.FormValue("captcha")
+	if captchaStr == "" {
+		return c.String(http.StatusBadRequest, "Captcha cannot be empty")
+	}
+	if !captcha.VerifyCaptcha(c, captchaStr) {
+		return c.String(http.StatusBadRequest, "Captcha is incorrect")
+	}
 	author := c.FormValue("author")
 	subject := c.FormValue("subject")
 	content := c.FormValue("content")
@@ -627,25 +660,11 @@ func CreateThread(c echo.Context) error {
 	if len(content) > 100 {
 		partialContent = content[:100]
 	}
-	session, err := session.Get("session", c)
-	if err != nil {
-		logs.Error("Failed to get session: %v", err)
-		return c.String(http.StatusInternalServerError, "Failed to get session")
-	}
+
+	auth := auth.UserSession(c)
 	var trueuser string
-
-	userSessionValue, ok := session.Values["user"]
-	if !ok {
-		return nil
-	}
-
-	user, ok := userSessionValue.(models.User)
-	if !ok {
-		return nil
-	}
-
-	if user.Username != "" {
-		trueuser = user.Username
+	if auth != nil && auth.Username != "" {
+		trueuser = auth.Username
 	} else {
 		trueuser = ""
 	}
@@ -669,12 +688,15 @@ func CreateThread(c echo.Context) error {
 		TrueUser:       trueuser,
 	}
 
-	queue.Q.Enqueue("thread:create", func() { processThreadPost(threadpost, c) })
+	queue.Q.Enqueue("thread:create", func() {
+		processThreadPost(c, threadpost)
+		actions.AddThreadAction(c, threadpost)
+	})
 
 	return c.JSON(http.StatusOK, "Thread created")
 }
 
-func processThreadPost(threadpost models.ThreadPost, c echo.Context) func() {
+func processThreadPost(c echo.Context, threadpost models.ThreadPost) {
 	globalpostcount := cache.GetGlobalPostCount()
 	threadpost.PostNumber = int64(globalpostcount) + 1
 	cache.AddThreadToCache(threadpost.BoardID, threadpost)
@@ -685,14 +707,11 @@ func processThreadPost(threadpost models.ThreadPost, c echo.Context) func() {
 	_, err := db.Collection(threadpost.ThreadID).InsertOne(ctx, threadpost)
 	if err != nil {
 		logs.Error("Error inserting post: %v", err)
-		return nil
+		return
 	}
 	AddGlobalPostCount()
-	cache.CacheGlobalPostCount()
 	AddBoardPostCount(threadpost.BoardID)
 	AddRecentPost(models.Posts{}, threadpost)
-	SetSessionSelfPostID(c, threadpost.PostID)
-	return nil
 }
 
 func CreatePost(c echo.Context) error {
@@ -721,6 +740,13 @@ func CreatePost(c echo.Context) error {
 
 	if cache.CheckDuplicatePostContent(boardID, c.Param("t"), c.FormValue("content")) {
 		return c.String(http.StatusForbidden, "Duplicate post detected")
+	}
+	captchaStr := c.FormValue("captcha")
+	if captchaStr == "" {
+		return c.String(http.StatusBadRequest, "Captcha cannot be empty")
+	}
+	if !captcha.VerifyCaptcha(c, captchaStr) {
+		return c.String(http.StatusBadRequest, "Captcha is incorrect")
 	}
 	author := c.FormValue("author")
 	subject := c.FormValue("subject")
@@ -766,29 +792,14 @@ func CreatePost(c echo.Context) error {
 		partialContent = content[:100]
 	}
 
-	session, err := session.Get("session", c)
-	if err != nil {
-		logs.Error("Failed to get session: %v", err)
-		return c.String(http.StatusInternalServerError, "Failed to get session")
-	}
+	auth := auth.UserSession(c)
+
 	var trueuser string
-
-	userSessionValue, ok := session.Values["user"]
-	if !ok {
-		return nil
-	}
-
-	user, ok := userSessionValue.(models.User)
-	if !ok {
-		return nil
-	}
-
-	if user.Username != "" {
-		trueuser = user.Username
+	if auth != nil && auth.Username != "" {
+		trueuser = auth.Username
 	} else {
 		trueuser = ""
 	}
-
 	post := models.Posts{
 		Author:         author,
 		BoardID:        boardID,
@@ -804,11 +815,14 @@ func CreatePost(c echo.Context) error {
 		TrueUser:       trueuser,
 	}
 
-	queue.Q.Enqueue("post:create", func() { processPost(post, c) })
+	queue.Q.Enqueue("post:create", func() {
+		processPost(post, c)
+		actions.AddPostAction(c, post)
+	})
 	return c.JSON(http.StatusOK, "Post created")
 }
 
-func processPost(post models.Posts, c echo.Context) func() {
+func processPost(post models.Posts, c echo.Context) {
 	globalpostcount := cache.GetGlobalPostCount()
 	post.PostNumber = int64(globalpostcount) + 1
 	cache.AddPostToThreadCache(post.BoardID, post.ParentID, post)
@@ -818,14 +832,13 @@ func processPost(post models.Posts, c echo.Context) func() {
 	_, err := db.Collection(post.ParentID).InsertOne(ctx, post)
 	if err != nil {
 		logs.Error("Error inserting post: %v", err)
-		return nil
+		c.JSON(http.StatusInternalServerError, "Error creating post")
+		return
 	}
 	AddGlobalPostCount()
-	cache.CacheGlobalPostCount()
 	AddBoardPostCount(post.BoardID)
 	AddThreadPostCount(post.BoardID, post.ParentID)
 	SetSessionSelfPostID(c, post.PostID)
-	return nil
 }
 
 type OldPost struct {
@@ -959,7 +972,6 @@ func MigrateToMongoFromGob() {
 }
 
 func parseTimestamp(timestamp string) int64 {
-	// Assuming the timestamp is in the format "09-18-2024 05:14:11"
 	layout := "01-02-2006 15:04:05"
 	t, err := time.Parse(layout, timestamp)
 	if err != nil {

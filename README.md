@@ -2,6 +2,10 @@
 
 anonymous imageboard. accounts are random 16-digit IDs with BIP39 seed phrase recovery. no email, no phone number.
 
+## stats
+
+total lines of go: [ 23,087 ] (202603-dev)
+
 ## why e2e
 
 the site sits behind cloudflare, which terminates TLS and can read traffic in plaintext. credentials, posts, and uploaded media are encrypted in the browser before they reach the server. cloudflare only sees ciphertext.

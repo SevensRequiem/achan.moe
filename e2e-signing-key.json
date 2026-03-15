@@ -1,10 +1,10 @@
 {
   "fingerprint": "",
   "algorithm": "",
-  "rotated_at": "2026-03-14T03:10:30Z",
+  "rotated_at": "2026-03-15T10:08:36Z",
   "assets": {
     "pqc.min.js": "c06b4cd9a5933cd89d1df0a37043ebccd2e87d9e4b51139b960d17f06b9aebdb",
-    "achan.js": "4b73533d75ac44c86031c391c110d410dbdf86dc2437db7f4c5f164515f53fdf",
+    "achan.js": "cb95267d0d04524655ac32b81f994f438250fe627557cc4fb335afbc8a6777fe",
     "admin.js": "7baae5e8d80c69ec85a8629e975d79f065ff0cb0c95d052b6f72f33095c72ff1"
   }
 }

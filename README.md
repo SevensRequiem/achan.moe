@@ -4,7 +4,7 @@ anonymous imageboard. accounts are random 16-digit IDs with BIP39 seed phrase re
 
 ## stats
 
-total lines of go: [  ] at 2026-03-14
+total lines of go: [ 22735 ] at 2026-03-15
 
 ## why e2e
 
